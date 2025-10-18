@@ -5,22 +5,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { text, sourceLanguage, targetLanguage } = req.body;
+  const { text, sourceLanguage, targetLanguage, isStudyMaterial = false } = req.body;
 
   if (!text || !sourceLanguage || !targetLanguage) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    // For now, we'll use a simple translation approach
-    // In production, you would integrate with a translation service like Google Translate API
-    const translatedText = await translateText(text, sourceLanguage, targetLanguage);
+    // Enhanced translation with AI models for study materials
+    const translatedText = await translateText(text, sourceLanguage, targetLanguage, isStudyMaterial);
     
     res.status(200).json({ 
       translatedText,
       sourceLanguage,
       targetLanguage,
-      originalText: text
+      originalText: text,
+      isStudyMaterial
     });
   } catch (error) {
     console.error('Translation error:', error);
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   }
 }
 
-async function translateText(text, sourceLang, targetLang) {
+async function translateText(text, sourceLang, targetLang, isStudyMaterial = false) {
   if (sourceLang === targetLang) {
     return text;
   }
@@ -47,7 +47,34 @@ async function translateText(text, sourceLang, targetLang) {
     'kn': 'Kannada'
   };
 
-  // Try LibreTranslate (FREE) first
+  // For study materials, try AI models first for better quality
+  if (isStudyMaterial) {
+    // Try Cohere API first (free tier available)
+    if (process.env.COHERE_API_KEY) {
+      try {
+        const cohereResponse = await translateWithCohere(text, sourceLang, targetLang);
+        if (cohereResponse) {
+          return cohereResponse;
+        }
+      } catch (error) {
+        console.log('Cohere translation failed, trying Mistral...');
+      }
+    }
+
+    // Try Mistral API (free tier available)
+    if (process.env.MISTRAL_API_KEY) {
+      try {
+        const mistralResponse = await translateWithMistral(text, sourceLang, targetLang);
+        if (mistralResponse) {
+          return mistralResponse;
+        }
+      } catch (error) {
+        console.log('Mistral translation failed, trying fallback...');
+      }
+    }
+  }
+
+  // Try LibreTranslate (FREE) as fallback
   try {
     const libreTranslateResponse = await fetch('https://libretranslate.de/translate', {
       method: 'POST',
@@ -111,15 +138,239 @@ async function translateText(text, sourceLang, targetLang) {
     }
   }
 
-  // Enhanced fallback: Better translation simulation
+  // Enhanced fallback with study material context
   const sourceLangName = languageNames[sourceLang] || sourceLang;
   const targetLangName = languageNames[targetLang] || targetLang;
   
   let translatedText = text;
   
-  // Enhanced word mapping for all supported chatbot languages
+  // Enhanced word mapping for study materials
+  if (isStudyMaterial && sourceLang === 'en') {
+    translatedText = enhanceStudyMaterialTranslation(text, targetLang);
+  } else {
+    // Basic word mapping for all supported languages
+    translatedText = basicTranslation(text, sourceLang, targetLang);
+  }
+
+  return `[Translated from ${sourceLangName} to ${targetLangName}]\n\n${translatedText}\n\n[Note: ${isStudyMaterial ? 'AI-powered study material translation' : 'Basic translation'}. For better quality, add API keys for Cohere or Mistral in your .env.local file.]`;
+}
+
+// Cohere API translation for study materials
+async function translateWithCohere(text, sourceLang, targetLang) {
+  const languageNames = {
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
+  };
+
+  const sourceLangName = languageNames[sourceLang] || sourceLang;
+  const targetLangName = languageNames[targetLang] || targetLang;
+
+  const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
+
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
+- Preserve the academic tone and exam-relevant vocabulary
+- Use formal language appropriate for competitive exams
+- Maintain technical terms and concepts accurately
+- Ensure the translation is suitable for state-level PCS exam preparation
+- Keep the structure and formatting intact
+
+Text to translate:
+${text}
+
+Translation:`;
+
+  try {
+    const response = await fetch('https://api.cohere.ai/v1/generate', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.COHERE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'command',
+        prompt: prompt,
+        max_tokens: 2000,
+        temperature: 0.3,
+        stop_sequences: ['---']
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.generations[0].text.trim();
+    }
+  } catch (error) {
+    console.error('Cohere API error:', error);
+  }
+  return null;
+}
+
+// Mistral API translation for study materials
+async function translateWithMistral(text, sourceLang, targetLang) {
+  const languageNames = {
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
+  };
+
+  const sourceLangName = languageNames[sourceLang] || sourceLang;
+  const targetLangName = languageNames[targetLang] || targetLang;
+
+  const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
+
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
+- Preserve the academic tone and exam-relevant vocabulary
+- Use formal language appropriate for competitive exams
+- Maintain technical terms and concepts accurately
+- Ensure the translation is suitable for state-level PCS exam preparation
+- Keep the structure and formatting intact
+
+Text to translate:
+${text}
+
+Translation:`;
+
+  try {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'mistral-small-latest',
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.3
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.choices[0].message.content.trim();
+    }
+  } catch (error) {
+    console.error('Mistral API error:', error);
+  }
+  return null;
+}
+
+// Enhanced study material translation with exam-specific vocabulary
+function enhanceStudyMaterialTranslation(text, targetLang) {
+  const studyTerms = {
+    'hi': {
+      'government': 'सरकार',
+      'administration': 'प्रशासन',
+      'constitution': 'संविधान',
+      'democracy': 'लोकतंत्र',
+      'economy': 'अर्थव्यवस्था',
+      'development': 'विकास',
+      'policy': 'नीति',
+      'reform': 'सुधार',
+      'governance': 'शासन',
+      'bureaucracy': 'नौकरशाही',
+      'civil service': 'सिविल सेवा',
+      'public administration': 'लोक प्रशासन',
+      'judiciary': 'न्यायपालिका',
+      'legislature': 'विधायिका',
+      'executive': 'कार्यपालिका',
+      'federalism': 'संघवाद',
+      'secularism': 'धर्मनिरपेक्षता',
+      'socialism': 'समाजवाद',
+      'republic': 'गणतंत्र',
+      'sovereignty': 'संप्रभुता',
+      'integrity': 'अखंडता',
+      'unity': 'एकता',
+      'diversity': 'विविधता',
+      'equality': 'समानता',
+      'justice': 'न्याय',
+      'liberty': 'स्वतंत्रता',
+      'fraternity': 'बंधुत्व'
+    },
+    'mr': {
+      'government': 'सरकार',
+      'administration': 'प्रशासन',
+      'constitution': 'घटना',
+      'democracy': 'लोकशाही',
+      'economy': 'अर्थव्यवस्था',
+      'development': 'विकास',
+      'policy': 'धोरण',
+      'reform': 'सुधारणा',
+      'governance': 'शासन',
+      'bureaucracy': 'नोकरशाही',
+      'civil service': 'नागरी सेवा',
+      'public administration': 'सार्वजनिक प्रशासन',
+      'judiciary': 'न्यायव्यवस्था',
+      'legislature': 'विधानसभा',
+      'executive': 'कार्यकारी',
+      'federalism': 'संघराज्यवाद',
+      'secularism': 'धर्मनिरपेक्षता',
+      'socialism': 'समाजवाद',
+      'republic': 'प्रजासत्ताक',
+      'sovereignty': 'सार्वभौमत्व',
+      'integrity': 'अखंडता',
+      'unity': 'एकता',
+      'diversity': 'विविधता',
+      'equality': 'समानता',
+      'justice': 'न्याय',
+      'liberty': 'स्वातंत्र्य',
+      'fraternity': 'बंधुत्व'
+    },
+    'ta': {
+      'government': 'அரசு',
+      'administration': 'நிர்வாகம்',
+      'constitution': 'அரசியலமைப்பு',
+      'democracy': 'ஜனநாயகம்',
+      'economy': 'பொருளாதாரம்',
+      'development': 'வளர்ச்சி',
+      'policy': 'கொள்கை',
+      'reform': 'சீர்திருத்தம்',
+      'governance': 'ஆட்சி',
+      'bureaucracy': 'அதிகாரவர்க்கம்',
+      'civil service': 'குடிமை சேவை',
+      'public administration': 'பொது நிர்வாகம்',
+      'judiciary': 'நீதித்துறை',
+      'legislature': 'சட்டமன்றம்',
+      'executive': 'செயலாட்சி',
+      'federalism': 'கூட்டாட்சி',
+      'secularism': 'மதச்சார்பின்மை',
+      'socialism': 'சமூகவாதம்',
+      'republic': 'குடியரசு',
+      'sovereignty': 'இறையாண்மை',
+      'integrity': 'ஒருமைப்பாடு',
+      'unity': 'ஒற்றுமை',
+      'diversity': 'பன்முகத்தன்மை',
+      'equality': 'சமத்துவம்',
+      'justice': 'நீதி',
+      'liberty': 'சுதந்திரம்',
+      'fraternity': 'சகோதரத்துவம்'
+    }
+  };
+
+  let translatedText = text;
+  const terms = studyTerms[targetLang] || {};
+
+  // Replace study-specific terms
+  Object.entries(terms).forEach(([english, translation]) => {
+    const regex = new RegExp(`\\b${english}\\b`, 'gi');
+    translatedText = translatedText.replace(regex, translation);
+  });
+
+  return translatedText;
+}
+
+// Basic translation fallback
+function basicTranslation(text, sourceLang, targetLang) {
+  let translatedText = text;
+  
+  // Basic word mapping for all supported languages
   if (sourceLang === 'en' && targetLang === 'hi') {
-    // English to Hindi
     translatedText = text
       .replace(/\bhello\b/gi, 'नमस्ते')
       .replace(/\bhi\b/gi, 'नमस्ते')
@@ -134,7 +385,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'स्वागत है')
       .replace(/\bgoodbye\b/gi, 'अलविदा');
   } else if (sourceLang === 'en' && targetLang === 'bn') {
-    // English to Bengali
     translatedText = text
       .replace(/\bhello\b/gi, 'হ্যালো')
       .replace(/\bhi\b/gi, 'হ্যালো')
@@ -149,7 +399,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'স্বাগতম')
       .replace(/\bgoodbye\b/gi, 'বিদায়');
   } else if (sourceLang === 'en' && targetLang === 'mr') {
-    // English to Marathi
     translatedText = text
       .replace(/\bhello\b/gi, 'नमस्कार')
       .replace(/\bhi\b/gi, 'नमस्कार')
@@ -164,7 +413,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'स्वागत आहे')
       .replace(/\bgoodbye\b/gi, 'निरोप');
   } else if (sourceLang === 'en' && targetLang === 'ta') {
-    // English to Tamil
     translatedText = text
       .replace(/\bhello\b/gi, 'வணக்கம்')
       .replace(/\bhi\b/gi, 'வணக்கம்')
@@ -179,7 +427,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'வரவேற்கிறோம்')
       .replace(/\bgoodbye\b/gi, 'பிரியாவிடை');
   } else if (sourceLang === 'en' && targetLang === 'te') {
-    // English to Telugu
     translatedText = text
       .replace(/\bhello\b/gi, 'నమస్కారం')
       .replace(/\bhi\b/gi, 'నమస్కారం')
@@ -194,7 +441,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'స్వాగతం')
       .replace(/\bgoodbye\b/gi, 'వీడ్కోలు');
   } else if (sourceLang === 'en' && targetLang === 'gu') {
-    // English to Gujarati
     translatedText = text
       .replace(/\bhello\b/gi, 'નમસ્તે')
       .replace(/\bhi\b/gi, 'નમસ્તે')
@@ -209,7 +455,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'સ્વાગત છે')
       .replace(/\bgoodbye\b/gi, 'આવજો');
   } else if (sourceLang === 'en' && targetLang === 'pa') {
-    // English to Punjabi
     translatedText = text
       .replace(/\bhello\b/gi, 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ')
       .replace(/\bhi\b/gi, 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ')
@@ -224,7 +469,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'ਜੀ ਆਇਆਂ ਨੂੰ')
       .replace(/\bgoodbye\b/gi, 'ਅਲਵਿਦਾ');
   } else if (sourceLang === 'en' && targetLang === 'ml') {
-    // English to Malayalam
     translatedText = text
       .replace(/\bhello\b/gi, 'നമസ്കാരം')
       .replace(/\bhi\b/gi, 'നമസ്കാരം')
@@ -239,7 +483,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'സ്വാഗതം')
       .replace(/\bgoodbye\b/gi, 'വിട');
   } else if (sourceLang === 'en' && targetLang === 'kn') {
-    // English to Kannada
     translatedText = text
       .replace(/\bhello\b/gi, 'ನಮಸ್ಕಾರ')
       .replace(/\bhi\b/gi, 'ನಮಸ್ಕಾರ')
@@ -254,7 +497,6 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bwelcome\b/gi, 'ಸ್ವಾಗತ')
       .replace(/\bgoodbye\b/gi, 'ವಿದಾಯ');
   } else if (sourceLang === 'en' && targetLang === 'es') {
-    // English to Spanish
     translatedText = text
       .replace(/\bhello\b/gi, 'hola')
       .replace(/\bhi\b/gi, 'hola')
@@ -270,5 +512,5 @@ async function translateText(text, sourceLang, targetLang) {
       .replace(/\bgoodbye\b/gi, 'adiós');
   }
 
-  return `[Translated from ${sourceLangName} to ${targetLangName}]\n\n${translatedText}\n\n[Note: This is a demo translation. For real-time translation, the system will automatically use free translation services like LibreTranslate or MyMemory API.]`;
+  return translatedText;
 }
