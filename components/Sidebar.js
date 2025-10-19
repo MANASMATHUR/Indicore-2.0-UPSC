@@ -31,13 +31,13 @@ export default function Sidebar({
       {/* Sidebar */}
       <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
         {/* Header */}
-        <div className="p-4 border-b border-red-900/40 dark:border-red-900/60">
+        <div className="p-4 border-b border-red-200 dark:border-red-800">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-100">Your Chats</h2>
+            <h2 className="text-lg font-semibold text-red-900 dark:text-red-100">Your Chats</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowSearch(!showSearch)}
-                className="p-1 hover:bg-red-900/60 rounded transition-colors duration-200 text-slate-200 hover:text-white"
+                className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded transition-colors duration-200 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                 title="Search chats"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,7 +46,7 @@ export default function Sidebar({
               </button>
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="p-1 hover:bg-red-900/60 rounded transition-colors duration-200 text-slate-200 hover:text-white"
+                className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded transition-colors duration-200 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                 title="Collapse sidebar"
               >
                 <svg 
@@ -60,7 +60,7 @@ export default function Sidebar({
               </button>
               <button
                 onClick={onClose}
-                className="p-1 hover:bg-red-900/60 rounded transition-colors duration-200 text-slate-200 hover:text-white"
+                className="p-1 hover:bg-red-200 dark:hover:bg-red-800 rounded transition-colors duration-200 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                 title="Close sidebar"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,9 +81,9 @@ export default function Sidebar({
                   setSearchQuery(e.target.value);
                   onSearchChat?.(e.target.value);
                 }}
-                className="w-full px-3 py-2 pl-8 text-sm border border-red-900/60 bg-red-950/60 text-slate-100 placeholder:text-slate-400 rounded-lg focus:ring-2 focus:ring-red-400/60 focus:border-red-400"
+                className="w-full px-3 py-2 pl-8 text-sm border border-red-300 dark:border-red-600 bg-white dark:bg-red-800 text-red-900 dark:text-red-100 placeholder:text-red-500 dark:placeholder:text-red-400 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
               />
-              <svg className="absolute left-2 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-2 top-2.5 w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -93,7 +93,7 @@ export default function Sidebar({
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
           {(!chats || chats.length === 0) ? (
-            <div className="p-4 text-center text-gray-500 dark:text-slate-400">
+            <div className="p-4 text-center text-red-600 dark:text-red-400">
               <p className="text-sm">No chats yet</p>
               <p className="text-xs mt-1">Start a new conversation!</p>
             </div>
@@ -110,7 +110,7 @@ export default function Sidebar({
 
                 if (searchQuery.trim() && filteredChats.length === 0) {
                   return (
-                  <div className="p-4 text-center text-slate-400">
+                  <div className="p-4 text-center text-red-500">
                       <p className="text-sm">No chats found</p>
                       <p className="text-xs mt-1">Try a different search term</p>
                     </div>
@@ -146,7 +146,7 @@ export default function Sidebar({
                       </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button
-                        className="p-1 rounded hover:bg-red-900/70 text-red-300 hover:text-red-100"
+                        className="p-1 rounded hover:bg-red-200 dark:hover:bg-red-800 text-red-500 hover:text-red-700 dark:hover:text-red-300"
                           title="Edit chat"
                           onClick={(e) => { e.stopPropagation(); onEditChat?.(chat._id); }}
                         >
@@ -155,7 +155,7 @@ export default function Sidebar({
                           </svg>
                         </button>
                         <button
-                        className="p-1 rounded hover:bg-yellow-900/40 text-yellow-300 hover:text-yellow-100"
+                        className="p-1 rounded hover:bg-red-200 dark:hover:bg-red-800 text-red-500 hover:text-red-700 dark:hover:text-red-300"
                           title={chat.pinned ? "Unpin chat" : "Pin chat"}
                           onClick={(e) => { e.stopPropagation(); onPinChat?.(chat._id); }}
                         >
@@ -164,7 +164,7 @@ export default function Sidebar({
                           </svg>
                         </button>
                         <button
-                        className="p-1 rounded hover:bg-red-900/50 text-red-300 hover:text-red-100"
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 hover:text-red-600 dark:hover:text-red-400"
                           title="Delete chat"
                           onClick={(e) => { e.stopPropagation(); onDeleteChat?.(chat._id); }}
                         >
@@ -183,10 +183,10 @@ export default function Sidebar({
         </div>
 
         {/* New Chat Button */}
-        <div className="p-4 border-t border-red-900/40">
+        <div className="p-4 border-t border-red-200 dark:border-red-800">
           <button
             onClick={onNewChat}
-            className="w-full bg-red-700 text-white py-3 px-4 rounded-lg hover:bg-red-600 transition-colors duration-200 flex items-center justify-center gap-2"
+            className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center gap-2 font-medium"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

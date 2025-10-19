@@ -25,6 +25,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
   const [extractedText, setExtractedText] = useState('');
   const [showTextInput, setShowTextInput] = useState(false);
   const [manualText, setManualText] = useState('');
+  const [isStudyMaterial, setIsStudyMaterial] = useState(true);
   const fileInputRef = useRef(null);
 
   // Simple language detection based on common words and characters
@@ -74,11 +75,14 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         'text/markdown',
         'application/pdf',
         'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'image/png',
+        'image/jpeg',
+        'image/webp'
       ];
       
       if (!allowedTypes.includes(file.type)) {
-        alert('Please select a valid file type (.txt, .md, .pdf, .doc, .docx)');
+        alert('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .png, .jpg, .webp)');
         return;
       }
       
@@ -185,6 +189,22 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
       
       if (file.type === 'application/pdf') {
         text = await extractTextFromPDF(file);
+      } else if (file.type.startsWith('image/')) {
+        // OCR for images using tesseract.js (lazy import)
+        try {
+          const { createWorker } = await import('tesseract.js');
+          const lang = sourceLanguage === 'en' ? 'eng' : 'eng'; // default to English OCR; multilingual packs can be added later
+          const worker = await createWorker(lang);
+          const { data: { text: ocrText } } = await worker.recognize(file);
+          await worker.terminate();
+          text = (ocrText || '').trim();
+          if (!text) {
+            text = `⚠️ No readable text detected in the image ${file.name}. Try a clearer photo with good lighting.`;
+          }
+        } catch (e) {
+          console.error('OCR failed:', e);
+          text = `❌ OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
+        }
       } else {
         // Handle text files
         text = await readFileAsText(file);
@@ -248,7 +268,8 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         body: JSON.stringify({
           text: textToTranslate,
           sourceLanguage,
-          targetLanguage
+          targetLanguage,
+          isStudyMaterial
         }),
       });
 
@@ -315,10 +336,15 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         onClick={onClose}
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">Document Translation</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Document Translation</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                  AI-powered translation for study materials with exam-specific vocabulary
+                </p>
+              </div>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors duration-200"
@@ -331,14 +357,14 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
 
             {/* File Upload Area */}
             <div
-              className="border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-8 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors duration-200"
+              className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center hover:border-slate-400 dark:hover:border-slate-500 transition-colors duration-200"
               onDrop={handleDrop}
               onDragOver={handleDragOver}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.doc,.docx,.pdf"
+                accept=".txt,.md,.doc,.docx,.pdf,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -349,6 +375,10 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                     {selectedFile.type === 'application/pdf' ? (
                       <svg className="w-12 h-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                      </svg>
+                    ) : selectedFile.type.startsWith('image/') ? (
+                      <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4-4 4 4 4-4 4 4M4 4h16v16H4z" />
                       </svg>
                     ) : (
                       <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -376,7 +406,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                   <div>
                     <p className="text-lg font-medium text-gray-700 dark:text-slate-200">Upload a document</p>
                     <p className="text-sm text-gray-500 dark:text-slate-400">Drag and drop or click to select</p>
-                    <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Supports: .txt, .md, .doc, .docx, .pdf</p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Supports: .txt, .md, .doc, .docx, .pdf, .png, .jpg, .webp</p>
                   </div>
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -384,6 +414,37 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                   >
                     Select File
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Study Material Toggle */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="studyMaterial"
+                      checked={isStudyMaterial}
+                      onChange={(e) => setIsStudyMaterial(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                    />
+                    <label htmlFor="studyMaterial" className="ml-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                      Study Material Translation
+                    </label>
+                  </div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                    ✨ AI-powered with exam vocabulary
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  {isStudyMaterial ? 'Enhanced' : 'Basic'}
+                </div>
+              </div>
+              {isStudyMaterial && (
+                <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                  Uses Cohere/Mistral AI for better academic translations with PCS/UPSC exam terminology
                 </div>
               )}
             </div>
@@ -511,9 +572,26 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                   <button
                     onClick={handleTranslate}
                     disabled={isUploading || (!extractedText.trim() && !manualText.trim())}
-                    className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                    className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center space-x-2"
                   >
-                    {isUploading ? (selectedFile?.type === 'application/pdf' ? 'Extracting PDF text...' : 'Processing...') : 'Translate Document'}
+                    {isUploading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>{selectedFile?.type === 'application/pdf' ? 'Extracting PDF text...' : 'Translating...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                        </svg>
+                        <span>
+                          {isStudyMaterial ? 'Translate with AI' : 'Translate Document'}
+                        </span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
