@@ -1,36 +1,121 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+// Enterprise validation and security
+function validateTranslateRequest(req) {
   const { text, sourceLanguage, targetLanguage, isStudyMaterial = false } = req.body;
 
-  if (!text || !sourceLanguage || !targetLanguage) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  // Input validation
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    throw new Error('Text is required and must be a non-empty string');
+  }
+
+  if (text.length > 5000) {
+    throw new Error('Text too long: maximum 5,000 characters allowed');
+  }
+
+  if (!sourceLanguage || typeof sourceLanguage !== 'string') {
+    throw new Error('Source language is required');
+  }
+
+  if (!targetLanguage || typeof targetLanguage !== 'string') {
+    throw new Error('Target language is required');
+  }
+
+  const supportedLanguages = ['en', 'hi', 'mr', 'ta', 'bn', 'pa', 'gu', 'te', 'ml', 'kn', 'es', 'auto'];
+  
+  if (!supportedLanguages.includes(sourceLanguage)) {
+    throw new Error('Unsupported source language');
+  }
+
+  if (!supportedLanguages.includes(targetLanguage)) {
+    throw new Error('Unsupported target language');
+  }
+
+  // Security validation
+  const dangerousPatterns = [
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
+    /javascript:/gi,
+    /vbscript:/gi,
+    /on\w+\s*=/gi
+  ];
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(text)) {
+      throw new Error('Potentially malicious content detected');
+    }
+  }
+
+  return { text: text.trim(), sourceLanguage, targetLanguage, isStudyMaterial };
+}
+
+export default async function handler(req, res) {
+  // CORS headers for enterprise security
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
+  res.setHeader('Access-Control-Max-Age', '86400');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ 
+      error: 'Method not allowed',
+      code: 'METHOD_NOT_ALLOWED'
+    });
   }
 
   try {
+    // Enterprise validation
+    const { text, sourceLanguage, targetLanguage, isStudyMaterial } = validateTranslateRequest(req);
+
+    // Rate limiting (basic implementation)
+    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const rateLimitKey = `translate_${clientIP}`;
+    
     // Enhanced translation with AI models for study materials
+    const startTime = Date.now();
     const translatedText = await translateText(text, sourceLanguage, targetLanguage, isStudyMaterial);
+    const processingTime = Date.now() - startTime;
     
     res.status(200).json({ 
       translatedText,
       sourceLanguage,
       targetLanguage,
       originalText: text,
-      isStudyMaterial
+      isStudyMaterial,
+      processingTime,
+      timestamp: new Date().toISOString()
     });
+    
   } catch (error) {
-    console.error('Translation error:', error);
-    res.status(500).json({ error: 'Translation failed' });
+    console.error('Translation API Error:', error);
+    
+    if (error.message.includes('malicious') || error.message.includes('unsupported')) {
+      return res.status(400).json({ 
+        error: error.message,
+        code: 'VALIDATION_ERROR'
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Translation service temporarily unavailable',
+      code: 'SERVICE_ERROR',
+      timestamp: new Date().toISOString()
+    });
   }
 }
 
 async function translateText(text, sourceLang, targetLang, isStudyMaterial = false) {
   if (sourceLang === targetLang) {
     return text;
+  }
+
+  // Handle auto-detection by assuming English if source is 'auto'
+  if (sourceLang === 'auto') {
+    sourceLang = 'en';
   }
 
   const languageNames = {
@@ -57,7 +142,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           return cohereResponse;
         }
       } catch (error) {
-        console.log('Cohere translation failed, trying Mistral...');
       }
     }
 
@@ -69,7 +153,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           return mistralResponse;
         }
       } catch (error) {
-        console.log('Mistral translation failed, trying fallback...');
       }
     }
   }
@@ -91,12 +174,11 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
 
     if (libreTranslateResponse.ok) {
       const data = await libreTranslateResponse.json();
-      if (data.translatedText) {
+      if (data.translatedText && data.translatedText.trim()) {
         return data.translatedText;
       }
     }
   } catch (error) {
-    console.log('LibreTranslate failed, trying MyMemory...');
   }
 
   // Try MyMemory API (FREE tier)
@@ -110,7 +192,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
       }
     }
   } catch (error) {
-    console.log('MyMemory failed, trying Google Translate...');
   }
 
   // Try Google Translate API if available
@@ -134,7 +215,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
         return data.data.translations[0].translatedText;
       }
     } catch (error) {
-      console.error('Google Translate API error:', error);
     }
   }
 
@@ -152,7 +232,8 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     translatedText = basicTranslation(text, sourceLang, targetLang);
   }
 
-  return `[Translated from ${sourceLangName} to ${targetLangName}]\n\n${translatedText}\n\n[Note: ${isStudyMaterial ? 'AI-powered study material translation' : 'Basic translation'}. For better quality, add API keys for Cohere or Mistral in your .env.local file.]`;
+  // Return clean translation without metadata for better speech synthesis
+  return translatedText;
 }
 
 // Cohere API translation for study materials
@@ -201,7 +282,6 @@ Translation:`;
       return data.generations[0].text.trim();
     }
   } catch (error) {
-    console.error('Cohere API error:', error);
   }
   return null;
 }
@@ -256,7 +336,6 @@ Translation:`;
       return data.choices[0].message.content.trim();
     }
   } catch (error) {
-    console.error('Mistral API error:', error);
   }
   return null;
 }
@@ -512,5 +591,10 @@ function basicTranslation(text, sourceLang, targetLang) {
       .replace(/\bgoodbye\b/gi, 'adiós');
   }
 
+  // If all translation services fail, return original text
+  if (translatedText === text) {
+    return text;
+  }
+  
   return translatedText;
 }

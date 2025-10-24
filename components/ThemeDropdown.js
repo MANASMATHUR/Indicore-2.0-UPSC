@@ -21,7 +21,7 @@ export default function ThemeDropdown({ currentTheme, onThemeChange }) {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-white bg-opacity-25 hover:bg-opacity-40 p-2 rounded-lg transition-all duration-200 flex items-center gap-2"
+        className="bg-white bg-opacity-25 hover:bg-opacity-40 dark:bg-slate-800 dark:bg-opacity-50 dark:hover:bg-opacity-70 p-2 rounded-lg transition-all duration-200 flex items-center gap-2 text-gray-700 dark:text-gray-300"
         title="Change theme"
       >
         <span className="text-lg">{currentThemeData.icon}</span>

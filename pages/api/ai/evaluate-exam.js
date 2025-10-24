@@ -109,7 +109,6 @@ Please provide a comprehensive evaluation following the format specified in your
     }
 
   } catch (error) {
-    console.error('Exam Evaluation API error:', error);
 
     if (error.response) {
       const status = error.response.status;

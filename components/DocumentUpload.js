@@ -143,12 +143,10 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
             return extractedText;
           }
         } catch (workerError) {
-          console.log(`Worker ${workerSrc} failed, trying next...`);
           continue;
         }
       }
     } catch (pdfjsError) {
-      console.log('PDF.js failed, trying alternative method...');
     }
     
     // Method 2: Try using a different PDF parsing approach
@@ -175,7 +173,6 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         }
       }
     } catch (regexError) {
-      console.log('Regex extraction failed');
     }
     
     // Method 3: Return helpful error message with suggestions
@@ -202,7 +199,6 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
             text = `⚠️ No readable text detected in the image ${file.name}. Try a clearer photo with good lighting.`;
           }
         } catch (e) {
-          console.error('OCR failed:', e);
           text = `❌ OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
         }
       } else {
@@ -219,7 +215,6 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         setSourceLanguage(detected);
       }
     } catch (error) {
-      console.error('Error extracting text:', error);
       setExtractedText(`❌ Error reading file: ${file.name}\n\nPlease ensure the file is not corrupted and try again.\n\nFile size: ${(file.size / 1024).toFixed(1)} KB`);
     } finally {
       setIsUploading(false);
@@ -276,11 +271,9 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
       if (!response.ok) throw new Error('Translation failed');
       const data = await response.json();
       
-      console.log('Translation API response:', data);
       onTranslate(data.translatedText, targetLanguage);
       onClose();
     } catch (error) {
-      console.error('Translation error:', error);
       alert('Translation failed. Please try again.');
     } finally {
       setIsUploading(false);

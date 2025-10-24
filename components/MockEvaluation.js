@@ -74,7 +74,6 @@ export default function MockEvaluation({ isOpen, onClose, onEvaluate }) {
       setEvaluation(data.evaluation);
       setShowResults(true);
     } catch (error) {
-      console.error('Evaluation error:', error);
       alert('Evaluation failed. Please try again.');
     } finally {
       setIsEvaluating(false);

@@ -1,8 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Button from '../ui/Button';
+import Input from '../ui/Input';
 
-export default function ChatInput({ onSendMessage, onVoiceClick, onImageUpload, disabled }) {
+const ChatInput = ({ 
+  onSendMessage, 
+  onVoiceClick, 
+  onImageUpload, 
+  disabled = false 
+}) => {
   const [message, setMessage] = useState('');
   const [showImageDropdown, setShowImageDropdown] = useState(false);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
@@ -55,7 +62,6 @@ export default function ChatInput({ onSendMessage, onVoiceClick, onImageUpload, 
       const extractedText = (ocrText || '').trim();
       
       if (extractedText) {
-        // Send the OCR text as a message
         onSendMessage(`📷 Image OCR Result:\n\n${extractedText}`);
       } else {
         onSendMessage('📷 No readable text found in the image. Please try a clearer photo with better lighting.');
@@ -93,64 +99,75 @@ export default function ChatInput({ onSendMessage, onVoiceClick, onImageUpload, 
   }, [showImageDropdown]);
 
   return (
-    <div className="input-container">
-      <form onSubmit={handleSubmit} className="flex gap-3 items-center w-full max-w-4xl mx-auto">
-        <input
+    <div className="input-container p-3 sm:p-4">
+      <form onSubmit={handleSubmit} className="chat-input-form flex gap-2 sm:gap-3 items-center">
+        <Input
           ref={inputRef}
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Message Indicore AI..."
-          className="message-input"
+          className="flex-1 text-sm sm:text-base"
           disabled={disabled}
+          aria-label="Chat message input"
+          aria-describedby="chat-input-help"
         />
         
-        <button
+        <div id="chat-input-help" className="sr-only">
+          Type your message and press Enter to send, or Shift+Enter for a new line
+        </div>
+        
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onVoiceClick}
-          className="mic-button"
           disabled={disabled}
           title="Voice input"
+          className="mic-button p-2 sm:p-3 hover:bg-red-100 dark:hover:bg-red-900/20 hover:scale-110 transition-all duration-200 group"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
-        </button>
+        </Button>
 
         {/* Image Upload Dropdown */}
         <div className="relative image-dropdown-container">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setShowImageDropdown(!showImageDropdown)}
             disabled={disabled || isProcessingImage}
-            className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Upload Image"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 p-2 sm:p-3 hover:scale-110 transition-all duration-200 group"
           >
             {isProcessingImage ? (
-              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4-4 4 4 4-4 4 4M4 4h16v16H4z" />
               </svg>
             )}
-          </button>
+          </Button>
 
           {showImageDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
               <div className="p-2">
-                <button
+                <Button
+                  variant="ghost"
                   onClick={handleImageUpload}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-2 font-medium"
+                  className="w-full justify-start text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 font-medium"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4-4 4 4 4-4 4 4M4 4h16v16H4z" />
                   </svg>
                   Upload Image for OCR
-                </button>
+                </Button>
                 <div className="text-xs text-gray-500 dark:text-gray-400 px-3 py-1">
                   Supports: PNG, JPG, WEBP
                 </div>
@@ -168,17 +185,20 @@ export default function ChatInput({ onSendMessage, onVoiceClick, onImageUpload, 
           className="hidden"
         />
         
-        <button
+        <Button
           type="submit"
           disabled={!message.trim() || disabled || isProcessingImage}
-          className="send-button"
+          className="send-button group"
           title="Send message"
+          aria-label="Send message"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
-        </button>
+        </Button>
       </form>
     </div>
   );
-}
+};
+
+export default ChatInput;

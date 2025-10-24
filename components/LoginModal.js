@@ -11,7 +11,6 @@ export default function LoginModal() {
     try {
       await signIn('google', { callbackUrl: '/' });
     } catch (error) {
-      console.error('Sign in error:', error);
     } finally {
       setIsLoading(false);
     }

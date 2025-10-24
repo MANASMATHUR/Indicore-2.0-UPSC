@@ -65,7 +65,6 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
       setEnhancedText(data.enhancedEssay);
       setShowEnhanced(true);
     } catch (error) {
-      console.error('Enhancement error:', error);
       alert('Enhancement failed. Please try again.');
     } finally {
       setIsProcessing(false);

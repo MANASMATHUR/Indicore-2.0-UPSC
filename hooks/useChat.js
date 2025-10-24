@@ -28,7 +28,6 @@ export function useChat(userEmail) {
         setChats(enriched);
       }
     } catch (error) {
-      console.error('Error loading chats:', error);
     }
   }, [userEmail]);
 
@@ -53,7 +52,6 @@ export function useChat(userEmail) {
         return newChat;
       }
     } catch (error) {
-      console.error('Error creating chat:', error);
     }
   }, [userEmail]);
 
@@ -68,7 +66,6 @@ export function useChat(userEmail) {
         setMessages(chat.messages || []);
       }
     } catch (error) {
-      console.error('Error loading chat:', error);
     }
   }, []);
 
@@ -111,7 +108,6 @@ export function useChat(userEmail) {
         return updatedChat;
       }
     } catch (error) {
-      console.error('Error sending message:', error);
     }
   }, []);
 
@@ -139,7 +135,6 @@ export function useChat(userEmail) {
         return updatedChat;
       }
     } catch (error) {
-      console.error('Error adding AI message:', error);
     }
   }, []);
 
@@ -159,7 +154,6 @@ export function useChat(userEmail) {
         return true;
       }
     } catch (error) {
-      console.error('Error deleting chat:', error);
     }
     return false;
   }, [currentChat]);

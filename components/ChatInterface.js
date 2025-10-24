@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { signOut } from 'next-auth/react';
-import Sidebar from './Sidebar';
-import ChatMessages from './ChatMessages';
-import ChatInput from './ChatInput';
-import SettingsPanel from './SettingsPanel';
+import Header from './layout/Header';
+import Sidebar from './layout/Sidebar';
+import ChatMessages from './chat/ChatMessages';
+import StreamingChatMessages from './chat/StreamingChatMessages';
+import ChatInput from './chat/ChatInput';
+import SettingsPanel from './settings/SettingsPanel';
 import VoiceDialog from './VoiceDialog';
-import ThemeDropdown from './ThemeDropdown';
 import RenameChatModal from './RenameChatModal';
 import ExamPaperUpload from './ExamPaperUpload';
 import EssayEnhancement from './EssayEnhancement';
@@ -16,6 +17,10 @@ import MockEvaluation from './MockEvaluation';
 import { useChat } from '@/hooks/useChat';
 import { useSettings } from '@/hooks/useSettings';
 import Toast, { useToast } from './Toast';
+import speechService from '@/lib/speechService';
+import errorHandler from '@/lib/errorHandler';
+import { validateInput, validateSecurity, security } from '@/lib/validation';
+import { useLoadingState, LoadingStates, LoadingTypes, StatusIndicator } from '@/lib/loadingStates';
 
 export default function ChatInterface({ user }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -25,29 +30,46 @@ export default function ChatInterface({ user }) {
   const [isEssayEnhancementOpen, setIsEssayEnhancementOpen] = useState(false);
   const [isVocabularyBuilderOpen, setIsVocabularyBuilderOpen] = useState(false);
   const [isMockEvaluationOpen, setIsMockEvaluationOpen] = useState(false);
-  const [currentChatId, setCurrentChatId] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState('light');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [renameInitial, setRenameInitial] = useState('');
+  const [currentChatId, setCurrentChatId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState('light');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [useStreaming, setUseStreaming] = useState(true);
   const renameTargetIdRef = useRef(null);
-
   const messagesEndRef = useRef(null);
 
   const { chats, messages, setMessages, loadChats, createNewChat, loadChat, sendMessage, addAIMessage, deleteChat, setChats, setCurrentChat } = useChat(user.email);
   const { settings, updateSettings, loadSettings } = useSettings();
   const toast = useToast();
+  
+  // Enterprise loading states
+  const chatLoading = useLoadingState();
+  const speechLoading = useLoadingState();
+  const translationLoading = useLoadingState();
 
   useEffect(() => {
     loadChats();
     loadSettings();
-  }, [loadChats, loadSettings]);
+    
+    if (settings.useStreaming !== undefined) {
+      setUseStreaming(settings.useStreaming);
+    }
+  }, [loadChats, loadSettings, settings.useStreaming]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    if (currentTheme === 'dark') {
+      root.classList.add('dark');
+    }
+  }, [currentTheme]);
 
   const getLanguageCode = (lang) => {
     const languageMap = {
@@ -55,74 +77,314 @@ export default function ChatInterface({ user }) {
       bn: 'bn-IN', pa: 'pa-IN', gu: 'gu-IN', te: 'te-IN',
       ml: 'ml-IN', kn: 'kn-IN', es: 'es-ES'
     };
-    return languageMap[lang] || 'en-US';
+    // Return the mapped language code or the original language code if not found
+    // This ensures we don't fallback to English for unsupported languages
+    return languageMap[lang] || lang;
   };
 
-  const speakResponse = (text, lang) => {
-    if (!text || !('speechSynthesis' in window)) return;
-
-    if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-
-    const cleanText = text
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\[(\d+)\]/g, '')
-      .replace(/^- /gm, '')
-      .replace(/\n/g, ' ')
+  const cleanTextForSpeech = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1')           // Remove bold markdown
+      .replace(/\*(.*?)\*/g, '$1')               // Remove italic markdown
+      .replace(/\[(\d+)\]/g, '')                 // Remove reference numbers like [1], [2], etc.
+      .replace(/\[\d+\]/g, '')                   // Remove any remaining [number] patterns
+      .replace(/^\s*[-\*•]\s+/gm, '')           // Remove bullet points (including •) only when at line start
+      .replace(/^\s*\d+\.\s+/gm, '')            // Remove numbered lists only when at line start
+      .replace(/\n+/g, ' ')                      // Replace multiple newlines with space
+      .replace(/\s+/g, ' ')                      // Replace multiple spaces with single space
       .trim();
+  };
 
-    if (!cleanText) return;
+  const speakResponse = async (text, lang) => {
+    if (!text) return;
 
-    const chunks = cleanText.match(/.{1,200}(\s|$)/g) || [cleanText];
-    chunks.forEach((chunk) => {
-      const utterance = new SpeechSynthesisUtterance(chunk.trim());
-      utterance.lang = getLanguageCode(lang);
-      window.speechSynthesis.speak(utterance);
-    });
+    try {
+      // Enterprise input validation for multilingual text
+      const validation = validateInput('multilingualText', text);
+      if (!validation.isValid) {
+        console.error('Speech validation failed:', validation.errors[0]?.message);
+        return;
+      }
+
+      await speechService.speak(validation.value, lang, {
+        rate: 0.9,
+        pitch: 1.0,
+        volume: 1.0
+      });
+    } catch (error) {
+      console.error('Speech synthesis error:', error);
+    }
   };
 
   const handleSendMessage = async (message, isVoiceInput = false, messageLanguage = settings.language) => {
-    if (!message.trim()) return;
-    setIsLoading(true);
-
     try {
+      // Enterprise input validation
+      const validation = validateInput('chatMessage', message);
+      if (!validation.isValid) {
+        const error = validation.errors[0];
+        toast.error(error.message);
+        return;
+      }
+
+      // Security validation
+      const securityCheck = validateSecurity(validation.value);
+      if (!securityCheck.isValid) {
+        toast.error('Security validation failed. Please check your input.');
+        errorHandler.logError(new Error('Security validation failed'), {
+          type: 'security_validation',
+          message: message.substring(0, 100),
+          user: user.email
+        }, 'warning');
+        return;
+      }
+
+      const sanitizedMessage = validation.value;
+      
+      // Rate limiting check
+      try {
+        security.checkRateLimit(user.email, 30, 60000); // 30 requests per minute
+      } catch (rateLimitError) {
+        toast.error('Too many requests. Please wait a moment before sending another message.');
+        return;
+      }
+
+      chatLoading.setLoading('Processing your message...', 0);
+      setIsLoading(true);
+      setStreamingMessage('');
+
       let chatId = currentChatId;
 
-      // Show user message immediately
-      setMessages(prev => [...prev, { sender: 'user', text: message, language: messageLanguage }]);
-
-      // Send message to backend (creates chat if chatId is null)
-      const updatedChat = await sendMessage(chatId, message, messageLanguage);
+      setMessages(prev => [...prev, { sender: 'user', text: sanitizedMessage, language: messageLanguage }]);
+      
+      // Update progress
+      chatLoading.updateProgress(20, 'Sending message...');
+      
+      const updatedChat = await sendMessage(chatId, sanitizedMessage, messageLanguage);
       if (!chatId && updatedChat?._id) {
         chatId = updatedChat._id;
         setCurrentChatId(chatId);
       }
 
-      // Fetch AI response from API
-      const response = await fetch('/api/ai/chat', {
+      chatLoading.updateProgress(40, 'Generating response...');
+
+      // Check for simple greetings and provide hardcoded responses
+      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
+      const isSimpleGreeting = simpleGreetings.some(greeting => 
+        sanitizedMessage.toLowerCase().trim() === greeting || 
+        sanitizedMessage.toLowerCase().trim().startsWith(greeting + ' ')
+      );
+      
+      if (isSimpleGreeting) {
+        const hardcodedResponse = "Hello! I'm Indicore, your AI-powered exam preparation assistant. I specialize in helping students prepare for PCS, UPSC, and SSC exams through comprehensive study materials, answer writing practice, and multilingual support. I can assist you with: Study material translation, Essay and answer writing enhancement, Mock exam evaluation, Vocabulary building, and Multilingual practice. How can I help you with your exam preparation today?";
+        
+        chatLoading.updateProgress(80, 'Preparing response...');
+        await addAIMessage(chatId, hardcodedResponse, messageLanguage);
+        
+        chatLoading.updateProgress(100, 'Response ready!');
+        chatLoading.setSuccess('Message sent successfully');
+        
+        if (isVoiceInput) {
+          speechLoading.setLoading('Speaking response...');
+          await speakResponse(hardcodedResponse, settings.language);
+          speechLoading.setSuccess('Speech completed');
+        }
+        return;
+      }
+
+      chatLoading.updateProgress(60, 'Processing with AI...');
+
+      // Force non-streaming for complex questions to avoid garbled responses
+      if (useStreaming) {
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': security.generateCSRFToken()
+          },
+          body: JSON.stringify({
+            message: sanitizedMessage,
+            model: settings.model,
+            systemPrompt: settings.systemPrompt,
+            language: messageLanguage
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        chatLoading.updateProgress(90, 'Finalizing response...');
+        await addAIMessage(chatId, data.response, messageLanguage);
+        
+        chatLoading.updateProgress(100, 'Response ready!');
+        chatLoading.setSuccess('Message sent successfully');
+        
+        if (isVoiceInput) {
+          speechLoading.setLoading('Speaking response...');
+          await speakResponse(data.response, settings.language);
+          speechLoading.setSuccess('Speech completed');
+        }
+        return;
+      }
+
+      if (useStreaming) {
+        await handleStreamingResponse(sanitizedMessage, messageLanguage, chatId, isVoiceInput);
+      } else {
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': security.generateCSRFToken()
+          },
+          body: JSON.stringify({
+            message: sanitizedMessage,
+            model: settings.model,
+            systemPrompt: settings.systemPrompt,
+            language: messageLanguage
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+
+        chatLoading.updateProgress(90, 'Finalizing response...');
+        await addAIMessage(chatId, data.response, messageLanguage);
+        
+        chatLoading.updateProgress(100, 'Response ready!');
+        chatLoading.setSuccess('Message sent successfully');
+
+        if (isVoiceInput) {
+          speechLoading.setLoading('Speaking response...');
+          await speakResponse(data.response, settings.language);
+          speechLoading.setSuccess('Speech completed');
+        }
+      }
+
+    } catch (error) {
+      // Enterprise error handling
+      const errorResult = errorHandler.handleChatError(error, {
+        messageLength: message?.length || 0,
+        language: messageLanguage,
+        isVoiceInput,
+        user: user.email
+      });
+
+      chatLoading.setError(errorResult.userMessage);
+      
+      if (errorResult.requiresAuth) {
+        // Handle authentication issues
+        toast.error('Session expired. Please refresh and log in again.');
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        toast.error(errorResult.userMessage);
+      }
+      
+      // Log error for monitoring
+      errorHandler.logError(error, {
+        type: 'chat_error',
+        message: message?.substring(0, 100),
+        language: messageLanguage,
+        isVoiceInput,
+        user: user.email
+      }, 'error');
+      
+    } finally {
+      setIsLoading(false);
+      setStreamingMessage('');
+    }
+  };
+
+  const handleStreamingResponse = async (message, messageLanguage, chatId, isVoiceInput) => {
+    try {
+      // Check for simple greetings and provide hardcoded responses
+      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
+      const isSimpleGreeting = simpleGreetings.some(greeting => 
+        message.toLowerCase().trim() === greeting || 
+        message.toLowerCase().trim().startsWith(greeting + ' ')
+      );
+      
+      if (isSimpleGreeting) {
+        const hardcodedResponse = "Hello! I'm Indicore, your AI-powered exam preparation assistant. I specialize in helping students prepare for PCS, UPSC, and SSC exams through comprehensive study materials, answer writing practice, and multilingual support. I can assist you with: Study material translation, Essay and answer writing enhancement, Mock exam evaluation, Vocabulary building, and Multilingual practice. How can I help you with your exam preparation today?";
+        
+        await addAIMessage(chatId, hardcodedResponse, messageLanguage);
+        setStreamingMessage('');
+        if (isVoiceInput) await speakResponse(hardcodedResponse, settings.language);
+        return;
+      }
+
+      const response = await fetch('/api/ai/chat-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
           model: settings.model,
           systemPrompt: settings.systemPrompt,
-          language: messageLanguage
+          language: messageLanguage,
+          enableCaching: settings.enableCaching,
+          quickResponses: settings.quickResponses
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get AI response');
-      const data = await response.json();
+      if (!response.ok) throw new Error('Failed to get streaming response');
 
-      // Add AI message using useChat hook (no truncation)
-      await addAIMessage(chatId, data.response, messageLanguage);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
 
-      if (isVoiceInput) speakResponse(data.response, messageLanguage);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      return data.response;
+        const chunk = decoder.decode(value);
+        fullResponse += chunk;
+        setStreamingMessage(fullResponse);
+      }
+
+      // Check if response is complete and not garbled
+      const isGarbled = /(greeting to conversation|used in and, first print|earlyth time|beco\.\.\.|for competitive, and offering|support, languages you of|effective writing, or in your preferred)/i.test(fullResponse);
+      const isIncomplete = fullResponse.trim().length < 50 || !fullResponse.endsWith('.') && !fullResponse.endsWith('!') && !fullResponse.endsWith('?') || fullResponse.includes('...');
+      
+      if (isGarbled || isIncomplete) {
+        // Try non-streaming API as fallback
+        try {
+          const fallbackResponse = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              model: settings.model,
+              systemPrompt: settings.systemPrompt,
+              language: messageLanguage
+            }),
+          });
+
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            if (fallbackData.response && fallbackData.response.length > fullResponse.length) {
+              await addAIMessage(chatId, fallbackData.response, messageLanguage);
+              setStreamingMessage('');
+              if (isVoiceInput) await speakResponse(fallbackData.response, settings.language);
+              return;
+            }
+          }
+        } catch (fallbackError) {
+          // Fallback failed - continue with original response
+        }
+      }
+
+      await addAIMessage(chatId, fullResponse, messageLanguage);
+      setStreamingMessage('');
+
+      if (isVoiceInput) await speakResponse(fullResponse, settings.language);
 
     } catch (error) {
-      console.error('Error sending message:', error);
-    } finally {
-      setIsLoading(false);
+      throw error;
     }
   };
 
@@ -140,34 +402,20 @@ export default function ChatInterface({ user }) {
 
   const handleLogout = () => signOut({ callbackUrl: '/' });
 
-  useEffect(() => {
-    const root = document.documentElement;
-    
-    // Remove dark class
-    root.classList.remove('dark');
-    
-    // Apply current theme
-    if (currentTheme === 'dark') {
-      root.classList.add('dark');
-    }
-  }, [currentTheme]);
-
   const handleThemeChange = (theme) => {
     setCurrentTheme(theme);
   };
 
   const handleSearchChat = (query) => {
     setSearchQuery(query);
-    // The search filtering is handled in the Sidebar component
-    // This function is called when user types in the search box
   };
+
 
   const handleEditChat = async (chatId) => {
     const chat = chats.find(c => c._id === chatId);
     if (!chat) return;
     setRenameInitial(chat.name || `Chat ${chats.indexOf(chat) + 1}`);
     setIsRenameOpen(true);
-    // Store target id in a ref to avoid stale closures
     renameTargetIdRef.current = chatId;
   };
 
@@ -193,7 +441,6 @@ export default function ChatInterface({ user }) {
         toast.error(err.error || 'Failed to update chat name');
       }
     } catch (e) {
-      console.error('Error updating chat name:', e);
       toast.error('Failed to update chat name');
     }
   };
@@ -205,17 +452,12 @@ export default function ChatInterface({ user }) {
       try {
         const response = await fetch(`/api/chat/${chatId}/update`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            pinned: newPinnedState
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned: newPinnedState })
         });
 
         if (response.ok) {
           const data = await response.json();
-          // Update the chat in the local state
           setChats(prevChats => 
             prevChats.map(c => 
               c._id === chatId 
@@ -229,7 +471,6 @@ export default function ChatInterface({ user }) {
           toast.error(errorData.error || `Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`);
         }
       } catch (error) {
-        console.error('Error updating pin status:', error);
         toast.error(`Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`);
       }
     }
@@ -260,20 +501,34 @@ export default function ChatInterface({ user }) {
         }
         
         const sender = message.sender === 'user' ? 'You' : 'AI';
-        const text = message.text || message.content || '';
+        const rawText = message.text || message.content || '';
+        
+        // Clean the text for PDF export
+        const cleanText = rawText
+          .replace(/\*\*(.*?)\*\*/g, '$1')           // Remove bold markdown
+          .replace(/\*(.*?)\*/g, '$1')               // Remove italic markdown
+          .replace(/\[(\d+)\]/g, '')                 // Remove reference numbers like [1], [2], etc.
+          .replace(/\[\d+\]/g, '')                   // Remove any remaining [number] patterns
+          .replace(/^- /gm, '')                      // Remove bullet points
+          .replace(/\*\s/g, '')                      // Remove asterisk bullets
+          .replace(/\d+\.\s/g, '')                   // Remove numbered lists (1., 2., etc.)
+          .replace(/\n+/g, '\n')                     // Normalize newlines
+          .replace(/\s+/g, ' ')                      // Replace multiple spaces with single space
+          .trim();
         
         doc.text(`${sender}:`, margin, y);
         y += 7;
         
         // Split long text into multiple lines
-        const lines = doc.splitTextToSize(text, 170);
+        const lines = doc.splitTextToSize(cleanText, 170);
         doc.text(lines, margin + 10, y);
         y += lines.length * 5 + 10;
       });
       
       doc.save(`chat-export-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Chat exported as PDF');
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      toast.error('Failed to export PDF');
     }
   };
 
@@ -296,130 +551,107 @@ export default function ChatInterface({ user }) {
     handleSendMessage(evaluationMessage, false, language);
   };
 
-  
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-950 via-rose-900 to-slate-950 flex items-center justify-center p-0 md:p-4">
-      <div className="chat-container">
-        <Toast toasts={toast.toasts} onRemove={toast.removeToast} />
-        {/* Header */}
-        <div className="bg-gradient-to-r from-red-900 to-rose-700 dark:from-red-950 dark:to-rose-900 text-white p-6 text-center relative shadow-lg rounded-t-lg md:rounded-t-xl">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="absolute left-6 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-25 hover:bg-opacity-40 p-2 rounded-lg transition-all duration-200"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <h1 className="text-2xl font-bold mb-1">🎓 Indicore</h1>
-          <p className="text-sm opacity-90">PCS • UPSC • SSC Exam Prep AI</p>
-          <div className="absolute right-6 top-1/2 transform -translate-y-1/2 flex gap-2">
-            <button
-              onClick={() => setIsExamUploadOpen(true)}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-              title="Upload Exam Paper for Evaluation"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setIsEssayEnhancementOpen(true)}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-              title="Essay & Answer Writing Enhancement"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setIsVocabularyBuilderOpen(true)}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-              title="Bilingual Vocabulary Builder"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setIsMockEvaluationOpen(true)}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-              title="Regional Language Mock Evaluation"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </button>
-            <button
-              onClick={downloadChatAsPDF}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-              title="Download chat as PDF"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </button>
-            <ThemeDropdown currentTheme={currentTheme} onThemeChange={handleThemeChange} />
-            <button
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className="bg-white bg-opacity-15 hover:bg-opacity-30 focus:ring-2 focus:ring-red-300/60 focus:outline-none p-2 rounded-lg transition-all duration-200 text-slate-100 hover:text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
+    <div className="min-h-screen bg-red-50 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-x-hidden">
+      {/* Skip link for accessibility */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      
+      {/* Sidebar - positioned outside the main container */}
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        chats={chats}
+        currentChatId={currentChatId}
+        onChatSelect={handleChatSelect}
+        onNewChat={handleNewChat}
+        onDeleteChat={async (id) => {
+          const ok = await deleteChat(id);
+          if (ok && currentChatId === id) {
+            setCurrentChatId(null);
+          }
+        }}
+        onEditChat={handleEditChat}
+        onPinChat={handlePinChat}
+        onSearchChat={handleSearchChat}
+      />
 
-            <div className="relative group">
-              <button className="bg-white bg-opacity-25 hover:bg-opacity-40 p-2 rounded-lg transition-all duration-200">
-                <img src={user.avatar || '/static/default-avatar.jpg'} alt={user.name} className="w-6 h-6 rounded-full" />
-              </button>
-              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                <div className="p-3 border-b border-gray-200">
-                  <p className="font-medium text-gray-800">{user.name}</p>
-                  <p className="text-sm text-gray-600">{user.email}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200"
-                >
-                  Sign Out
-                </button>
+      <div 
+        className="chat-container transition-all duration-300 ease-in-out min-h-screen flex flex-col"
+        style={{
+          marginLeft: isSidebarOpen ? '20rem' : '0'
+        }}
+      >
+        <Toast toasts={toast.toasts} onRemove={toast.removeToast} />
+        
+        {/* Header */}
+        <Header
+          user={user}
+          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          onSettingsClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          onLogout={handleLogout}
+          onExamUpload={() => setIsExamUploadOpen(true)}
+          onEssayEnhancement={() => setIsEssayEnhancementOpen(true)}
+          onVocabularyBuilder={() => setIsVocabularyBuilderOpen(true)}
+          onMockEvaluation={() => setIsMockEvaluationOpen(true)}
+          onDownloadPDF={downloadChatAsPDF}
+          currentTheme={currentTheme}
+          onThemeChange={handleThemeChange}
+        />
+
+        {/* Chat Messages */}
+        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages">
+          {/* Enterprise Status Indicators */}
+          <div className="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700 px-4 py-2">
+            <div className="flex items-center justify-between max-w-4xl mx-auto">
+              <div className="flex items-center space-x-4">
+                <StatusIndicator 
+                  status={chatLoading.state} 
+                  message={chatLoading.message}
+                  showIcon={true}
+                />
+                <StatusIndicator 
+                  status={speechLoading.state} 
+                  message={speechLoading.message}
+                  showIcon={true}
+                />
+                <StatusIndicator 
+                  status={translationLoading.state} 
+                  message={translationLoading.message}
+                  showIcon={true}
+                />
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Chat Messages */}
-        <ChatMessages messages={messages} isLoading={isLoading} messagesEndRef={messagesEndRef} />
+          {useStreaming ? (
+            <StreamingChatMessages 
+              messages={messages} 
+              isLoading={isLoading} 
+              messagesEndRef={messagesEndRef}
+              streamingMessage={streamingMessage}
+            />
+          ) : (
+            <ChatMessages 
+              messages={messages} 
+              isLoading={isLoading} 
+              messagesEndRef={messagesEndRef} 
+            />
+          )}
+        </main>
 
         {/* Chat Input */}
-        <ChatInput
-          onSendMessage={(msg) => handleSendMessage(msg, false, settings.language)}
-          onVoiceClick={() => setIsVoiceDialogOpen(true)}
-          disabled={isLoading}
-        />
+        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-700" role="region" aria-label="Chat input">
+          <ChatInput
+            onSendMessage={(msg) => handleSendMessage(msg, false, settings.language)}
+            onVoiceClick={() => setIsVoiceDialogOpen(true)}
+            onImageUpload={(msg) => handleSendMessage(msg, false, settings.language)}
+            disabled={isLoading}
+          />
+        </div>
 
-        {/* Sidebar */}
-        <Sidebar
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          chats={chats}
-          currentChatId={currentChatId}
-          onChatSelect={handleChatSelect}
-          onNewChat={handleNewChat}
-          onDeleteChat={async (id) => {
-            const ok = await deleteChat(id);
-            if (ok && currentChatId === id) {
-              setCurrentChatId(null);
-            }
-          }}
-          onEditChat={handleEditChat}
-          onPinChat={handlePinChat}
-          onSearchChat={handleSearchChat}
-        />
-
+        {/* Modals */}
         <RenameChatModal
           isOpen={isRenameOpen}
           initialName={renameInitial}
@@ -427,7 +659,6 @@ export default function ChatInterface({ user }) {
           onConfirm={handleConfirmRename}
         />
 
-        {/* Settings Panel */}
         <SettingsPanel
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
@@ -435,7 +666,6 @@ export default function ChatInterface({ user }) {
           onUpdateSettings={updateSettings}
         />
 
-        {/* Voice Dialog */}
         <VoiceDialog
           isOpen={isVoiceDialogOpen}
           onClose={() => setIsVoiceDialogOpen(false)}
@@ -443,35 +673,30 @@ export default function ChatInterface({ user }) {
           language={settings.language}
         />
 
-        {/* Exam Paper Upload */}
         <ExamPaperUpload
           isOpen={isExamUploadOpen}
           onClose={() => setIsExamUploadOpen(false)}
           onEvaluate={handleExamEvaluation}
         />
 
-        {/* Essay Enhancement */}
         <EssayEnhancement
           isOpen={isEssayEnhancementOpen}
           onClose={() => setIsEssayEnhancementOpen(false)}
           onEnhance={handleEssayEnhancement}
         />
 
-        {/* Vocabulary Builder */}
         <VocabularyBuilder
           isOpen={isVocabularyBuilderOpen}
           onClose={() => setIsVocabularyBuilderOpen(false)}
           onAddToChat={handleVocabularyAddition}
         />
 
-        {/* Mock Evaluation */}
         <MockEvaluation
           isOpen={isMockEvaluationOpen}
           onClose={() => setIsMockEvaluationOpen(false)}
           onEvaluate={handleMockEvaluation}
         />
 
-        
       </div>
     </div>
   );

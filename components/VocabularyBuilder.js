@@ -63,7 +63,6 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
       setShowAnswer(false);
       setStudyMode(true);
     } catch (error) {
-      console.error('Generation error:', error);
       alert('Failed to generate vocabulary. Please try again.');
     } finally {
       setIsGenerating(false);

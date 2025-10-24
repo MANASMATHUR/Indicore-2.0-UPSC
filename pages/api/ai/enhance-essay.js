@@ -113,7 +113,6 @@ Please provide the enhanced essay in ${targetLangName} only.`
     }
 
   } catch (error) {
-    console.error('Essay Enhancement API error:', error);
 
     if (error.response) {
       const status = error.response.status;

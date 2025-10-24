@@ -73,7 +73,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Chat update error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -118,7 +118,6 @@ Return a JSON array of flashcards with the exact structure:
           flashcards = JSON.parse(content);
         }
       } catch (parseError) {
-        console.error('JSON parse error:', parseError);
         // Fallback: create sample flashcards
         flashcards = generateFallbackFlashcards(category, sourceLanguage, targetLanguage, count || 10);
       }
@@ -136,7 +135,6 @@ Return a JSON array of flashcards with the exact structure:
     }
 
   } catch (error) {
-    console.error('Vocabulary Generation API error:', error);
 
     if (error.response) {
       const status = error.response.status;

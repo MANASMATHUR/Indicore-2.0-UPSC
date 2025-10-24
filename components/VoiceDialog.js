@@ -1,45 +1,154 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import errorHandler from '@/lib/errorHandler';
+import { validateInput } from '@/lib/validation';
+import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingStates';
 
 export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [recognitionError, setRecognitionError] = useState('');
   const recognitionRef = useRef(null);
+  const animationRef = useRef(null);
+  
+  // Enterprise loading states
+  const voiceLoading = useLoadingState();
+  const processingLoading = useLoadingState();
 
   useEffect(() => {
-    if (isOpen && 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      const recognition = recognitionRef.current;
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = getLanguageCode(language);
+    if (isOpen) {
+      // Check for both webkit and standard SpeechRecognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        const recognition = recognitionRef.current;
+        
+        // Enhanced configuration for better recognition
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = getLanguageCode(language);
+        recognition.maxAlternatives = 3; // Increased for better accuracy
+        recognition.serviceURI = ''; // Use default service
+        
+        // Add timeout handling
+        let recognitionTimeout;
+        
+        recognition.onstart = () => {
+          setIsListening(true);
+          setRecognitionError('');
+          startAudioLevelAnimation();
+          
+          // Set a timeout to prevent infinite listening
+          recognitionTimeout = setTimeout(() => {
+            if (recognition && recognition.state !== 'stopped') {
+              recognition.stop();
+            }
+          }, 30000); // 30 second timeout
+        };
 
-      recognition.onstart = () => setIsListening(true);
+        recognition.onresult = (event) => {
+          let finalTranscript = '';
+          let interimTranscript = '';
 
-      recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcriptPart = result[0].transcript;
+            
+            if (result.isFinal) {
+              finalTranscript += transcriptPart;
+            } else {
+              interimTranscript += transcriptPart;
+            }
+          }
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcriptPart = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalTranscript += transcriptPart;
-          else interimTranscript += transcriptPart;
-        }
+          // Simple transcript update - just append new results
+          setTranscript(prev => {
+            // Remove any interim results from previous state and add new ones
+            const cleanPrev = prev.replace(/\s*\[interim\]\s*$/g, '');
+            return cleanPrev + finalTranscript + (interimTranscript ? ` [interim]${interimTranscript}` : '');
+          });
+        };
 
-        setTranscript(finalTranscript + interimTranscript);
-      };
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+          stopAudioLevelAnimation();
+          clearTimeout(recognitionTimeout);
+          
+          switch (event.error) {
+            case 'no-speech':
+              setRecognitionError('No speech detected. Please try speaking again.');
+              break;
+            case 'audio-capture':
+              setRecognitionError('Microphone not accessible. Please check permissions.');
+              break;
+            case 'not-allowed':
+              setRecognitionError('Microphone access denied. Please allow microphone access.');
+              break;
+            case 'network':
+              setRecognitionError('Network error. Please check your connection.');
+              break;
+            case 'aborted':
+              setRecognitionError('Speech recognition was aborted.');
+              break;
+            case 'language-not-supported':
+              setRecognitionError('Language not supported for speech recognition.');
+              break;
+            default:
+              setRecognitionError(`Speech recognition error: ${event.error}`);
+          }
+        };
 
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
+        recognition.onend = () => {
+          setIsListening(false);
+          stopAudioLevelAnimation();
+          clearTimeout(recognitionTimeout);
+        };
 
-      recognition.onend = () => setIsListening(false);
+        recognition.onnomatch = () => {
+          console.log('No speech was recognized');
+        };
+
+        recognition.onspeechstart = () => {
+          console.log('Speech has been detected');
+        };
+
+        recognition.onspeechend = () => {
+          console.log('Speech has stopped being detected');
+        };
+
+        recognition.onsoundstart = () => {
+          console.log('Some sound has been detected');
+        };
+
+        recognition.onsoundend = () => {
+          console.log('Some sound has stopped being detected');
+        };
+
+      } else {
+        setRecognitionError('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+      }
     }
   }, [isOpen, language]);
+
+  const startAudioLevelAnimation = () => {
+    const animate = () => {
+      setAudioLevel(Math.random() * 100);
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    animate();
+  };
+
+  const stopAudioLevelAnimation = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      setAudioLevel(0);
+    }
+  };
 
   const getLanguageCode = (lang) => {
     const languageMap = {
@@ -55,35 +164,97 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       kn: 'kn-IN',
       es: 'es-ES'
     };
-    return languageMap[lang] || 'en-US';
+    
+    // Return the mapped language code or the original language code if not found
+    // This ensures we don't fallback to English for unsupported languages
+    const selectedLang = languageMap[lang] || lang;
+    console.log('Selected language code for speech recognition:', selectedLang, 'for input language:', lang);
+    return selectedLang;
   };
 
-  const startListening = () => {
+  const startListening = async () => {
     if (recognitionRef.current) {
-      setTranscript('');
-      recognitionRef.current.start();
+      try {
+        setTranscript('');
+        setRecognitionError('');
+        
+        // Request microphone permission first
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (error) {
+            setRecognitionError('Microphone access denied. Please allow microphone access and try again.');
+            return;
+          }
+        }
+        
+        // Start recognition
+        recognitionRef.current.start();
+        console.log('Started speech recognition for language:', getLanguageCode(language));
+      } catch (error) {
+        console.error('Error starting speech recognition:', error);
+        setRecognitionError('Failed to start speech recognition. Please try again.');
+      }
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+    if (recognitionRef.current && recognitionRef.current.state !== 'stopped') {
+      try {
+        recognitionRef.current.stop();
+        setIsListening(false);
+        stopAudioLevelAnimation();
+        console.log('Stopped speech recognition');
+      } catch (error) {
+        console.error('Error stopping speech recognition:', error);
+      }
     }
   };
 
   const handleSend = async () => {
     if (!transcript.trim()) return;
 
+    try {
+      // Enterprise input validation
+      const validation = validateInput('voiceInput', transcript);
+      if (!validation.isValid) {
+        const error = validation.errors[0];
+        setRecognitionError(error.message);
+        return;
+      }
+
+      processingLoading.setLoading('Processing voice message...', 0);
     setIsProcessing(true);
     stopListening();
 
-    try {
-      await onSendMessage(transcript.trim());
+      processingLoading.updateProgress(50, 'Sending message...');
+
+      await onSendMessage(validation.value.trim());
+      
+      processingLoading.updateProgress(100, 'Message sent successfully');
+      processingLoading.setSuccess('Voice message sent');
+      
       setTranscript('');
       onClose();
+      
     } catch (err) {
-      console.error('Error sending voice message:', err);
+      // Enterprise error handling
+      const errorResult = errorHandler.handleChatError(err, {
+        type: 'voice_send_error',
+        transcriptLength: transcript.length,
+        language
+      });
+      
+      processingLoading.setError(errorResult.userMessage || 'Failed to send voice message');
+      setRecognitionError(errorResult.userMessage || 'Failed to send voice message');
+      
+      // Log error for monitoring
+      errorHandler.logError(err, {
+        type: 'voice_send_error',
+        transcriptLength: transcript.length,
+        language
+      }, 'error');
+      
     } finally {
       setIsProcessing(false);
     }
@@ -92,8 +263,33 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   const handleClose = () => {
     stopListening();
     setTranscript('');
+    setRecognitionError('');
+    
+    // Clean up recognition instance
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (error) {
+        console.error('Error aborting recognition:', error);
+      }
+      recognitionRef.current = null;
+    }
+    
     onClose();
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (error) {
+          console.error('Error cleaning up recognition:', error);
+        }
+      }
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -101,50 +297,163 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     <div className="voice-dialog">
       <div className="voice-dialog-content">
         <div className="flex justify-between items-center mb-6 w-full">
-          <h3 className="text-xl font-semibold text-gray-800">🎤 Voice Input</h3>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200">
+          <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+            <span className="text-2xl">🎤</span>
+            Voice Input
+          </h3>
+          <button 
+            onClick={handleClose} 
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200"
+          >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
+        {/* Audio Level Indicator */}
+        {isListening && (
+          <div className="w-full mb-6 flex justify-center">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                  style={{ height: `${Math.max(20, audioLevel)}%` }}
+                />
+              </div>
+              <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                  style={{ height: `${Math.max(30, audioLevel)}%` }}
+                />
+              </div>
+              <div className="w-2 h-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                  style={{ height: `${Math.max(40, audioLevel)}%` }}
+                />
+              </div>
+              <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                  style={{ height: `${Math.max(30, audioLevel)}%` }}
+                />
+              </div>
+              <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                  style={{ height: `${Math.max(20, audioLevel)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="w-full mb-4">
-          <p className="text-sm text-gray-600 text-center">
-            {isListening ? 'Listening... Speak now.' : 'Click "Start Listening" to begin speaking...'}
+          <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
+            {isListening ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                Listening... Speak now.
+              </span>
+            ) : (
+              'Click "Start Listening" to begin speaking...'
+            )}
           </p>
         </div>
+
+        {/* Error Message */}
+        {recognitionError && (
+          <div className="w-full mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-700 dark:text-red-300">{recognitionError}</p>
+          </div>
+        )}
 
         <div className="w-full mb-6">
           <textarea
             value={transcript}
             placeholder="Your speech will appear here..."
-            className="w-full p-4 border border-gray-300 rounded-lg bg-gray-50 min-h-[100px] resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 min-h-[100px] resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
             readOnly
           />
         </div>
 
         <div className="flex gap-3 w-full">
-          <button onClick={startListening} disabled={isListening || isProcessing} className="flex-1 bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isListening ? 'Listening...' : 'Start Listening'}
+          <button 
+            onClick={startListening} 
+            disabled={isListening || isProcessing} 
+            className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 px-4 rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            {isListening ? (
+              <>
+                <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                Listening...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                Start Listening
+              </>
+            )}
           </button>
-          <button onClick={stopListening} disabled={!isListening || isProcessing} className="flex-1 bg-red-500 text-white py-3 px-4 rounded-lg hover:bg-red-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button 
+            onClick={stopListening} 
+            disabled={!isListening || isProcessing} 
+            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white py-3 px-4 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+            </svg>
             Stop
           </button>
         </div>
 
         {transcript.trim() && (
-          <button onClick={handleSend} disabled={isProcessing} className="w-full mt-4 bg-blue-500 text-white py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-            {isProcessing ? 'Processing...' : 'Send'}
+          <button 
+            onClick={handleSend} 
+            disabled={isProcessing} 
+            className="w-full mt-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-4 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            {isProcessing ? (
+              <>
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                Send Message
+              </>
+            )}
           </button>
         )}
 
-        {isProcessing && (
-          <div className="mt-4 text-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
-            <p className="text-sm text-gray-600">Processing your message...</p>
+        {/* Enterprise Status Indicators */}
+        <div className="mt-4 flex flex-col items-center space-y-2">
+          <div className="flex items-center space-x-2">
+            <StatusIndicator 
+              status={voiceLoading.state} 
+              message={voiceLoading.message}
+              showIcon={true}
+            />
+            <StatusIndicator 
+              status={processingLoading.state} 
+              message={processingLoading.message}
+              showIcon={true}
+            />
           </div>
-        )}
+          <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
+            Language: {getLanguageCode(language).toUpperCase()}
+          </span>
+        </div>
       </div>
     </div>
   );

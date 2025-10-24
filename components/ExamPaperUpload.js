@@ -82,7 +82,6 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       
       setExtractedText(text);
     } catch (error) {
-      console.error('Error extracting text:', error);
       setExtractedText(`❌ Error reading file: ${file.name}\n\nPlease ensure the file is not corrupted and try again.`);
     } finally {
       setIsUploading(false);
@@ -127,12 +126,10 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
             return extractedText;
           }
         } catch (workerError) {
-          console.log(`Worker ${workerSrc} failed, trying next...`);
           continue;
         }
       }
     } catch (pdfjsError) {
-      console.log('PDF.js failed, trying alternative method...');
     }
     
     return `[PDF File: ${file.name}]\n\n⚠️ PDF text extraction failed. This PDF might be image-based or password-protected.\n\nPlease provide the exam paper content manually in the text area below for AI evaluation.`;
@@ -181,7 +178,6 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       onEvaluate(data.evaluation, examType, subject);
       onClose();
     } catch (error) {
-      console.error('Evaluation error:', error);
       alert('Evaluation failed. Please try again.');
     } finally {
       setIsUploading(false);
