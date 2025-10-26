@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
 import Header from './layout/Header';
 import Sidebar from './layout/Sidebar';
@@ -113,7 +113,7 @@ export default function ChatInterface({ user }) {
     }
   };
 
-  const handleSendMessage = async (message, isVoiceInput = false, messageLanguage = settings.language) => {
+  const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
     try {
       const validation = validateInput('chatMessage', message);
       if (!validation.isValid) {
@@ -285,7 +285,7 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
     }
-  };
+  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, chatLoading, speechLoading, toast, user.email]);
 
   const handleStreamingResponse = async (message, messageLanguage, chatId, isVoiceInput) => {
     try {
@@ -375,27 +375,27 @@ export default function ChatInterface({ user }) {
     }
   };
 
-  const handleChatSelect = async (chatId) => {
+  const handleChatSelect = useCallback(async (chatId) => {
     setCurrentChatId(chatId);
     await loadChat(chatId);
     setIsSidebarOpen(false);
-  };
+  }, [loadChat]);
 
-  const handleNewChat = async () => {
+  const handleNewChat = useCallback(async () => {
     const newChat = await createNewChat();
     setCurrentChatId(newChat._id);
     setIsSidebarOpen(false);
-  };
+  }, [createNewChat]);
 
-  const handleLogout = () => signOut({ callbackUrl: '/' });
+  const handleLogout = useCallback(() => signOut({ callbackUrl: '/' }), []);
 
-  const handleThemeChange = (theme) => {
+  const handleThemeChange = useCallback((theme) => {
     setCurrentTheme(theme);
-  };
+  }, []);
 
-  const handleSearchChat = (query) => {
+  const handleSearchChat = useCallback((query) => {
     setSearchQuery(query);
-  };
+  }, []);
 
 
   const handleEditChat = async (chatId) => {
@@ -575,13 +575,13 @@ export default function ChatInterface({ user }) {
         {/* Header */}
         <Header
           user={user}
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          onSettingsClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          onMenuClick={useCallback(() => setIsSidebarOpen(!isSidebarOpen), [isSidebarOpen])}
+          onSettingsClick={useCallback(() => setIsSettingsOpen(!isSettingsOpen), [isSettingsOpen])}
           onLogout={handleLogout}
-          onExamUpload={() => setIsExamUploadOpen(true)}
-          onEssayEnhancement={() => setIsEssayEnhancementOpen(true)}
-          onVocabularyBuilder={() => setIsVocabularyBuilderOpen(true)}
-          onMockEvaluation={() => setIsMockEvaluationOpen(true)}
+          onExamUpload={useCallback(() => setIsExamUploadOpen(true), [])}
+          onEssayEnhancement={useCallback(() => setIsEssayEnhancementOpen(true), [])}
+          onVocabularyBuilder={useCallback(() => setIsVocabularyBuilderOpen(true), [])}
+          onMockEvaluation={useCallback(() => setIsMockEvaluationOpen(true), [])}
           onDownloadPDF={downloadChatAsPDF}
           currentTheme={currentTheme}
           onThemeChange={handleThemeChange}
@@ -648,39 +648,39 @@ export default function ChatInterface({ user }) {
 
         <SettingsPanel
           isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
+          onClose={useCallback(() => setIsSettingsOpen(false), [])}
           settings={settings}
           onUpdateSettings={updateSettings}
         />
 
         <VoiceDialog
           isOpen={isVoiceDialogOpen}
-          onClose={() => setIsVoiceDialogOpen(false)}
-          onSendMessage={(msg) => handleSendMessage(msg, true, settings.language)}
+          onClose={useCallback(() => setIsVoiceDialogOpen(false), [])}
+          onSendMessage={useCallback((msg) => handleSendMessage(msg, true, settings.language), [handleSendMessage, settings.language])}
           language={settings.language}
         />
 
         <ExamPaperUpload
           isOpen={isExamUploadOpen}
-          onClose={() => setIsExamUploadOpen(false)}
+          onClose={useCallback(() => setIsExamUploadOpen(false), [])}
           onEvaluate={handleExamEvaluation}
         />
 
         <EssayEnhancement
           isOpen={isEssayEnhancementOpen}
-          onClose={() => setIsEssayEnhancementOpen(false)}
+          onClose={useCallback(() => setIsEssayEnhancementOpen(false), [])}
           onEnhance={handleEssayEnhancement}
         />
 
         <VocabularyBuilder
           isOpen={isVocabularyBuilderOpen}
-          onClose={() => setIsVocabularyBuilderOpen(false)}
+          onClose={useCallback(() => setIsVocabularyBuilderOpen(false), [])}
           onAddToChat={handleVocabularyAddition}
         />
 
         <MockEvaluation
           isOpen={isMockEvaluationOpen}
-          onClose={() => setIsMockEvaluationOpen(false)}
+          onClose={useCallback(() => setIsMockEvaluationOpen(false), [])}
           onEvaluate={handleMockEvaluation}
         />
 

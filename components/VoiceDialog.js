@@ -61,7 +61,7 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           }
 
           setTranscript(prev => {
-            const cleanPrev = prev.replace(/\s*\[interim\]\s*$/g, '');
+            const cleanPrev = prev.replace(/\s*\[interim\].*$/g, '');
             return cleanPrev + finalTranscript + (interimTranscript ? ` [interim]${interimTranscript}` : '');
           });
         };
@@ -204,7 +204,15 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     if (!transcript.trim()) return;
 
     try {
-      const validation = validateInput('voiceInput', transcript);
+      // Clean transcript to remove interim results
+      const cleanTranscript = transcript.replace(/\s*\[interim\].*$/g, '').trim();
+      
+      if (!cleanTranscript) {
+        setRecognitionError('No final transcript available. Please try speaking again.');
+        return;
+      }
+
+      const validation = validateInput('voiceInput', cleanTranscript);
       if (!validation.isValid) {
         const error = validation.errors[0];
         setRecognitionError(error.message);
@@ -212,8 +220,8 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       }
 
       processingLoading.setLoading('Processing voice message...', 0);
-    setIsProcessing(true);
-    stopListening();
+      setIsProcessing(true);
+      stopListening();
 
       processingLoading.updateProgress(50, 'Sending message...');
 

@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 
-const SettingsPanel = ({ isOpen, onClose, settings, onUpdateSettings }) => {
+const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => {
   const [localSettings, setLocalSettings] = useState(settings);
 
   useEffect(() => {
@@ -14,8 +14,12 @@ const SettingsPanel = ({ isOpen, onClose, settings, onUpdateSettings }) => {
   }, [settings]);
 
   const handleSave = () => {
-    onUpdateSettings(localSettings);
-    onClose();
+    try {
+      onUpdateSettings(localSettings);
+      onClose();
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
   };
 
   const handleChange = (key, value) => {
@@ -246,6 +250,6 @@ const SettingsPanel = ({ isOpen, onClose, settings, onUpdateSettings }) => {
       </div>
     </Modal>
   );
-};
+});
 
 export default SettingsPanel;

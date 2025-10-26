@@ -2,10 +2,9 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
   "/api/ai/speech": "pages/api/ai/speech.js",
-  "/api/chat/[id]": "pages/api/chat/[id].js",
+  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
   "/api/chat": "pages/api/chat.js",
-  "/api/ai/generate-vocabulary": "pages/api/ai/generate-vocabulary.js",
-  "/api/ai/chat": "pages/api/ai/chat.js"
+  "/api/chat/[id]": "pages/api/chat/[id].js",
+  "/api/ai/translate": "pages/api/ai/translate.js"
 }
