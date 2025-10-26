@@ -1,5 +1,3 @@
-// Speech API for text-to-speech functionality
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -12,16 +10,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check if Azure Speech Services are configured
-    const azureSpeechKey = process.env.AZURE_SPEECH_KEY;
-    const azureSpeechRegion = process.env.AZURE_SPEECH_REGION;
+    const azureSpeechKey = process.env.AZURE_SPEECH_KEY?.trim();
+    const azureSpeechRegion = process.env.AZURE_SPEECH_REGION?.trim();
+
+    console.log('Azure Speech Services Check:', {
+      hasKey: !!azureSpeechKey,
+      hasRegion: !!azureSpeechRegion,
+      keyLength: azureSpeechKey?.length || 0,
+      region: azureSpeechRegion || 'not set'
+    });
 
     if (!azureSpeechKey || !azureSpeechRegion) {
-      // Fallback to browser speech synthesis
+      console.log('Azure Speech Services not configured - using browser fallback');
       return res.status(200).json({ 
         success: true, 
         method: 'browser',
-        message: 'Azure Speech Services not configured, using browser fallback',
+        message: 'Using browser speech synthesis',
         config: {
           text: text,
           language: language || 'en-IN',
@@ -32,10 +36,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // Azure Speech Services implementation
     const defaultVoice = getDefaultVoice(language);
     
-    // If no voice is available for this language, return browser fallback
     if (!defaultVoice) {
       return res.status(200).json({ 
         success: true, 
@@ -51,26 +53,44 @@ export default async function handler(req, res) {
       });
     }
     
+    // Convert short language code to full language code
+    const languageMap = {
+      'en': 'en-IN',
+      'hi': 'hi-IN',
+      'mr': 'mr-IN',
+      'ta': 'ta-IN',
+      'bn': 'bn-IN',
+      'pa': 'pa-IN',
+      'gu': 'gu-IN',
+      'te': 'te-IN',
+      'ml': 'ml-IN',
+      'kn': 'kn-IN',
+      'es': 'es-ES'
+    };
+    
+    const fullLanguageCode = languageMap[language] || language || 'en-IN';
+    
     const speechConfig = {
       text: text,
-      language: language || 'en-IN',
+      language: fullLanguageCode,
       voice: voice || defaultVoice,
       rate: '0.9',
       pitch: '1.0'
     };
 
-    // Generate SSML for Azure Speech Services
     const ssml = generateSSML(speechConfig);
 
-    // Call Azure Speech Services REST API
-    console.log('Calling Azure Speech Services with:', {
+    const azureEndpoint = `https://${azureSpeechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`;
+    
+    console.log('Calling Azure Speech Services:', {
+      endpoint: azureEndpoint,
       region: azureSpeechRegion,
       voice: speechConfig.voice,
       language: speechConfig.language,
       textLength: text.length
     });
 
-    const azureResponse = await fetch(`https://${azureSpeechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    const azureResponse = await fetch(azureEndpoint, {
       method: 'POST',
       headers: {
         'Ocp-Apim-Subscription-Key': azureSpeechKey,
@@ -86,14 +106,19 @@ export default async function handler(req, res) {
       console.error('Azure Speech API error:', {
         status: azureResponse.status,
         statusText: azureResponse.statusText,
-        error: errorText
+        error: errorText,
+        endpoint: azureEndpoint
       });
       throw new Error(`Azure Speech API error: ${azureResponse.status} ${azureResponse.statusText} - ${errorText}`);
     }
 
-    // Get the audio data
     const audioBuffer = await azureResponse.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString('base64');
+    
+    console.log('Azure Speech Services response successful:', {
+      audioDataLength: audioBase64.length,
+      format: 'audio/mp3'
+    });
     
     return res.status(200).json({
       success: true,
@@ -105,10 +130,16 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+    console.error('Speech API error:', {
+      message: error.message,
+      stack: error.stack,
+      endpoint: azureEndpoint || 'N/A'
+    });
     return res.status(500).json({ 
       error: 'Failed to process speech request',
       fallback: true,
-      message: 'Falling back to browser speech synthesis'
+      message: 'Falling back to browser speech synthesis',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 }
@@ -128,20 +159,53 @@ function getDefaultVoice(language) {
     'es': 'es-ES-ElviraNeural'
   };
   
-  // Return the mapped voice or null if not found (no English fallback)
   return voiceMap[language] || null;
 }
 
 function generateSSML(config) {
-  return `
-    <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${config.language}">
-      <voice name="${config.voice}">
-        <prosody rate="${config.rate}" pitch="${config.pitch}">
-          ${escapeXml(config.text)}
-        </prosody>
-      </voice>
-    </speak>
-  `.trim();
+  // Convert short language code to full language code for SSML
+  const languageMap = {
+    'en': 'en-IN',
+    'hi': 'hi-IN',
+    'mr': 'mr-IN',
+    'ta': 'ta-IN',
+    'bn': 'bn-IN',
+    'pa': 'pa-IN',
+    'gu': 'gu-IN',
+    'te': 'te-IN',
+    'ml': 'ml-IN',
+    'kn': 'kn-IN',
+    'es': 'es-ES'
+  };
+  
+  const fullLanguageCode = languageMap[config.language] || config.language;
+  
+  // For Indian languages, add specific SSML attributes for better pronunciation
+  const isIndianLanguage = ['hi-IN', 'mr-IN', 'ta-IN', 'bn-IN', 'pa-IN', 'gu-IN', 'te-IN', 'ml-IN', 'kn-IN'].includes(fullLanguageCode);
+  
+  if (isIndianLanguage) {
+    return `
+      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
+        <voice name="${config.voice}">
+          <prosody rate="${config.rate}" pitch="${config.pitch}" volume="1.0">
+            <lang xml:lang="${fullLanguageCode}">
+              ${escapeXml(config.text)}
+            </lang>
+          </prosody>
+        </voice>
+      </speak>
+    `.trim();
+  } else {
+    return `
+      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
+        <voice name="${config.voice}">
+          <prosody rate="${config.rate}" pitch="${config.pitch}">
+            ${escapeXml(config.text)}
+          </prosody>
+        </voice>
+      </speak>
+    `.trim();
+  }
 }
 
 function escapeXml(text) {

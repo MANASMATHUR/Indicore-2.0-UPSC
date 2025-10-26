@@ -45,7 +45,6 @@ export default function ChatInterface({ user }) {
   const { settings, updateSettings, loadSettings } = useSettings();
   const toast = useToast();
   
-  // Enterprise loading states
   const chatLoading = useLoadingState();
   const speechLoading = useLoadingState();
   const translationLoading = useLoadingState();
@@ -77,22 +76,20 @@ export default function ChatInterface({ user }) {
       bn: 'bn-IN', pa: 'pa-IN', gu: 'gu-IN', te: 'te-IN',
       ml: 'ml-IN', kn: 'kn-IN', es: 'es-ES'
     };
-    // Return the mapped language code or the original language code if not found
-    // This ensures we don't fallback to English for unsupported languages
     return languageMap[lang] || lang;
   };
 
   const cleanTextForSpeech = (text) => {
     if (!text) return '';
     return text
-      .replace(/\*\*(.*?)\*\*/g, '$1')           // Remove bold markdown
-      .replace(/\*(.*?)\*/g, '$1')               // Remove italic markdown
-      .replace(/\[(\d+)\]/g, '')                 // Remove reference numbers like [1], [2], etc.
-      .replace(/\[\d+\]/g, '')                   // Remove any remaining [number] patterns
-      .replace(/^\s*[-\*•]\s+/gm, '')           // Remove bullet points (including •) only when at line start
-      .replace(/^\s*\d+\.\s+/gm, '')            // Remove numbered lists only when at line start
-      .replace(/\n+/g, ' ')                      // Replace multiple newlines with space
-      .replace(/\s+/g, ' ')                      // Replace multiple spaces with single space
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/\[(\d+)\]/g, '')
+      .replace(/\[\d+\]/g, '')
+      .replace(/^\s*[-\*•]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
   };
 
@@ -100,7 +97,6 @@ export default function ChatInterface({ user }) {
     if (!text) return;
 
     try {
-      // Enterprise input validation for multilingual text
       const validation = validateInput('multilingualText', text);
       if (!validation.isValid) {
         console.error('Speech validation failed:', validation.errors[0]?.message);
@@ -119,7 +115,6 @@ export default function ChatInterface({ user }) {
 
   const handleSendMessage = async (message, isVoiceInput = false, messageLanguage = settings.language) => {
     try {
-      // Enterprise input validation
       const validation = validateInput('chatMessage', message);
       if (!validation.isValid) {
         const error = validation.errors[0];
@@ -127,7 +122,6 @@ export default function ChatInterface({ user }) {
         return;
       }
 
-      // Security validation
       const securityCheck = validateSecurity(validation.value);
       if (!securityCheck.isValid) {
         toast.error('Security validation failed. Please check your input.');
@@ -141,9 +135,8 @@ export default function ChatInterface({ user }) {
 
       const sanitizedMessage = validation.value;
       
-      // Rate limiting check
       try {
-        security.checkRateLimit(user.email, 30, 60000); // 30 requests per minute
+        security.checkRateLimit(user.email, 30, 60000);
       } catch (rateLimitError) {
         toast.error('Too many requests. Please wait a moment before sending another message.');
         return;
@@ -157,7 +150,6 @@ export default function ChatInterface({ user }) {
 
       setMessages(prev => [...prev, { sender: 'user', text: sanitizedMessage, language: messageLanguage }]);
       
-      // Update progress
       chatLoading.updateProgress(20, 'Sending message...');
       
       const updatedChat = await sendMessage(chatId, sanitizedMessage, messageLanguage);
@@ -168,7 +160,6 @@ export default function ChatInterface({ user }) {
 
       chatLoading.updateProgress(40, 'Generating response...');
 
-      // Check for simple greetings and provide hardcoded responses
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
       const isSimpleGreeting = simpleGreetings.some(greeting => 
         sanitizedMessage.toLowerCase().trim() === greeting || 
@@ -194,7 +185,6 @@ export default function ChatInterface({ user }) {
 
       chatLoading.updateProgress(60, 'Processing with AI...');
 
-      // Force non-streaming for complex questions to avoid garbled responses
       if (useStreaming) {
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
@@ -267,7 +257,6 @@ export default function ChatInterface({ user }) {
       }
 
     } catch (error) {
-      // Enterprise error handling
       const errorResult = errorHandler.handleChatError(error, {
         messageLength: message?.length || 0,
         language: messageLanguage,
@@ -278,14 +267,12 @@ export default function ChatInterface({ user }) {
       chatLoading.setError(errorResult.userMessage);
       
       if (errorResult.requiresAuth) {
-        // Handle authentication issues
         toast.error('Session expired. Please refresh and log in again.');
         setTimeout(() => window.location.reload(), 2000);
       } else {
         toast.error(errorResult.userMessage);
       }
       
-      // Log error for monitoring
       errorHandler.logError(error, {
         type: 'chat_error',
         message: message?.substring(0, 100),

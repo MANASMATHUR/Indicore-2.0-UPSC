@@ -43,6 +43,17 @@ export default async function handler(req, res) {
 4. **Exam-Specific Feedback**: Provide targeted advice for ${examName} preparation
 5. **Improvement Suggestions**: Offer specific, actionable recommendations
 
+**UPSC/PCS/SSC EVALUATION STANDARDS:**
+- UPSC Mains: Focus on analytical depth, multiple perspectives, and balanced approach
+- PCS Exams: Include state-specific examples and regional governance aspects
+- SSC Exams: Emphasize factual accuracy, precision, and objective-type preparation
+
+**UPSC MARKING SCHEME:**
+- Introduction (10-15%): Context setting and thesis statement
+- Main Body (70-80%): Detailed analysis with examples and case studies
+- Conclusion (10-15%): Synthesis and forward-looking approach
+- Quality of Expression (10%): Language, grammar, and coherence
+
 **Evaluation Criteria:**
 - **Accuracy**: Factual correctness and precision
 - **Completeness**: Coverage of all aspects of the question
@@ -50,6 +61,16 @@ export default async function handler(req, res) {
 - **Language**: Grammar, vocabulary, and expression quality
 - **Relevance**: Direct addressing of the question asked
 - **Depth**: Level of analysis and insight provided
+- **Examples**: Use of relevant case studies and current affairs
+- **Balance**: Multiple perspectives and nuanced approach
+
+**Subject-Specific Focus:**
+- Polity: Constitutional provisions, governance structures, recent developments
+- History: Chronological accuracy, cultural aspects, freedom struggle
+- Geography: Physical features, climate, natural resources, environmental issues
+- Economics: Economic concepts, government policies, recent developments
+- Science & Technology: Recent developments, applications, policy implications
+- Environment: Biodiversity, climate change, conservation strategies
 
 **Response Format:**
 Provide a comprehensive evaluation with:
@@ -59,6 +80,7 @@ Provide a comprehensive evaluation with:
 4. **Detailed Feedback** (question-by-question analysis)
 5. **Recommendations** (how to improve)
 6. **Study Tips** (exam-specific preparation advice)
+7. **Answer Writing Tips** (structure and approach)
 
 Be encouraging but honest, specific but constructive. Focus on helping the student improve their performance.`;
 

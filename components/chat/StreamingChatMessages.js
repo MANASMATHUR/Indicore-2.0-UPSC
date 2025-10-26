@@ -244,7 +244,6 @@ const TranslationResult = memo(({ text, language, langCode }) => {
         textLength: text.length
       });
 
-      // Enterprise input validation for multilingual text
       const validation = validateInput('multilingualText', text);
       if (!validation.isValid) {
         const error = validation.errors[0];
@@ -254,10 +253,12 @@ const TranslationResult = memo(({ text, language, langCode }) => {
 
       setIsSpeaking(true);
       
-      console.log('Calling speechService.speak with:', {
-        text: validation.value.substring(0, 100) + '...',
-        language: langCode,
-        options: { rate: 0.9, pitch: 1.0, volume: 1.0 }
+      console.log('Translation Speech Debug:', {
+        originalText: text.substring(0, 100) + '...',
+        cleanedText: validation.value.substring(0, 100) + '...',
+        language: language,
+        langCode: langCode,
+        textLength: text.length
       });
       
       await speechService.speak(validation.value, langCode, {
@@ -267,6 +268,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       });
       
     } catch (error) {
+      console.error('Speech synthesis error in translation:', error);
     } finally {
       setIsSpeaking(false);
     }

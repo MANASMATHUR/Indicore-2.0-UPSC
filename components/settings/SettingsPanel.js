@@ -19,10 +19,13 @@ const SettingsPanel = ({ isOpen, onClose, settings, onUpdateSettings }) => {
   };
 
   const handleChange = (key, value) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    setLocalSettings(prev => {
+      if (prev[key] === value) return prev;
+      return {
+        ...prev,
+        [key]: value
+      };
+    });
   };
 
   return (

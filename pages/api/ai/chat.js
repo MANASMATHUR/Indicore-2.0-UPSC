@@ -2,13 +2,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { withCache } from '@/lib/cache';
 import { contextualLayer } from '@/lib/contextual-layer';
+import examKnowledge from '@/lib/exam-knowledge';
 import axios from 'axios';
 
-// Enterprise validation and security
 function validateChatRequest(req) {
   const { message, model, systemPrompt, language } = req.body;
 
-  // Input validation
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     throw new Error('Message is required and must be a non-empty string');
   }
@@ -21,7 +20,6 @@ function validateChatRequest(req) {
     throw new Error('Message too short: minimum 1 character required');
   }
 
-  // Security validation
   const dangerousPatterns = [
     /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
     /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
@@ -38,13 +36,11 @@ function validateChatRequest(req) {
     }
   }
 
-  // Language validation
   const supportedLanguages = ['en', 'hi', 'mr', 'ta', 'bn', 'pa', 'gu', 'te', 'ml', 'kn', 'es'];
   if (language && !supportedLanguages.includes(language)) {
     throw new Error('Unsupported language');
   }
 
-  // Model validation
   const supportedModels = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo', 'claude-3-sonnet', 'claude-3-haiku', 'sonar-pro', 'sonar-medium', 'sonar-small'];
   if (model && !supportedModels.includes(model)) {
     throw new Error('Unsupported model');
@@ -58,71 +54,59 @@ function validateChatRequest(req) {
   };
 }
 
-// Function to calculate optimal token count based on message complexity
 function calculateMaxTokens(message) {
   const messageLength = message.length;
   
-  // Short questions (< 100 chars): 4000 tokens
   if (messageLength < 100) return 4000;
-  
-  // Medium questions (100-500 chars): 8000 tokens
   if (messageLength < 500) return 8000;
-  
-  // Long questions or document analysis (500-2000 chars): 12000 tokens
   if (messageLength < 2000) return 12000;
-  
-  // Very long content (> 2000 chars): 16000 tokens
   return 16000;
 }
 
 function isResponseComplete(response) {
-  // Check if response ends with proper punctuation
   const trimmedResponse = response.trim();
   if (trimmedResponse.length < 10) return false;
   
-  // Check for incomplete sentences (ends with incomplete words or fragments)
   const lastSentence = trimmedResponse.split(/[.!?]/).pop().trim();
   if (lastSentence.length > 0 && lastSentence.length < 5) return false;
   
-  // Check for common incomplete patterns
   const incompletePatterns = [
-    /-\s*$/,  // Ends with dash
-    /,\s*$/,  // Ends with comma
-    /and\s*$/,  // Ends with "and"
-    /or\s*$/,   // Ends with "or"
-    /the\s*$/,  // Ends with "the"
-    /a\s*$/,    // Ends with "a"
-    /an\s*$/,   // Ends with "an"
-    /to\s*$/,   // Ends with "to"
-    /of\s*$/,   // Ends with "of"
-    /in\s*$/,   // Ends with "in"
-    /for\s*$/,  // Ends with "for"
-    /with\s*$/, // Ends with "with"
-    /by\s*$/,   // Ends with "by"
-    /from\s*$/, // Ends with "from"
-    /about\s*$/, // Ends with "about"
-    /through\s*$/, // Ends with "through"
-    /during\s*$/, // Ends with "during"
-    /while\s*$/, // Ends with "while"
-    /because\s*$/, // Ends with "because"
-    /although\s*$/, // Ends with "although"
-    /however\s*$/, // Ends with "however"
-    /therefore\s*$/, // Ends with "therefore"
-    /moreover\s*$/, // Ends with "moreover"
-    /furthermore\s*$/, // Ends with "furthermore"
-    /additionally\s*$/, // Ends with "additionally"
-    /consequently\s*$/, // Ends with "consequently"
-    /meanwhile\s*$/, // Ends with "meanwhile"
-    /otherwise\s*$/, // Ends with "otherwise"
-    /nevertheless\s*$/, // Ends with "nevertheless"
-    /nonetheless\s*$/ // Ends with "nonetheless"
+    /-\s*$/,
+    /,\s*$/,
+    /and\s*$/,
+    /or\s*$/,
+    /the\s*$/,
+    /a\s*$/,
+    /an\s*$/,
+    /to\s*$/,
+    /of\s*$/,
+    /in\s*$/,
+    /for\s*$/,
+    /with\s*$/,
+    /by\s*$/,
+    /from\s*$/,
+    /about\s*$/,
+    /through\s*$/,
+    /during\s*$/,
+    /while\s*$/,
+    /because\s*$/,
+    /although\s*$/,
+    /however\s*$/,
+    /therefore\s*$/,
+    /moreover\s*$/,
+    /furthermore\s*$/,
+    /additionally\s*$/,
+    /consequently\s*$/,
+    /meanwhile\s*$/,
+    /otherwise\s*$/,
+    /nevertheless\s*$/,
+    /nonetheless\s*$/
   ];
   
   return !incompletePatterns.some(pattern => pattern.test(trimmedResponse));
 }
 
 async function chatHandler(req, res) {
-  // CORS headers for enterprise security
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
@@ -148,11 +132,9 @@ async function chatHandler(req, res) {
   }
 
   try {
-    // Enterprise validation
     const { message, model, systemPrompt, language } = validateChatRequest(req);
     const { inputType, enableCaching = true, quickResponses = true } = req.body;
 
-    // If input is text-only, skip AI generation
     if (inputType === 'textOnly') {
       return res.status(200).json({ 
         response: null,
@@ -160,7 +142,6 @@ async function chatHandler(req, res) {
       });
     }
 
-    // Check for quick responses first
     if (quickResponses) {
       const quickResponse = contextualLayer.getQuickResponse(message);
       if (quickResponse) {
@@ -171,25 +152,60 @@ async function chatHandler(req, res) {
       }
     }
 
-    // Prepare system prompt
     let finalSystemPrompt = systemPrompt || `You are Indicore, an AI-powered exam preparation assistant specialized in PCS, UPSC, and SSC exams. You help students with multilingual study materials, answer writing practice, document evaluation, and regional language support.
+
+EXAM EXPERTISE:
+- UPSC Civil Services (Prelims, Mains, Interview)
+- PCS (Provincial Civil Services) 
+- SSC (Staff Selection Commission)
+- State-level competitive exams
+- Multilingual exam preparation
+- Answer writing techniques
+- Current affairs and general knowledge
+- Subject-specific guidance
+
+UPSC EXAM STRUCTURE:
+- Prelims: 2 papers (GS Paper I: 100 questions, 200 marks; GS Paper II/CSAT: 80 questions, 200 marks)
+- Mains: 9 papers (2 language papers, 1 essay, 4 GS papers, 2 optional papers) - Total 1750 marks
+- Interview: 275 marks, 30-45 minutes duration
+
+KEY SUBJECTS & WEIGHTAGE:
+- Polity: High weightage (15-20 questions in Prelims) - Constitution, Fundamental Rights, Parliament, Judiciary
+- History: High weightage (15-20 questions) - Ancient, Medieval, Modern periods, Freedom Struggle
+- Geography: High weightage (15-20 questions) - Physical, Human, World Geography
+- Economics: High weightage (15-20 questions) - Micro/Macro economics, Indian Economy
+- Science & Technology: Medium weightage (10-15 questions) - Recent developments, Space, IT
+- Environment: High weightage (10-15 questions) - Biodiversity, Climate Change, Conservation
+
+ANSWER WRITING FRAMEWORKS:
+- 150 words: Introduction (20-30 words) → Main Body (100-120 words) → Conclusion (20-30 words)
+- 250 words: Introduction (40-50 words) → Main Body (150-180 words) → Conclusion (40-50 words)
+- Essay: Introduction → Body (3-4 paragraphs) → Conclusion
 
 CRITICAL RESPONSE REQUIREMENTS:
 - Write complete, well-formed sentences
 - Provide comprehensive answers that fully address the question
 - Use proper grammar and punctuation
 - Structure your response logically with clear paragraphs
-- NEVER include reference numbers like [1], [2], [3]
-- NEVER include citations or source references
+- NEVER include reference numbers like [1], [2], [3], [7] or any citations
+- NEVER include source references or footnotes
+- NEVER include bracketed numbers or academic citations
 - Always complete your thoughts and sentences fully
 - Write in a helpful, conversational tone
 - Focus on being educational and exam-focused
+- Remove any citation patterns from your responses
+- Provide exam-specific insights and strategies
+- Include relevant examples and case studies
+- Reference important acts, policies, and recent developments
 
 RESPONSE FORMAT:
 - Start with a clear introduction
 - Provide detailed explanations with examples
 - End with a helpful conclusion or summary
-- Ensure every sentence is complete and meaningful`;
+- Ensure every sentence is complete and meaningful
+- Keep responses clean without any reference numbers
+- Include practical exam tips when relevant
+- Structure answers according to UPSC requirements when applicable`;
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -202,15 +218,17 @@ RESPONSE FORMAT:
       finalSystemPrompt += ` Your response MUST be entirely in ${langName}. Do not use any other language. Ensure perfect grammar and natural flow in ${langName}.`;
     }
 
-    // Call Perplexity/Sonar API
+    const contextualEnhancement = contextualLayer.generateContextualPrompt(message);
+    const examContext = examKnowledge.generateContextualPrompt(message);
     
+    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
+
     const response = await axios.post('https://api.perplexity.ai/chat/completions', {
       model: model || 'sonar-pro',
       messages: [
-        { role: 'system', content: finalSystemPrompt },
+        { role: 'system', content: enhancedSystemPrompt },
         { role: 'user', content: message }
       ],
-      // Use dynamic token allocation based on message complexity
       max_tokens: calculateMaxTokens(message),
       temperature: 0.7,
       top_p: 0.9,

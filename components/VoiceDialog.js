@@ -14,27 +14,23 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   const recognitionRef = useRef(null);
   const animationRef = useRef(null);
   
-  // Enterprise loading states
   const voiceLoading = useLoadingState();
   const processingLoading = useLoadingState();
 
   useEffect(() => {
     if (isOpen) {
-      // Check for both webkit and standard SpeechRecognition
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         const recognition = recognitionRef.current;
         
-        // Enhanced configuration for better recognition
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = getLanguageCode(language);
-        recognition.maxAlternatives = 3; // Increased for better accuracy
-        recognition.serviceURI = ''; // Use default service
+        recognition.maxAlternatives = 3;
+        recognition.serviceURI = '';
         
-        // Add timeout handling
         let recognitionTimeout;
         
         recognition.onstart = () => {
@@ -42,12 +38,11 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           setRecognitionError('');
           startAudioLevelAnimation();
           
-          // Set a timeout to prevent infinite listening
           recognitionTimeout = setTimeout(() => {
             if (recognition && recognition.state !== 'stopped') {
               recognition.stop();
             }
-          }, 30000); // 30 second timeout
+          }, 30000);
         };
 
         recognition.onresult = (event) => {
@@ -65,9 +60,7 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
             }
           }
 
-          // Simple transcript update - just append new results
           setTranscript(prev => {
-            // Remove any interim results from previous state and add new ones
             const cleanPrev = prev.replace(/\s*\[interim\]\s*$/g, '');
             return cleanPrev + finalTranscript + (interimTranscript ? ` [interim]${interimTranscript}` : '');
           });
@@ -165,8 +158,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       es: 'es-ES'
     };
     
-    // Return the mapped language code or the original language code if not found
-    // This ensures we don't fallback to English for unsupported languages
     const selectedLang = languageMap[lang] || lang;
     console.log('Selected language code for speech recognition:', selectedLang, 'for input language:', lang);
     return selectedLang;
@@ -178,7 +169,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         setTranscript('');
         setRecognitionError('');
         
-        // Request microphone permission first
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           try {
             await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -188,7 +178,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           }
         }
         
-        // Start recognition
         recognitionRef.current.start();
         console.log('Started speech recognition for language:', getLanguageCode(language));
       } catch (error) {
@@ -215,7 +204,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     if (!transcript.trim()) return;
 
     try {
-      // Enterprise input validation
       const validation = validateInput('voiceInput', transcript);
       if (!validation.isValid) {
         const error = validation.errors[0];
@@ -238,7 +226,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       onClose();
       
     } catch (err) {
-      // Enterprise error handling
       const errorResult = errorHandler.handleChatError(err, {
         type: 'voice_send_error',
         transcriptLength: transcript.length,
@@ -248,7 +235,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       processingLoading.setError(errorResult.userMessage || 'Failed to send voice message');
       setRecognitionError(errorResult.userMessage || 'Failed to send voice message');
       
-      // Log error for monitoring
       errorHandler.logError(err, {
         type: 'voice_send_error',
         transcriptLength: transcript.length,
@@ -265,7 +251,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     setTranscript('');
     setRecognitionError('');
     
-    // Clean up recognition instance
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
@@ -278,7 +263,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     onClose();
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
@@ -311,43 +295,40 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           </button>
         </div>
 
-        {/* Audio Level Indicator */}
-        {isListening && (
-          <div className="w-full mb-6 flex justify-center">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
-                  style={{ height: `${Math.max(20, audioLevel)}%` }}
-                />
-              </div>
-              <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
-                  style={{ height: `${Math.max(30, audioLevel)}%` }}
-                />
-              </div>
-              <div className="w-2 h-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
-                  style={{ height: `${Math.max(40, audioLevel)}%` }}
-                />
-              </div>
-              <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
-                  style={{ height: `${Math.max(30, audioLevel)}%` }}
-                />
-              </div>
-              <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
-                  style={{ height: `${Math.max(20, audioLevel)}%` }}
-                />
-              </div>
+        <div className="w-full mb-6 flex justify-center">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                style={{ height: `${Math.max(20, audioLevel)}%` }}
+              />
+            </div>
+            <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                style={{ height: `${Math.max(30, audioLevel)}%` }}
+              />
+            </div>
+            <div className="w-2 h-16 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                style={{ height: `${Math.max(40, audioLevel)}%` }}
+              />
+            </div>
+            <div className="w-2 h-12 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                style={{ height: `${Math.max(30, audioLevel)}%` }}
+              />
+            </div>
+            <div className="w-2 h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="w-full bg-gradient-to-t from-red-500 to-red-400 transition-all duration-100 ease-out"
+                style={{ height: `${Math.max(20, audioLevel)}%` }}
+              />
             </div>
           </div>
-        )}
+        </div>
 
         <div className="w-full mb-4">
           <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
@@ -362,7 +343,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           </p>
         </div>
 
-        {/* Error Message */}
         {recognitionError && (
           <div className="w-full mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
             <p className="text-sm text-red-700 dark:text-red-300">{recognitionError}</p>
@@ -436,7 +416,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           </button>
         )}
 
-        {/* Enterprise Status Indicators */}
         <div className="mt-4 flex flex-col items-center space-y-2">
           <div className="flex items-center space-x-2">
             <StatusIndicator 
