@@ -67,7 +67,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         };
 
         recognition.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
           setIsListening(false);
           stopAudioLevelAnimation();
           clearTimeout(recognitionTimeout);
@@ -225,7 +224,8 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
 
       processingLoading.updateProgress(50, 'Sending message...');
 
-      await onSendMessage(validation.value.trim());
+      // Send with the language the user is speaking in (from VoiceDialog's language prop)
+      await onSendMessage(validation.value.trim(), language);
       
       processingLoading.updateProgress(100, 'Message sent successfully');
       processingLoading.setSuccess('Voice message sent');

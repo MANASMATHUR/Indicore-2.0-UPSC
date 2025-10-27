@@ -38,8 +38,8 @@ export default async function handler(req, res) {
       pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada'
     };
 
-    const sourceLangName = languageNames[sourceLanguage]; //|| 'English';
-    const targetLangName = languageNames[targetLanguage]; //|| 'Hindi';
+    const sourceLangName = languageNames[sourceLanguage];
+    const targetLangName = languageNames[targetLanguage];
     const essayTypeDesc = essayTypePrompts[essayType] || 'general essay writing';
 
     const systemPrompt = `You are Indicore, an AI-powered essay enhancement specialist for competitive exams like PCS, UPSC, and SSC. You excel at:

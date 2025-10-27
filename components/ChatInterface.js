@@ -70,16 +70,16 @@ export default function ChatInterface({ user }) {
     }
   }, [currentTheme]);
 
-  const getLanguageCode = (lang) => {
+  const getLanguageCode = useCallback((lang) => {
     const languageMap = {
       en: 'en-US', hi: 'hi-IN', mr: 'mr-IN', ta: 'ta-IN',
       bn: 'bn-IN', pa: 'pa-IN', gu: 'gu-IN', te: 'te-IN',
       ml: 'ml-IN', kn: 'kn-IN', es: 'es-ES'
     };
     return languageMap[lang] || lang;
-  };
+  }, []);
 
-  const cleanTextForSpeech = (text) => {
+  const cleanTextForSpeech = useCallback((text) => {
     if (!text) return '';
     return text
       .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -91,7 +91,7 @@ export default function ChatInterface({ user }) {
       .replace(/\n+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-  };
+  }, []);
 
   const speakResponse = async (text, lang) => {
     if (!text) return;
@@ -99,21 +99,60 @@ export default function ChatInterface({ user }) {
     try {
       const validation = validateInput('multilingualText', text);
       if (!validation.isValid) {
-        console.error('Speech validation failed:', validation.errors[0]?.message);
         return;
       }
 
-      await speechService.speak(validation.value, lang, {
+      // Ensure we use the correct language for speech
+      const speechLanguage = lang || settings.language || 'en';
+      
+      await speechService.speak(validation.value, speechLanguage, {
         rate: 0.9,
         pitch: 1.0,
         volume: 1.0
       });
     } catch (error) {
-      console.error('Speech synthesis error:', error);
+      console.error('Speech error:', error);
+      // Don't show error to user for speech - just fail silently
     }
   };
 
+  const handleSendAssistantMessage = useCallback(async (message) => {
+    if (!message.trim()) return;
+    
+    // Get or create a chat, ensuring we extract the ID string
+    let chatId = currentChatId;
+    if (!chatId) {
+      const newChat = await createNewChat();
+      chatId = newChat?._id;
+      setCurrentChatId(chatId);
+    }
+    
+    // Ensure chatId is a string, not an object
+    if (!chatId || typeof chatId !== 'string') {
+      console.error('Invalid chatId:', chatId);
+      return;
+    }
+    
+    await addAIMessage(chatId, message, settings.language);
+  }, [currentChatId, createNewChat, addAIMessage, settings.language]);
+
   const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
+    // Detect if user is asking for translation in voice input
+    let speechLanguage = messageLanguage; // For speech output
+    if (isVoiceInput) {
+      const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
+      if (translationMatch) {
+        const requestedLang = translationMatch[1].toLowerCase();
+        const languageMap = {
+          'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
+          'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+          'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+        };
+        if (languageMap[requestedLang]) {
+          speechLanguage = languageMap[requestedLang]; // Only for speech, not text
+        }
+      }
+    }
     try {
       const validation = validateInput('chatMessage', message);
       if (!validation.isValid) {
@@ -177,7 +216,7 @@ export default function ChatInterface({ user }) {
         
         if (isVoiceInput) {
           speechLoading.setLoading('Speaking response...');
-          await speakResponse(hardcodedResponse, settings.language);
+          await speakResponse(hardcodedResponse, speechLanguage);
           speechLoading.setSuccess('Speech completed');
         }
         return;
@@ -214,7 +253,7 @@ export default function ChatInterface({ user }) {
         
         if (isVoiceInput) {
           speechLoading.setLoading('Speaking response...');
-          await speakResponse(data.response, settings.language);
+          await speakResponse(data.response, speechLanguage);
           speechLoading.setSuccess('Speech completed');
         }
         return;
@@ -248,10 +287,10 @@ export default function ChatInterface({ user }) {
         
         chatLoading.updateProgress(100, 'Response ready!');
         chatLoading.setSuccess('Message sent successfully');
-
+        
         if (isVoiceInput) {
           speechLoading.setLoading('Speaking response...');
-          await speakResponse(data.response, settings.language);
+          await speakResponse(data.response, speechLanguage);
           speechLoading.setSuccess('Speech completed');
         }
       }
@@ -289,6 +328,23 @@ export default function ChatInterface({ user }) {
 
   const handleStreamingResponse = async (message, messageLanguage, chatId, isVoiceInput) => {
     try {
+      // Detect if user is asking for translation in voice input
+      let speechLanguage = messageLanguage; // For speech output
+      if (isVoiceInput) {
+        const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
+        if (translationMatch) {
+          const requestedLang = translationMatch[1].toLowerCase();
+          const languageMap = {
+            'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
+            'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+            'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+          };
+          if (languageMap[requestedLang]) {
+            speechLanguage = languageMap[requestedLang]; // Only for speech, not text
+          }
+        }
+      }
+
       // Check for simple greetings and provide hardcoded responses
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
       const isSimpleGreeting = simpleGreetings.some(greeting => 
@@ -301,7 +357,7 @@ export default function ChatInterface({ user }) {
         
         await addAIMessage(chatId, hardcodedResponse, messageLanguage);
         setStreamingMessage('');
-        if (isVoiceInput) await speakResponse(hardcodedResponse, settings.language);
+        if (isVoiceInput) await speakResponse(hardcodedResponse, speechLanguage);
         return;
       }
 
@@ -356,7 +412,7 @@ export default function ChatInterface({ user }) {
             if (fallbackData.response && fallbackData.response.length > fullResponse.length) {
               await addAIMessage(chatId, fallbackData.response, messageLanguage);
               setStreamingMessage('');
-              if (isVoiceInput) await speakResponse(fallbackData.response, settings.language);
+              if (isVoiceInput) await speakResponse(fallbackData.response, speechLanguage);
               return;
             }
           }
@@ -368,7 +424,7 @@ export default function ChatInterface({ user }) {
       await addAIMessage(chatId, fullResponse, messageLanguage);
       setStreamingMessage('');
 
-      if (isVoiceInput) await speakResponse(fullResponse, settings.language);
+      if (isVoiceInput) await speakResponse(fullResponse, speechLanguage);
 
     } catch (error) {
       throw error;
@@ -589,29 +645,6 @@ export default function ChatInterface({ user }) {
 
         {/* Chat Messages */}
         <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages">
-          {/* Enterprise Status Indicators */}
-          <div className="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-slate-700 px-4 py-2">
-            <div className="flex items-center justify-between max-w-4xl mx-auto">
-              <div className="flex items-center space-x-4">
-                <StatusIndicator 
-                  status={chatLoading.state} 
-                  message={chatLoading.message}
-                  showIcon={true}
-                />
-                <StatusIndicator 
-                  status={speechLoading.state} 
-                  message={speechLoading.message}
-                  showIcon={true}
-                />
-                <StatusIndicator 
-                  status={translationLoading.state} 
-                  message={translationLoading.message}
-                  showIcon={true}
-                />
-              </div>
-            </div>
-          </div>
-
           {useStreaming ? (
             <StreamingChatMessages 
               messages={messages} 
@@ -634,6 +667,7 @@ export default function ChatInterface({ user }) {
             onSendMessage={(msg) => handleSendMessage(msg, false, settings.language)}
             onVoiceClick={() => setIsVoiceDialogOpen(true)}
             onImageUpload={(msg) => handleSendMessage(msg, false, settings.language)}
+            onSendAssistantMessage={handleSendAssistantMessage}
             disabled={isLoading}
           />
         </div>
@@ -656,7 +690,12 @@ export default function ChatInterface({ user }) {
         <VoiceDialog
           isOpen={isVoiceDialogOpen}
           onClose={useCallback(() => setIsVoiceDialogOpen(false), [])}
-          onSendMessage={useCallback((msg) => handleSendMessage(msg, true, settings.language), [handleSendMessage, settings.language])}
+          onSendMessage={useCallback(async (msg, speakLanguage) => {
+            // Use the language from VoiceDialog if provided, otherwise use settings.language
+            // This is the language the user is speaking in
+            const langToUse = speakLanguage || settings.language;
+            await handleSendMessage(msg, true, langToUse);
+          }, [handleSendMessage, settings.language])}
           language={settings.language}
         />
 

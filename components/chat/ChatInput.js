@@ -8,6 +8,7 @@ const ChatInput = ({
   onSendMessage, 
   onVoiceClick, 
   onImageUpload, 
+  onSendAssistantMessage,
   disabled = false 
 }) => {
   const [message, setMessage] = useState('');
@@ -53,21 +54,33 @@ const ChatInput = ({
     setShowImageDropdown(false);
 
     try {
+      console.log('Starting OCR for image:', file.name, 'Size:', file.size);
+      
       // OCR the image
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng');
+      console.log('Worker created, recognizing text...');
+      
       const { data: { text: ocrText } } = await worker.recognize(file);
+      console.log('OCR result received, text length:', (ocrText || '').length);
+      
       await worker.terminate();
 
       const extractedText = (ocrText || '').trim();
       
       if (extractedText) {
-        onSendMessage(`📷 Image OCR Result:\n\n${extractedText}`);
+        console.log('Extracted text:', extractedText.substring(0, 100) + '...');
+        
+        // Send the OCR text as a normal user message
+        // This will trigger the AI to respond, and the AI response will have the translate button
+        onSendMessage(extractedText);
       } else {
+        console.warn('No text extracted from image');
         onSendMessage('📷 No readable text found in the image. Please try a clearer photo with better lighting.');
       }
     } catch (error) {
-      onSendMessage('❌ Failed to process the image. Please try again or upload a clearer image.');
+      console.error('OCR error:', error);
+      onSendMessage(`❌ Failed to process the image: ${error.message}. Please try again or upload a clearer image.`);
     } finally {
       setIsProcessingImage(false);
       // Reset file input

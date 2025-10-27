@@ -33,11 +33,8 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef })
     if (!text.trim()) return;
 
     try {
-      // Enterprise input validation
       const validation = validateInput('chatMessage', text);
       if (!validation.isValid) {
-        const error = validation.errors[0];
-        console.error('Translation validation failed:', error.message);
         return;
       }
 
@@ -159,8 +156,8 @@ const MessageItem = memo(({
       <div className="message-content group">
         {cleanText(text)}
         
-        {/* Translation dropdown for AI messages */}
-        {sender === 'assistant' && text.trim() && (
+        {/* Translation dropdown for AI messages and OCR results */}
+        {((sender === 'assistant') || text.includes('📷 Image OCR Result') || text.includes('Translated to')) && text.trim() && (
           <div className="mt-4">
             <select
               onChange={(e) => {
@@ -214,19 +211,30 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const speechLoading = useLoadingState();
 
   const handleSpeak = async () => {
+    console.log('Speak button clicked!', { text, langCode, language });
+    
+    // Clean the text by removing HTML tags and extra formatting
+    const cleanText = text
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
+      .replace(/#{1,6}\s*/g, '') // Remove markdown headers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links
+      .replace(/\n+/g, ' ') // Replace newlines with spaces
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+    
+    console.log('Cleaned text for speech:', cleanText);
+    
+    // Ensure speech service is initialized
+    if (!speechService) {
+      console.error('Speech service not available');
+      return;
+    }
     try {
-      console.log('TranslationResult - Speech Request:', {
-        text: text.substring(0, 100) + '...',
-        language,
-        langCode,
-        textLength: text.length
-      });
-
-      // Enterprise input validation for multilingual text
-      const validation = validateInput('multilingualText', text);
+      const validation = validateInput('multilingualText', cleanText);
       if (!validation.isValid) {
-        const error = validation.errors[0];
-        console.error('Speech validation failed:', error.message);
+        console.error('Text validation failed:', validation.errors);
         return;
       }
 
@@ -235,11 +243,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       
       speechLoading.updateProgress(50, 'Synthesizing speech...');
       
-      console.log('Calling speechService.speak with:', {
-        text: validation.value.substring(0, 100) + '...',
-        language: langCode,
-        options: { rate: 0.9, pitch: 1.0, volume: 1.0 }
-      });
+      console.log('Speaking text:', validation.value, 'in language:', langCode);
       
       await speechService.speak(validation.value, langCode, {
         rate: 0.9,
@@ -250,6 +254,8 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       speechLoading.setSuccess('Speech completed');
       
     } catch (error) {
+      console.error('Speech error:', error);
+      
       // Enterprise error handling
       const errorResult = errorHandler.handleSpeechError(error, {
         textLength: text.length,

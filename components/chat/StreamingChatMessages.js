@@ -182,8 +182,8 @@ const MessageItem = memo(({
       <div className="message-content">
         {cleanText(text)}
         
-        {/* Translation dropdown for AI messages */}
-        {sender === 'assistant' && text.trim() && (
+        {/* Translation dropdown for AI messages and OCR results */}
+        {((sender === 'assistant') || text.includes('📷 Image OCR Result') || text.includes('Translated to')) && text.trim() && (
           <div className="mt-4">
             <select
               onChange={(e) => {
@@ -236,30 +236,59 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const handleSpeak = async () => {
+    console.log('Speak button clicked!', { text, langCode, language });
+    
+    // Test if audio is working at all
+    if (!window.speechSynthesis) {
+      console.error('Speech synthesis not supported in this browser');
+      alert('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.');
+      return;
+    }
+    
+    // Force Azure re-initialization before speaking
+    console.log('Forcing Azure re-initialization...');
+    await speechService.forceReinitializeAzure();
+    
+    // Clean the text by removing HTML tags and extra formatting
+    // But preserve the actual content for speech
+    let cleanText = text
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
+      .replace(/#{1,6}\s*/g, '') // Remove markdown headers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links
+      .replace(/\n+/g, ' ') // Replace newlines with spaces
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+    
+    // Remove common unwanted patterns that might interfere with speech
+    cleanText = cleanText
+      .replace(/🎓|PCS|UPSC|SSC|Manas Mathur|Why did akbar fail|Translated to/g, '')
+      .replace(/\[Translated from .*?\]/g, '')
+      .replace(/\[Note: .*?\]/g, '')
+      .replace(/\[[0-9]+\]/g, '')
+      .replace(/\[[0-9]+,\s*[0-9]+,\s*[0-9]+\]/g, '')
+      .replace(/---\s*\n/g, '')
+      .replace(/={3,}/g, '')
+      .trim();
+    
+    console.log('Cleaned text for speech:', cleanText);
+    
+    // Ensure speech service is initialized
+    if (!speechService) {
+      console.error('Speech service not available');
+      return;
+    }
     try {
-      console.log('StreamingTranslationResult - Speech Request:', {
-        text: text.substring(0, 100) + '...',
-        language,
-        langCode,
-        textLength: text.length
-      });
-
-      const validation = validateInput('multilingualText', text);
+      const validation = validateInput('multilingualText', cleanText);
       if (!validation.isValid) {
-        const error = validation.errors[0];
-        console.error('Speech validation failed:', error.message);
+        console.error('Text validation failed:', validation.errors);
         return;
       }
 
       setIsSpeaking(true);
       
-      console.log('Translation Speech Debug:', {
-        originalText: text.substring(0, 100) + '...',
-        cleanedText: validation.value.substring(0, 100) + '...',
-        language: language,
-        langCode: langCode,
-        textLength: text.length
-      });
+      console.log('Speaking text:', validation.value, 'in language:', langCode);
       
       await speechService.speak(validation.value, langCode, {
         rate: 0.9,
@@ -268,7 +297,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       });
       
     } catch (error) {
-      console.error('Speech synthesis error in translation:', error);
+      console.error('Speech error:', error);
     } finally {
       setIsSpeaking(false);
     }

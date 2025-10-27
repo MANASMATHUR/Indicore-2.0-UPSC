@@ -73,8 +73,10 @@ A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparat
 - **Backend**: Node.js, Next.js API Routes
 - **Database**: MongoDB
 - **Authentication**: NextAuth.js
-- **AI Integration**: OpenAI API
-- **Speech Services**: Azure Speech Services
+- **AI Integration**: Gemini API (FREE TIER), Cohere API (FREE TIER), Mistral API (FREE TIER)
+- **Translation**: LibreTranslate (FREE), MyMemory API (FREE), Google Translate API (FREE TIER)
+- **OCR**: Tesseract.js (FREE)
+- **Speech Services**: Azure Speech Services (FREE TIER)
 - **Deployment**: Vercel
 
 ## 📁 Project Structure
@@ -96,16 +98,28 @@ A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparat
 
 ## 🌟 Key Components
 
+### Enhanced Multilingual Support
+- **OCR with Translation**: Extract text from images and translate to regional languages
+- **Gemini API Integration**: Advanced AI-powered translation for study materials
+- **Free Tier Optimization**: Uses only free APIs to avoid costs
+- **Smart Fallbacks**: Multiple translation services with automatic fallback
+
+### Performance Optimizations
+- **Response Caching**: 10-minute cache for chat responses, 5-minute for translations
+- **Reduced Latency**: Optimized API calls and efficient processing
+- **Streamlined UI**: Consolidated tools menu reduces clutter
+- **Efficient Resource Usage**: Smart caching and rate limiting
+
 ### Speech Service
 - **Multilingual Support**: 11 languages with native voices
-- **Azure Integration**: High-quality speech synthesis
+- **Azure Integration**: High-quality speech synthesis (FREE TIER)
 - **Browser Fallback**: Web Speech API support
 - **Error Handling**: Graceful degradation
 
 ### Chat Interface
 - **Streaming Responses**: Real-time AI communication
 - **Voice Integration**: Speech input and output
-- **Translation**: Multi-language support
+- **Translation**: Multi-language support with OCR integration
 - **Context Awareness**: Maintains conversation context
 
 ### UI Components
@@ -114,6 +128,7 @@ A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparat
 - **Modal**: Overlay dialogs
 - **Card**: Content containers
 - **Badge**: Status indicators
+- **Consolidated Tools Menu**: Streamlined header with organized features
 
 ## 🔧 Configuration
 
@@ -127,13 +142,21 @@ MONGODB_URI=mongodb://localhost:27017/indicore
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret-key
 
-# AI Services
-OPENAI_API_KEY=your-openai-key
+# AI Services - FREE TIER APIs ONLY
+GEMINI_API_KEY=your-gemini-api-key
+COHERE_API_KEY=your-cohere-api-key
+MISTRAL_API_KEY=your-mistral-api-key
+PERPLEXITY_API_KEY=your-perplexity-api-key
 
-# Speech Services
+# Speech Services - FREE TIER
 AZURE_SPEECH_KEY=your-azure-key
 AZURE_SPEECH_REGION=your-azure-region
+
+# Translation Services - FREE TIER
+GOOGLE_TRANSLATE_API_KEY=your-google-translate-key
 ```
+
+**Note**: All APIs are configured to use FREE TIER limits. See `FREE_TIER_SETUP.md` for detailed setup instructions.
 
 ## 📊 Performance
 
