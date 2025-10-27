@@ -115,16 +115,27 @@ export default async function handler(req, res) {
 function getDefaultVoice(language) {
   const voiceMap = {
     'en': 'en-IN-NeerjaNeural',
+    'en-IN': 'en-IN-NeerjaNeural',
     'hi': 'hi-IN-SwaraNeural',
+    'hi-IN': 'hi-IN-SwaraNeural',
     'mr': 'mr-IN-AarohiNeural',
+    'mr-IN': 'mr-IN-AarohiNeural',
     'ta': 'ta-IN-PallaviNeural',
+    'ta-IN': 'ta-IN-PallaviNeural',
     'bn': 'bn-IN-TanishaaNeural',
-    'pa': 'pa-IN-MeharNeural',
+    'bn-IN': 'bn-IN-TanishaaNeural',
+    'pa': null,
+    'pa-IN': null,
     'gu': 'gu-IN-DhwaniNeural',
+    'gu-IN': 'gu-IN-DhwaniNeural',
     'te': 'te-IN-ShrutiNeural',
+    'te-IN': 'te-IN-ShrutiNeural',
     'ml': 'ml-IN-SobhanaNeural',
+    'ml-IN': 'ml-IN-SobhanaNeural',
     'kn': 'kn-IN-SapnaNeural',
-    'es': 'es-ES-ElviraNeural'
+    'kn-IN': 'kn-IN-SapnaNeural',
+    'es': 'es-ES-ElviraNeural',
+    'es-ES': 'es-ES-ElviraNeural'
   };
   
   return voiceMap[language] || null;
@@ -148,32 +159,12 @@ function generateSSML(config) {
   
   const fullLanguageCode = languageMap[config.language] || config.language;
   
-  // For Indian languages, add specific SSML attributes for better pronunciation
-  const isIndianLanguage = ['hi-IN', 'mr-IN', 'ta-IN', 'bn-IN', 'pa-IN', 'gu-IN', 'te-IN', 'ml-IN', 'kn-IN'].includes(fullLanguageCode);
-  
-  if (isIndianLanguage) {
-    return `
-      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
-        <voice name="${config.voice}">
-          <prosody rate="${config.rate}" pitch="${config.pitch}" volume="1.0">
-            <lang xml:lang="${fullLanguageCode}">
-              ${escapeXml(config.text)}
-            </lang>
-          </prosody>
-        </voice>
-      </speak>
-    `.trim();
-  } else {
-    return `
-      <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
-        <voice name="${config.voice}">
-          <prosody rate="${config.rate}" pitch="${config.pitch}">
-            ${escapeXml(config.text)}
-          </prosody>
-        </voice>
-      </speak>
-    `.trim();
-  }
+  // Simple SSML format that works with Azure
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
+    <voice name="${config.voice}">
+      ${escapeXml(config.text)}
+    </voice>
+  </speak>`.trim();
 }
 
 function escapeXml(text) {
