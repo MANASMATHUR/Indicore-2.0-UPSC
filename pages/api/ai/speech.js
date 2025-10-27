@@ -13,15 +13,7 @@ export default async function handler(req, res) {
     const azureSpeechKey = process.env.AZURE_SPEECH_KEY?.trim();
     const azureSpeechRegion = process.env.AZURE_SPEECH_REGION?.trim();
 
-    console.log('Azure Speech Services Check:', {
-      hasKey: !!azureSpeechKey,
-      hasRegion: !!azureSpeechRegion,
-      keyLength: azureSpeechKey?.length || 0,
-      region: azureSpeechRegion || 'not set'
-    });
-
     if (!azureSpeechKey || !azureSpeechRegion) {
-      console.log('Azure Speech Services not configured - using browser fallback');
       return res.status(200).json({ 
         success: true, 
         method: 'browser',
@@ -82,14 +74,6 @@ export default async function handler(req, res) {
 
     const azureEndpoint = `https://${azureSpeechRegion}.tts.speech.microsoft.com/cognitiveservices/v1`;
     
-    console.log('Calling Azure Speech Services:', {
-      endpoint: azureEndpoint,
-      region: azureSpeechRegion,
-      voice: speechConfig.voice,
-      language: speechConfig.language,
-      textLength: text.length
-    });
-
     const azureResponse = await fetch(azureEndpoint, {
       method: 'POST',
       headers: {
@@ -103,22 +87,11 @@ export default async function handler(req, res) {
 
     if (!azureResponse.ok) {
       const errorText = await azureResponse.text();
-      console.error('Azure Speech API error:', {
-        status: azureResponse.status,
-        statusText: azureResponse.statusText,
-        error: errorText,
-        endpoint: azureEndpoint
-      });
       throw new Error(`Azure Speech API error: ${azureResponse.status} ${azureResponse.statusText} - ${errorText}`);
     }
 
     const audioBuffer = await azureResponse.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString('base64');
-    
-    console.log('Azure Speech Services response successful:', {
-      audioDataLength: audioBase64.length,
-      format: 'audio/mp3'
-    });
     
     return res.status(200).json({
       success: true,
@@ -130,11 +103,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Speech API error:', {
-      message: error.message,
-      stack: error.stack,
-      endpoint: azureEndpoint || 'N/A'
-    });
     return res.status(500).json({ 
       error: 'Failed to process speech request',
       fallback: true,

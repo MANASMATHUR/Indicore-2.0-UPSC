@@ -43,22 +43,23 @@ const Modal = ({
   return (
     <>
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-all duration-300 animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
       
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
       >
         <div className={`
-          bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full
+          bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full pointer-events-auto
           ${sizes[size]} ${className}
-          transform transition-all duration-300
-          ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}
+          transform transition-all duration-300 ease-out
+          ${isOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}
+          border border-gray-200 dark:border-slate-700
         `}>
           {title && (
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
