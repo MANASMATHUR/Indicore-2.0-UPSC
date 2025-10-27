@@ -38,8 +38,8 @@ export default async function handler(req, res) {
       pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada'
     };
 
-    const sourceLangName = languageNames[sourceLanguage]; // || 'English';
-    const targetLangName = languageNames[targetLanguage];// || 'Hindi';
+    const sourceLangName = languageNames[sourceLanguage];
+    const targetLangName = languageNames[targetLanguage];
     const categoryDesc = categoryFocus[category] || 'general studies and administration';
 
     const systemPrompt = `You are Indicore, an AI-powered vocabulary specialist for competitive exams like PCS, UPSC, and SSC. You excel at creating bilingual vocabulary flashcards for exam preparation.

@@ -40,8 +40,8 @@ export default async function handler(req, res) {
       pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada'
     };
 
-    const langName = languageNames[language]; //|| 'English';
-    const examName = examTypeNames[examType]; //|| 'Competitive Exam';
+    const langName = languageNames[language];
+    const examName = examTypeNames[examType];
     const questionTypeName = questionTypeNames[questionType] || 'General Questions';
 
     const systemPrompt = `You are Indicore, an AI-powered mock evaluation specialist for ${examName} and other competitive exams. You excel at evaluating answers written in ${langName} for ${questionTypeName} questions.

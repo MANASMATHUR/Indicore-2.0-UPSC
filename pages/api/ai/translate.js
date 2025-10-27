@@ -1,5 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
+// Simple in-memory cache for translations
+const translationCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Enterprise validation and security
 function validateTranslateRequest(req) {
   const { text, sourceLanguage, targetLanguage, isStudyMaterial = false } = req.body;
@@ -118,6 +122,13 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     sourceLang = 'en';
   }
 
+  // Check cache first
+  const cacheKey = `${text}-${sourceLang}-${targetLang}-${isStudyMaterial}`;
+  const cached = translationCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.translation;
+  }
+
   const languageNames = {
     'en': 'English',
     'es': 'Spanish',
@@ -134,7 +145,18 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
 
   // For study materials, try AI models first for better quality
   if (isStudyMaterial) {
-    // Try Cohere API first (free tier available)
+    // Try Gemini API first (free tier available)
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const geminiResponse = await translateWithGemini(text, sourceLang, targetLang);
+        if (geminiResponse) {
+          return geminiResponse;
+        }
+      } catch (error) {
+      }
+    }
+
+    // Try Cohere API (free tier available)
     if (process.env.COHERE_API_KEY) {
       try {
         const cohereResponse = await translateWithCohere(text, sourceLang, targetLang);
@@ -232,8 +254,82 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     translatedText = basicTranslation(text, sourceLang, targetLang);
   }
 
+  // Cache the result
+  translationCache.set(cacheKey, {
+    translation: translatedText,
+    timestamp: Date.now()
+  });
+
+  // Clean old cache entries periodically
+  if (translationCache.size > 1000) {
+    const now = Date.now();
+    for (const [key, value] of translationCache.entries()) {
+      if (now - value.timestamp > CACHE_TTL) {
+        translationCache.delete(key);
+      }
+    }
+  }
+
   // Return clean translation without metadata for better speech synthesis
   return translatedText;
+}
+
+// Gemini API translation for study materials (FREE TIER)
+async function translateWithGemini(text, sourceLang, targetLang) {
+  const languageNames = {
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
+  };
+
+  const sourceLangName = languageNames[sourceLang] || sourceLang;
+  const targetLangName = languageNames[targetLang] || targetLang;
+
+  const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
+
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
+- Preserve the academic tone and exam-relevant vocabulary
+- Use formal language appropriate for competitive exams
+- Maintain technical terms and concepts accurately
+- Ensure the translation is suitable for state-level PCS exam preparation
+- Keep the structure and formatting intact
+- Provide natural, fluent translation
+
+Text to translate:
+${text}
+
+Translation:`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2000,
+          topP: 0.8,
+          topK: 40
+        }
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
+        return data.candidates[0].content.parts[0].text.trim();
+      }
+    }
+  } catch (error) {
+  }
+  return null;
 }
 
 // Cohere API translation for study materials

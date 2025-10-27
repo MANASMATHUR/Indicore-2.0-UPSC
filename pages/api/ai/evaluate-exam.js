@@ -32,8 +32,8 @@ export default async function handler(req, res) {
       pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada'
     };
 
-    const langName = languageNames[language]; //|| 'English';
-    const examName = examTypeNames[examType]; //|| 'Competitive Exam';
+    const langName = languageNames[language];
+    const examName = examTypeNames[examType];
 
     const systemPrompt = `You are Indicore, an AI-powered exam evaluation specialist for ${examName} and other competitive exams. You excel at:
 
@@ -115,9 +115,6 @@ Please provide a comprehensive evaluation following the format specified in your
 
     if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
       const evaluation = response.data.choices[0].message.content;
-      
-      // Store evaluation in database (optional)
-      // We can add database storage here if needed
       
       return res.status(200).json({ 
         evaluation,
