@@ -245,12 +245,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       return;
     }
     
-    // Force Azure re-initialization before speaking
-    console.log('Forcing Azure re-initialization...');
-    await speechService.forceReinitializeAzure();
-    
     // Clean the text by removing HTML tags and extra formatting
-    // But preserve the actual content for speech
     let cleanText = text
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
@@ -261,24 +256,15 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .trim();
     
-    // Remove common unwanted patterns that might interfere with speech
-    cleanText = cleanText
-      .replace(/🎓|PCS|UPSC|SSC|Manas Mathur|Why did akbar fail|Translated to/g, '')
-      .replace(/\[Translated from .*?\]/g, '')
-      .replace(/\[Note: .*?\]/g, '')
-      .replace(/\[[0-9]+\]/g, '')
-      .replace(/\[[0-9]+,\s*[0-9]+,\s*[0-9]+\]/g, '')
-      .replace(/---\s*\n/g, '')
-      .replace(/={3,}/g, '')
-      .trim();
-    
     console.log('Cleaned text for speech:', cleanText);
+    console.log('Cleaned text length:', cleanText.length);
     
     // Ensure speech service is initialized
     if (!speechService) {
       console.error('Speech service not available');
       return;
     }
+    
     try {
       const validation = validateInput('multilingualText', cleanText);
       if (!validation.isValid) {
