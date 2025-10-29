@@ -1,6 +1,5 @@
-const express = require('express');
-const router = express.Router();
+module.exports = (req, res) => {
+  res.json({ ok: true });
+};
 
-router.get('/', (req, res) => res.json({ pong: true }));
 
-module.exports = router;

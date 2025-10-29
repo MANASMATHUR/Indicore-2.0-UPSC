@@ -1,16 +1,38 @@
 const mongoose = require('mongoose');
 
+const messageSchema = new mongoose.Schema({
+  sender: { type: String, enum: ['user', 'assistant'], required: true },
+  text: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+  metadata: { model: String, language: String, tokens: Number },
+});
+
 const chatSchema = new mongoose.Schema({
-    userEmail: { type: String, required: true },
-    name: { type: String }, // Chat name
-    messages: [
-        {
-            sender: { type: String, enum: ['user', 'assistant', 'ai'], required: true },
-            text: { type: String, required: true },
-            language: { type: String, default: 'en' }, // store message language
-            timestamp: { type: Date, default: Date.now }
-        }
-    ]
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  userEmail: { type: String, required: true },
+  name: { type: String, required: true },
+  messages: [messageSchema],
+  settings: {
+    language: { type: String, default: 'en' },
+    model: { type: String, default: 'sonar-pro' },
+    systemPrompt: String,
+  },
+  isActive: { type: Boolean, default: true },
+  pinned: { type: Boolean, default: false },
+  lastMessageAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Chat', chatSchema);
+chatSchema.index({ userId: 1, createdAt: -1 });
+chatSchema.index({ userEmail: 1, createdAt: -1 });
+chatSchema.index({ lastMessageAt: -1 });
+
+chatSchema.pre('save', function(next) {
+  if (this.messages && this.messages.length > 0) {
+    this.lastMessageAt = this.messages[this.messages.length - 1].timestamp;
+  }
+  next();
+});
+
+module.exports = mongoose.models.Chat || mongoose.model('Chat', chatSchema);
+
+

@@ -6,6 +6,7 @@ export default function Analytics() {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchUserData();
@@ -52,6 +53,17 @@ export default function Analytics() {
             <div className="h-4 bg-white rounded w-48 mx-auto mb-2"></div>
             <div className="h-4 bg-white rounded w-32 mx-auto"></div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center">
+        <div className="text-center text-white">
+          <h1 className="text-2xl font-bold mb-2">Error loading analytics</h1>
+          <p className="opacity-80">{error}</p>
         </div>
       </div>
     );

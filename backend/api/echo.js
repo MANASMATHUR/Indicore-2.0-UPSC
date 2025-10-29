@@ -1,6 +1,5 @@
-const express = require('express');
-const router = express.Router();
+module.exports = (req, res) => {
+  res.json({ body: req.body || null });
+};
 
-router.post('/', (req, res) => res.json({ ...req.body }));
 
-module.exports = router;

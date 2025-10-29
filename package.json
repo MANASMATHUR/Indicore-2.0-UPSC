@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.5.0",
     "autoprefixer": "^10.4.16",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",

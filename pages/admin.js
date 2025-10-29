@@ -41,15 +41,15 @@ function AdminDashboardContent() {
   };
 
   const exportToCSV = () => {
+    // Export only important fields for a cleaner sheet
     const csvContent = [
-      ['Name', 'Email', 'Last Login', 'Chat Count', 'Total Messages', 'Created At'],
+      ['Name', 'Email', 'Last Active', 'Chats', 'Messages'],
       ...users.map(user => [
         user.name,
         user.email,
         formatDate(user.lastActive),
         user.chatCount,
-        user.totalMessages,
-        formatDate(user.createdAt)
+        user.totalMessages
       ])
     ].map(row => row.join(',')).join('\n');
 
