@@ -29,7 +29,7 @@ const Sidebar = ({
       const chatName = chat.name || `Chat ${chats.indexOf(chat) + 1}`;
       const lastMessage = chat.lastMessageContent || '';
       return chatName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-             lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
+lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
     });
   }, [chats, searchQuery]);
 

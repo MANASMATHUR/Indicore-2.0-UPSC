@@ -75,7 +75,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef })
       translationLoading.setSuccess('Translation completed');
       
     } catch (error) {
-      // Enterprise error handling
+    
       const errorResult = errorHandler.handleChatError(error, {
         type: 'translation_error',
         messageIndex,
@@ -85,7 +85,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef })
       
       translationLoading.setError(errorResult.userMessage || 'Translation failed');
       
-      // Log error for monitoring
+    
       errorHandler.logError(error, {
         type: 'translation_error',
         messageIndex,
@@ -157,7 +157,7 @@ const MessageItem = memo(({
         {cleanText(text)}
         
         {/* Translation dropdown for AI messages and OCR results */}
-        {((sender === 'assistant') || text.includes('📷 Image OCR Result') || text.includes('Translated to')) && text.trim() && (
+        {((sender === 'assistant') || text.includes(' Image OCR Result') || text.includes('Translated to')) && text.trim() && (
           <div className="mt-4">
             <select
               onChange={(e) => {
@@ -213,7 +213,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const handleSpeak = async () => {
     console.log('Speak button clicked!', { text, langCode, language });
     
-    // Clean the text by removing HTML tags and extra formatting
+
     const cleanText = text
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
@@ -265,7 +265,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       
       speechLoading.setError(errorResult.userMessage);
       
-      // Log error for monitoring
+    
       errorHandler.logError(error, {
         type: 'translation_speech_error',
         textLength: text.length,

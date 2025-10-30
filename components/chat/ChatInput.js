@@ -72,15 +72,15 @@ const ChatInput = ({
         console.log('Extracted text:', extractedText.substring(0, 100) + '...');
         
         // Send the OCR text as a normal user message
-        // This will trigger the AI to respond, and the AI response will have the translate button
+        
         onSendMessage(extractedText);
       } else {
         console.warn('No text extracted from image');
-        onSendMessage('📷 No readable text found in the image. Please try a clearer photo with better lighting.');
+        onSendMessage(' No readable text found in the image. Please try a clearer photo with better lighting.');
       }
     } catch (error) {
       console.error('OCR error:', error);
-      onSendMessage(`❌ Failed to process the image: ${error.message}. Please try again or upload a clearer image.`);
+      onSendMessage(` Failed to process the image: ${error.message}. Please try again or upload a clearer image.`);
     } finally {
       setIsProcessingImage(false);
       // Reset file input

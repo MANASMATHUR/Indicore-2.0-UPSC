@@ -33,7 +33,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
     if (!text.trim()) return;
 
     try {
-      // Enterprise input validation
+    
       const validation = validateInput('chatMessage', text);
       if (!validation.isValid) {
         const error = validation.errors[0];
@@ -78,7 +78,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
       translationLoading.setSuccess('Translation completed');
       
     } catch (error) {
-      // Enterprise error handling
+      
       const errorResult = errorHandler.handleChatError(error, {
         type: 'streaming_translation_error',
         messageIndex,
@@ -88,7 +88,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
       
       translationLoading.setError(errorResult.userMessage || 'Translation failed');
       
-      // Log error for monitoring
+     
       errorHandler.logError(error, {
         type: 'streaming_translation_error',
         messageIndex,
@@ -238,14 +238,14 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const handleSpeak = async () => {
     console.log('Speak button clicked!', { text, langCode, language });
     
-    // Test if audio is working at all
+   
     if (!window.speechSynthesis) {
       console.error('Speech synthesis not supported in this browser');
       alert('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.');
       return;
     }
     
-    // Clean the text by removing HTML tags and extra formatting
+   
     let cleanText = text
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
