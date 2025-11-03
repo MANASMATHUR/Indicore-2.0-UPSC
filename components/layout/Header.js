@@ -139,11 +139,11 @@ const Header = ({
           {showToolsMenu && (
             <>
               <div 
-                className="fixed inset-0 z-10" 
+                className="fixed inset-0 z-40" 
                 onClick={() => setShowToolsMenu(false)}
                 aria-hidden="true"
               />
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-red-200 dark:border-slate-600 z-20">
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-red-200 dark:border-slate-600 z-50">
                 <div className="p-3 border-b border-red-200 dark:border-slate-600">
                   <h3 className="font-semibold text-red-800 dark:text-slate-100">Tools & Features</h3>
                   <p className="text-xs text-red-600 dark:text-slate-300">Access all exam preparation tools</p>
@@ -268,11 +268,11 @@ const Header = ({
           {showUserMenu && (
             <>
               <div 
-                className="fixed inset-0 z-10" 
+                className="fixed inset-0 z-40" 
                 onClick={() => setShowUserMenu(false)}
                 aria-hidden="true"
               />
-              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-red-200 dark:border-slate-600 z-20">
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-red-200 dark:border-slate-600 z-50">
                 <div className="p-3 border-b border-red-200 dark:border-slate-600">
                   <p className="font-medium text-red-800 dark:text-slate-100">{user.name}</p>
                   <p className="text-sm text-red-600 dark:text-slate-300">{user.email}</p>

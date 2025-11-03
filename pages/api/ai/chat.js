@@ -145,12 +145,10 @@ async function chatHandler(req, res) {
     const { message, model, systemPrompt, language } = validateChatRequest(req);
     const { inputType, enableCaching = true, quickResponses = true } = req.body;
 
-    // Enhanced safety validation
     if (typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Invalid message format' });
     }
     
-    // Content safety checks
     const unsafePatterns = [
       /leak|cheat|fraud|scam/i,
       /specific.*exam.*answer/i,
@@ -372,18 +370,13 @@ EXAMPLE OF BAD RESPONSE:
     const contextualEnhancement = contextualLayer.generateContextualPrompt(message);
     const examContext = examKnowledge.generateContextualPrompt(message);
     
-    // Detect PYQ (previous year questions) themed requests and enforce strict list output
     function buildPyqPrompt(userMsg) {
-      const lower = userMsg.toLowerCase();
       const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
       if (!pyqMatch) return '';
 
-      // Extract theme/topic words (everything except exam keywords)
-      // Simple heuristic: take text before/after pyq keywords
       const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
       const theme = themeMatch ? themeMatch[1].trim() : '';
 
-      // Extract year range
       let fromYear = null, toYear = null;
       const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
       const decade = userMsg.match(/(\d{4})s/i);
@@ -396,14 +389,16 @@ EXAMPLE OF BAD RESPONSE:
       }
 
       const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
+      
+      let examCodeDetected = 'UPSC';
+      if (/tnpsc|tamil nadu psc/i.test(userMsg) || language === 'ta') examCodeDetected = 'TNPSC';
+      else if (/mpsc|maharashtra psc/i.test(userMsg) || language === 'mr') examCodeDetected = 'MPSC';
+      else if (/upsc/i.test(userMsg)) examCodeDetected = 'UPSC';
+      else if (/pcs/i.test(userMsg)) examCodeDetected = 'PCS';
 
-      return `\n\nSTRICT PYQ LISTING MODE:\n- The user is asking for previous year questions (PYQs).\n- Return ONLY a clean list of PYQs without explanations or advice.\n- Group by decade. For each item: "[Year] – [Exam/Paper if known] – [Question]".\n- If a paper name is known (e.g., UPSC Mains GS-3), include it.\n- Do NOT include analysis, tips, or instructions.\n- Do NOT fabricate papers; if uncertain, mark as "(unverified)" at the end of the line.\n- If the theme is provided, filter strictly to the theme.\n- ${yearLine}\n- Theme: ${theme || 'as inferred from the query'}.\n- Exam focus: UPSC by default if not specified.\n- End with an explicit count line: "Total listed: N".`;
+      return `\n\nSTRICT PYQ LISTING MODE - ENHANCED FORMATTING:\n- The user is asking for previous year questions (PYQs).\n- Return ONLY a well-formatted list of PYQs without explanations or advice.\n\nFORMATTING REQUIREMENTS:\n1. Start with header: "## 📚 Previous Year Questions (${examCodeDetected})"\n2. If theme provided, add: "**Topic:** ${theme}"\n3. If year range provided, add: "**Year Range:** ${fromYear || 'All'} to ${toYear || 'Present'}"\n4. Group questions by year using: "### 📅 {YEAR} ({count} questions)"\n5. Format each question as: "{number}. [{Paper}] {Question Text}"\n6. Add verification status: Add "✅" for verified, "⚠️" for unverified\n7. End with summary section: "### 📊 Summary" with total count\n\nCONTENT REQUIREMENTS:\n- Group by year (most recent first), NOT by decade\n- Include paper name if known (e.g., "GS Paper 1", "Mains GS-3", "Prelims")\n- Keep question text concise but complete (max 200 characters)\n- Do NOT fabricate questions; if uncertain, mark as "(unverified)" or add ⚠️\n- If theme is provided (${theme || 'none'}), filter strictly to that theme\n- ${yearLine}\n- Exam focus: ${examCodeDetected} by default\n- Prioritize verified/official questions when available\n\nOUTPUT EXAMPLE:\n## 📚 Previous Year Questions (UPSC)\n**Topic:** Indian Constitution\n**Year Range:** 2020 to 2024\n\n### 📅 2024 (3 questions)\n1. [GS Paper 2] What is the significance of Article 356? ✅\n2. [Prelims] Which article deals with fundamental rights? ✅\n\n### 📅 2023 (2 questions)\n1. [Mains GS-2] Explain the federal structure of India. ✅\n\n---\n\n### 📊 Summary\n**Total:** 5 questions\n✅ All verified from official sources`;
     }
-    
-    // DB-first for PYQs with state exam detection
     function detectExamCode(userMsg, lang) {
-      const s = (userMsg || '').toLowerCase();
-      // Check state PCS exams first (more specific)
       if (/tnpsc|tamil nadu psc/i.test(userMsg) || lang === 'ta') return 'TNPSC';
       if (/mpsc|maharashtra psc/i.test(userMsg) || lang === 'mr') return 'MPSC';
       if (/bpsc|bihar psc/i.test(userMsg)) return 'BPSC';
@@ -423,10 +418,8 @@ EXAMPLE OF BAD RESPONSE:
       if (/hpsc|haryana psc/i.test(userMsg)) return 'HPSC';
       if (/jkpsc|j&k psc|jammu.*kashmir.*psc/i.test(userMsg)) return 'JKPSC';
       if (/gpsc goa|goa psc/i.test(userMsg)) return 'Goa PSC';
-      // Then check generic exams
       if (/upsc/i.test(userMsg)) return 'UPSC';
       if (/pcs/i.test(userMsg)) return 'PCS';
-      // Default to UPSC
       return 'UPSC';
     }
 
@@ -450,34 +443,22 @@ EXAMPLE OF BAD RESPONSE:
         }
         const examCode = detectExamCode(userMsg, language);
         const filter = { exam: new RegExp(`^${examCode}$`, 'i') };
-        // Filter out invalid years - set defaults
-        filter.year = { $gte: 1990, $lte: new Date().getFullYear() };
         
-        if (fromYear || toYear) {
-          // Override defaults if user specified year range
-          filter.year = {};
-          if (fromYear) filter.year.$gte = fromYear;
-          else filter.year.$gte = 1990; // Keep default lower bound
-          if (toYear) filter.year.$lte = toYear;
-          else filter.year.$lte = new Date().getFullYear(); // Keep default upper bound
-        }
+        filter.year = {};
+        filter.year.$gte = fromYear || 1990;
+        filter.year.$lte = toYear || new Date().getFullYear();
         
-        // Determine limit based on query specificity
         let limit = 500;
         if (!theme && !fromYear && !toYear) {
-          // General query - limit to most recent 30 questions
           limit = 30;
         } else if (theme && !fromYear && !toYear) {
-          // Theme query without year - limit to 50
           limit = 50;
         } else if (fromYear || toYear) {
-          // Year-specific query - allow more
           limit = 100;
         }
         
         let items = [];
         try {
-          // Try with text search first if theme is provided
           if (theme) {
             const query = PYQ.find({
               ...filter,
@@ -493,7 +474,6 @@ EXAMPLE OF BAD RESPONSE:
             items = await query.lean();
           }
         } catch (dbError) {
-          // Fallback: If $text index doesn't exist or query planner fails, use regex only
           console.warn('PYQ database query error:', dbError.message);
           if (theme) {
             const query = PYQ.find({
@@ -516,25 +496,23 @@ EXAMPLE OF BAD RESPONSE:
       const sortedItems = items.sort((a, b) => {
         const aVerified = a.verified === true || (a.sourceLink && a.sourceLink.includes('.gov.in'));
         const bVerified = b.verified === true || (b.sourceLink && b.sourceLink.includes('.gov.in'));
-        if (aVerified !== bVerified) return bVerified ? 1 : -1; // Verified first
-        return (b.year || 0) - (a.year || 0); // Then by year descending (most recent first)
+        if (aVerified !== bVerified) return bVerified ? 1 : -1;
+        return (b.year || 0) - (a.year || 0);
       });
       
       const verifiedCount = sortedItems.filter(q => q.verified === true || (q.sourceLink && q.sourceLink.includes('.gov.in'))).length;
       const unverifiedCount = sortedItems.length - verifiedCount;
       
-      // Group by year (more useful than decade)
       const byYear = new Map();
       for (const q of sortedItems) {
         const year = q.year || 0;
-        if (year < 1990 || year > new Date().getFullYear()) continue; // Skip invalid years
+        if (year < 1990 || year > new Date().getFullYear()) continue;
         
         if (!byYear.has(year)) byYear.set(year, []);
         
         const isUnverified = q.verified === false && (!q.sourceLink || !q.sourceLink.includes('.gov.in'));
         const topicTags = q.topicTags && q.topicTags.length > 0 ? q.topicTags.join(', ') : null;
         
-        // Build cleaner label - truncate long questions
         let questionText = q.question || '';
         if (questionText.length > 150) {
           questionText = questionText.substring(0, 147) + '...';
@@ -542,12 +520,10 @@ EXAMPLE OF BAD RESPONSE:
         
         let label = `[${q.paper || 'General'}] ${questionText}`;
         
-        // Add topic/theme if available (only if different from question)
         if (topicTags && !questionText.toLowerCase().includes(topicTags.toLowerCase().substring(0, 20))) {
           label += ` (${topicTags})`;
         }
         
-        // Add verification status
         if (isUnverified) {
           label += ' ⚠️';
         } else if (q.sourceLink && q.sourceLink.includes('.gov.in')) {
@@ -558,61 +534,62 @@ EXAMPLE OF BAD RESPONSE:
       }
       
       const lines = [];
-      
-      // Add header with summary
+      lines.push(`## 📚 Previous Year Questions (${examCode})`);
       if (theme) {
-        lines.push(`📚 Previous Year Questions on "${theme}" (${examCode})`);
-      } else {
-        lines.push(`📚 Previous Year Questions (${examCode})`);
+        lines.push(`**Topic:** ${theme}`);
       }
-      
       if (fromYear || toYear) {
-        lines.push(`📅 Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}`);
+        lines.push(`**Year Range:** ${fromYear || 'All'} to ${toYear || 'Present'}`);
       }
       lines.push('');
       
-      // Group by year (most recent first)
       const sortedYears = Array.from(byYear.keys()).sort((a, b) => b - a);
       
       for (const year of sortedYears) {
         const yearQuestions = byYear.get(year);
         if (yearQuestions.length === 0) continue;
         
-        lines.push(`**${year}** (${yearQuestions.length} question${yearQuestions.length > 1 ? 's' : ''}):`);
+        lines.push(`### 📅 ${year} (${yearQuestions.length} question${yearQuestions.length > 1 ? 's' : ''})`);
+        lines.push('');
         yearQuestions.forEach((q, idx) => {
           lines.push(`${idx + 1}. ${q}`);
         });
         lines.push('');
       }
       
-      // Summary with counts
       lines.push('---');
+      lines.push('');
       if (verifiedCount > 0 && unverifiedCount > 0) {
-        lines.push(`📊 Total: ${sortedItems.length} questions (${verifiedCount} ✅ verified, ${unverifiedCount} ⚠️ unverified)`);
+        lines.push(`### 📊 Summary`);
+        lines.push(`**Total:** ${sortedItems.length} questions`);
+        lines.push(`- ✅ Verified: ${verifiedCount} (from official sources)`);
+        lines.push(`- ⚠️ Unverified: ${unverifiedCount} (please verify before use)`);
       } else if (verifiedCount > 0) {
-        lines.push(`📊 Total: ${sortedItems.length} questions (✅ All verified from official sources)`);
+        lines.push(`### 📊 Summary`);
+        lines.push(`**Total:** ${sortedItems.length} questions`);
+        lines.push(`✅ All verified from official sources`);
       } else {
-        lines.push(`📊 Total: ${sortedItems.length} questions (⚠️ All unverified - please verify before use)`);
+        lines.push(`### 📊 Summary`);
+        lines.push(`**Total:** ${sortedItems.length} questions`);
+        lines.push(`⚠️ All unverified - please verify before use`);
       }
+      lines.push('');
       
-      // Add helpful message if too many results
       if (sortedItems.length >= limit) {
+        lines.push('💡 **Tips for Better Results:**');
+        lines.push('- Try: `"PYQ on [specific topic]"` for focused questions');
+        lines.push('- Try: `"PYQ from 2020 to 2024"` for year-specific queries');
+        lines.push('- Try: `"PYQ about [subject]"` for subject-wise questions');
+        lines.push('- Combine filters: `"PYQ on Geography from 2020 to 2024"`');
         lines.push('');
-        lines.push('💡 Tip: To get more specific results, try:');
-        lines.push(`   - "PYQ on [specific topic]"`);
-        lines.push(`   - "PYQ from 2020 to 2024"`);
-        lines.push(`   - "PYQ about [subject]"`);
       }
       
       return lines.join('\n');
       } catch (error) {
-        // Log error but don't crash - fall back to AI response
         console.error('PYQ database query error:', error.message);
-        return null; // Return null to allow fallback to AI
+        return null;
       }
     }
-
-    // If DB has PYQs, return immediately
     const pyqDb = await tryPyqFromDb(message);
     if (pyqDb) {
       return res.status(200).json({ response: pyqDb, source: 'pyq-db' });
@@ -621,9 +598,6 @@ EXAMPLE OF BAD RESPONSE:
     const pyqPrompt = buildPyqPrompt(message);
     const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext + (pyqPrompt || '');
 
-    // Parallelize primary and fast fallback model for lower latency
-    // Use longer timeouts for comprehensive research queries
-    // Note: sonar-pro automatically does web search - no additional config needed
     const primaryReq = axios.post('https://api.perplexity.ai/chat/completions', {
       model: model || 'sonar-pro',
       messages: [
@@ -640,10 +614,9 @@ EXAMPLE OF BAD RESPONSE:
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      timeout: 60000 // Increased to 60s for complex queries
+      timeout: 60000
     });
 
-    // Use faster model (sonar) for parallel fallback, not deep-research
     const fastReq = axios.post('https://api.perplexity.ai/chat/completions', {
       model: 'sonar',
       messages: [
@@ -660,14 +633,13 @@ EXAMPLE OF BAD RESPONSE:
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      timeout: 45000 // 45s for faster model
+      timeout: 45000
     });
 
     let response;
     try {
       response = await Promise.any([primaryReq, fastReq]);
     } catch (aggregateError) {
-      // If both requests fail, try a single fallback request with simpler parameters
       const errors = aggregateError.errors || [];
       const errorMessages = errors.map(e => {
         const msg = e.message || e.response?.data?.error?.message || String(e);
@@ -686,15 +658,14 @@ EXAMPLE OF BAD RESPONSE:
         errorDetails: errorMessages
       });
       
-      // Try a single fallback request with simpler config but adequate timeout
       try {
         const fallbackResponse = await axios.post('https://api.perplexity.ai/chat/completions', {
-          model: 'sonar', // Use faster model for fallback
+          model: 'sonar',
           messages: [
             { role: 'system', content: enhancedSystemPrompt },
             { role: 'user', content: message }
           ],
-          max_tokens: Math.min(calculateMaxTokens(message), 4000), // Increased from 2000
+          max_tokens: Math.min(calculateMaxTokens(message), 4000),
           temperature: 0.7,
           top_p: 0.9,
           stream: false
@@ -704,12 +675,11 @@ EXAMPLE OF BAD RESPONSE:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          timeout: 30000 // Increased to 30s
+          timeout: 30000
         });
         
         response = fallbackResponse;
       } catch (fallbackError) {
-        // If fallback also fails, return error
         const fallbackMsg = fallbackError.message || fallbackError.response?.data?.error?.message || String(fallbackError);
         console.error('Chat API Error: Fallback request also failed', {
           error: fallbackMsg,
@@ -729,13 +699,9 @@ EXAMPLE OF BAD RESPONSE:
 
     if (response && response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
       let aiResponse = response.data.choices[0].message.content;
-      // Clean any citation patterns that might slip through
       aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
       
-      // Check if response is complete, if not, try to regenerate
       if (!isResponseComplete(aiResponse)) {
-        
-        // Try one more time with a more explicit prompt
         const retryPrompt = `${finalSystemPrompt}\n\nIMPORTANT: The previous response was incomplete. Please provide a complete, well-structured answer that fully addresses the user's question. Ensure your response ends with a proper conclusion.`;
         
         try {
@@ -755,7 +721,7 @@ EXAMPLE OF BAD RESPONSE:
               'Content-Type': 'application/json',
               'Accept': 'application/json'
             },
-            timeout: 60000 // Increased to 60s for retry
+              timeout: 60000
           });
           
           if (retryResponse.data.choices && retryResponse.data.choices[0] && retryResponse.data.choices[0].message) {
@@ -766,7 +732,6 @@ EXAMPLE OF BAD RESPONSE:
         }
       }
       
-      // If this was a PYQ request and DB was empty, attempt to parse & seed results as unverified
       if (pyqPrompt) {
         try {
           await connectToDatabase();
@@ -797,7 +762,6 @@ EXAMPLE OF BAD RESPONSE:
             if (!line) continue;
             const yMatch = line.match(/\b(19\d{2}|20\d{2})\b/);
             const year = yMatch ? parseInt(yMatch[1], 10) : null;
-            // Extract text after last dash as question
             let question = line;
             const split = line.split('–');
             if (split.length >= 2) {
@@ -811,7 +775,6 @@ EXAMPLE OF BAD RESPONSE:
             await PYQ.insertMany(candidates, { ordered: false });
           }
         } catch (e) {
-          // best-effort; ignore seeding failures
         }
       }
       

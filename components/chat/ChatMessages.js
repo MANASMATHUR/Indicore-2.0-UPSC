@@ -240,64 +240,37 @@ const MessageItem = memo(({
           🎓
         </div>
       )}
-      <div className={`message-content group relative transition-all duration-200 hover:scale-[1.01] flex-1 ${sender === 'user' ? 'ml-auto' : ''}`}>
-        {/* Message Action Buttons - Visible on Hover */}
-        {isHovered && text.trim() && (
-          <div className={`absolute top-2 ${sender === 'user' ? 'left-2' : 'right-2'} flex gap-1 z-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg p-1 shadow-md border border-slate-200 dark:border-slate-700`}>
-            <button
-              onClick={handleCopy}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-              title="Copy message"
-              aria-label="Copy message"
-            >
-              <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
-            {sender === 'assistant' && onRegenerate && (
-              <button
-                onClick={() => onRegenerate(index)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-                title="Regenerate response"
-                aria-label="Regenerate response"
-              >
-                <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
+      <div className={`message-content group relative transition-all duration-200 hover:scale-[1.01] flex-1 ${sender === 'user' ? 'ml-auto' : ''} flex flex-col`}>
         <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-code:text-sm prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-['']">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
-              em: ({ children }) => <em className="italic text-inherit">{children}</em>,
-              ul: ({ children }) => <ul className="mb-1.5 mt-1.5 list-disc list-inside space-y-0.5 pl-4">{children}</ul>,
-              ol: ({ children }) => <ol className="mb-1.5 mt-1.5 list-decimal list-inside space-y-0.5 pl-4">{children}</ol>,
-              li: ({ children }) => <li className="my-0.5 leading-relaxed">{children}</li>,
-              h1: ({ children }) => <h1 className="text-2xl font-bold mb-2 mt-3 first:mt-0 text-slate-900 dark:text-slate-100">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-xl font-bold mb-1.5 mt-3 first:mt-0 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 pb-1">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-lg font-semibold mb-1.5 mt-2 first:mt-0 text-slate-700 dark:text-slate-300">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-base font-semibold mb-1 mt-2 text-slate-700 dark:text-slate-300">{children}</h4>,
+              p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed text-gray-900 dark:text-slate-50 text-[15px] font-normal">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>,
+              em: ({ children }) => <em className="italic text-gray-800 dark:text-slate-200">{children}</em>,
+              ul: ({ children }) => <ul className="mb-2 mt-2 list-disc list-inside space-y-1 pl-4 text-gray-900 dark:text-slate-50">{children}</ul>,
+              ol: ({ children }) => <ol className="mb-2 mt-2 list-decimal list-inside space-y-1 pl-4 text-gray-900 dark:text-slate-50">{children}</ol>,
+              li: ({ children }) => <li className="my-1 leading-relaxed text-gray-900 dark:text-slate-50">{children}</li>,
+              h1: ({ children }) => <h1 className="text-3xl font-bold mb-3 mt-4 first:mt-0 text-gray-900 dark:text-white leading-tight">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-2xl font-bold mb-2 mt-4 first:mt-0 text-gray-800 dark:text-slate-100 border-b border-gray-200 dark:border-slate-700 pb-2 leading-tight">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-xl font-semibold mb-2 mt-3 first:mt-0 text-gray-800 dark:text-slate-100 leading-snug">{children}</h3>,
+              h4: ({ children }) => <h4 className="text-lg font-semibold mb-1.5 mt-3 text-gray-800 dark:text-slate-200 leading-snug">{children}</h4>,
               code: ({ inline, children, ...props }) => {
                 if (inline) {
                   return (
-                    <code className="bg-slate-100 dark:bg-slate-800 text-sm px-1.5 py-0.5 rounded font-mono" {...props}>
+                    <code className="bg-gray-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm px-2 py-1 rounded-md font-mono font-medium border border-gray-200 dark:border-slate-700" {...props}>
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <code className="block bg-slate-100 dark:bg-slate-800 text-sm p-3 rounded overflow-x-auto" {...props}>
+                  <code className="block bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm p-4 rounded-lg overflow-x-auto font-mono border border-gray-200 dark:border-slate-700 shadow-sm" {...props}>
                     {children}
                   </code>
                 );
               },
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-red-300 dark:border-red-600 pl-4 my-2 italic">
+                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-3 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-2 rounded-r-lg">
                   {children}
                 </blockquote>
               ),
@@ -350,6 +323,36 @@ const MessageItem = memo(({
         {timeStr && (
           <div className={`mt-3 text-xs opacity-60 ${sender === 'user' ? 'text-white/70' : 'text-red-600 dark:text-gray-400'}`}>
             {timeStr}
+          </div>
+        )}
+
+        {/* Message Action Buttons - At Bottom, Visible on Hover */}
+        {isHovered && text.trim() && (
+          <div className={`mt-3 flex gap-2 justify-end ${sender === 'user' ? 'justify-start' : ''}`}>
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
+              title="Copy message"
+              aria-label="Copy message"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy
+            </button>
+            {sender === 'assistant' && onRegenerate && (
+              <button
+                onClick={() => onRegenerate(index)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
+                title="Regenerate response"
+                aria-label="Regenerate response"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Regenerate
+              </button>
+            )}
           </div>
         )}
 
