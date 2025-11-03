@@ -3,6 +3,8 @@ import { authOptions } from '@/lib/auth';
 import { contextualLayer } from '@/lib/contextual-layer';
 import examKnowledge from '@/lib/exam-knowledge';
 import axios from 'axios';
+import connectToDatabase from '@/lib/mongodb';
+import PYQ from '@/models/PYQ';
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -78,6 +80,13 @@ export default async function handler(req, res) {
 
     if (typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Invalid message format' });
+    }
+    
+    // Validate model
+    const supportedModels = ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research'];
+    const selectedModel = model || 'sonar-pro';
+    if (!supportedModels.includes(selectedModel)) {
+      return res.status(400).json({ error: 'Unsupported model' });
     }
     
     const unsafePatterns = [
@@ -266,7 +275,7 @@ RESPONSE STRUCTURE FOR TRUST-BUILDING:
 
 CRITICAL RESPONSE REQUIREMENTS:
 - Write complete, well-formed sentences that make grammatical sense
-- Provide comprehensive answers that fully address the user's question
+- Give complete answers that cover the user's question properly
 - Use proper grammar, punctuation, and sentence structure
 - Structure your response logically with clear paragraphs
 - NEVER include reference numbers like [1], [2], [3]
@@ -288,7 +297,7 @@ RESPONSE FORMAT:
 - Structure answers according to UPSC requirements when applicable
 
 EXAMPLE OF GOOD RESPONSE WITH REASONING:
-"Excellent question! Let me provide a comprehensive, exam-oriented explanation. According to Article 1 of the Indian Constitution, India is described as a 'Union of States' rather than a 'Federation of States'. Here's my detailed reasoning: The Indian federal structure is unique because it combines federal and unitary features. Federal features include: (1) Division of powers between center and states (List I, II, III in Schedule 7), (2) Written constitution with supremacy, (3) Independent judiciary (Articles 124-147), and (4) Bicameral legislature at center. Unitary features include: (1) Single citizenship (Article 5-11), (2) Strong center with residuary powers (Article 248), (3) Emergency provisions (Articles 352-360), and (4) All-India services. This is significant for UPSC because: (1) It's frequently asked in Prelims (2019, 2021), (2) Important for Mains GS Paper 2, and (3) Relevant for understanding center-state relations. The framers adopted this model because they learned from the failures of the Articles of Confederation in the US and adapted federalism to India's diverse needs. This understanding is crucial for questions on cooperative federalism, fiscal federalism, and recent developments like GST implementation."
+"Great question! Here's a clear explanation for exam prep. According to Article 1 of the Indian Constitution, India is called a 'Union of States' rather than a 'Federation of States'. Here's why: The Indian federal structure is unique because it combines federal and unitary features. Federal features include: (1) Division of powers between center and states (List I, II, III in Schedule 7), (2) Written constitution with supremacy, (3) Independent judiciary (Articles 124-147), and (4) Bicameral legislature at center. Unitary features include: (1) Single citizenship (Article 5-11), (2) Strong center with residuary powers (Article 248), (3) Emergency provisions (Articles 352-360), and (4) All-India services. This is significant for UPSC because: (1) It's frequently asked in Prelims (2019, 2021), (2) Important for Mains GS Paper 2, and (3) Relevant for understanding center-state relations. The framers adopted this model because they learned from the failures of the Articles of Confederation in the US and adapted federalism to India's diverse needs. This understanding is crucial for questions on cooperative federalism, fiscal federalism, and recent developments like GST implementation."
 
 EXAMPLE OF BAD RESPONSE:
 "Indian federalism is quasi-federal. It has federal and unitary features. This is important for exams."`;
@@ -313,17 +322,259 @@ EXAMPLE OF BAD RESPONSE:
 
     const contextualEnhancement = contextualLayer.generateContextualPrompt(message);
     const examContext = examKnowledge.generateContextualPrompt(message);
-    
-    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
+
+    // Check for PYQs in database before making AI call
+    async function tryPyqFromDb(userMsg) {
+      const isPyq = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
+      if (!isPyq) return null;
+      
+      try {
+        await connectToDatabase();
+        const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
+        const theme = themeMatch ? themeMatch[1].trim() : '';
+        let fromYear = null, toYear = null;
+        const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
+        const decade = userMsg.match(/(\d{4})s/i);
+        if (range1) {
+          fromYear = parseInt(range1[1], 10);
+          toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
+        } else if (decade) {
+          fromYear = parseInt(decade[1], 10);
+          toYear = fromYear + 9;
+        }
+        
+        function detectExamCode(userMsg, lang) {
+          const s = (userMsg || '').toLowerCase();
+          // Check state PCS exams first (more specific)
+          if (/tnpsc|tamil nadu psc/i.test(userMsg) || lang === 'ta') return 'TNPSC';
+          if (/mpsc|maharashtra psc/i.test(userMsg) || lang === 'mr') return 'MPSC';
+          if (/bpsc|bihar psc/i.test(userMsg)) return 'BPSC';
+          if (/uppsc|uttar pradesh psc/i.test(userMsg)) return 'UPPSC';
+          if (/mppsc|madhya pradesh psc/i.test(userMsg)) return 'MPPSC';
+          if (/ras|rajasthan psc/i.test(userMsg)) return 'RAS';
+          if (/rpsc|rajasthan psc/i.test(userMsg)) return 'RPSC';
+          if (/gpsc|gujarat psc/i.test(userMsg) || lang === 'gu') return 'GPSC';
+          if (/(karnataka\s*psc|kpsc)\b/i.test(userMsg) || (lang === 'kn' && /karnataka/i.test(userMsg))) return 'KPSC';
+          if (/wbpsc|west bengal psc/i.test(userMsg) || /wb psc/i.test(userMsg) || lang === 'bn') return 'WBPSC';
+          if (/ppsc|punjab psc/i.test(userMsg) || lang === 'pa') return 'PPSC';
+          if (/opsc|odisha psc/i.test(userMsg)) return 'OPSC';
+          if (/apsc|assam psc/i.test(userMsg)) return 'APSC';
+          if (/appsc|andhra pradesh psc/i.test(userMsg)) return 'APPSC';
+          if (/tspsc|telangana psc/i.test(userMsg) || lang === 'te') return 'TSPSC';
+          if (/(kerala\s*psc)/i.test(userMsg) || lang === 'ml') return 'Kerala PSC';
+          if (/hpsc|haryana psc/i.test(userMsg)) return 'HPSC';
+          if (/jkpsc|j&k psc|jammu.*kashmir.*psc/i.test(userMsg)) return 'JKPSC';
+          if (/gpsc goa|goa psc/i.test(userMsg)) return 'Goa PSC';
+          // Then check generic exams
+          if (/upsc/i.test(userMsg)) return 'UPSC';
+          if (/pcs/i.test(userMsg)) return 'PCS';
+          // Default to UPSC
+          return 'UPSC';
+        }
+        
+        const examCode = detectExamCode(userMsg, language);
+        const filter = { exam: new RegExp(`^${examCode}$`, 'i') };
+        // Filter out invalid years - set defaults
+        filter.year = { $gte: 1990, $lte: new Date().getFullYear() };
+        
+        if (fromYear || toYear) {
+          // Override defaults if user specified year range
+          filter.year = {};
+          if (fromYear) filter.year.$gte = fromYear;
+          else filter.year.$gte = 1990; // Keep default lower bound
+          if (toYear) filter.year.$lte = toYear;
+          else filter.year.$lte = new Date().getFullYear(); // Keep default upper bound
+        }
+        
+        // Determine limit based on query specificity
+        let limit = 500;
+        if (!theme && !fromYear && !toYear) {
+          // General query - limit to most recent 30 questions
+          limit = 30;
+        } else if (theme && !fromYear && !toYear) {
+          // Theme query without year - limit to 50
+          limit = 50;
+        } else if (fromYear || toYear) {
+          // Year-specific query - allow more
+          limit = 100;
+        }
+        
+        let items = [];
+        try {
+          // Try with text search first if theme is provided
+          if (theme) {
+            const query = PYQ.find({
+              ...filter,
+              $or: [
+                { $text: { $search: theme } },
+                { topicTags: { $regex: theme, $options: 'i' } },
+                { question: { $regex: theme, $options: 'i' } }
+              ]
+            }).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          } else {
+            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          }
+        } catch (dbError) {
+          // Fallback: If $text index doesn't exist or query planner fails, use regex only
+          console.warn('PYQ database query error:', dbError.message);
+          if (theme) {
+            const query = PYQ.find({
+              ...filter,
+              $or: [
+                { topicTags: { $regex: theme, $options: 'i' } },
+                { question: { $regex: theme, $options: 'i' } }
+              ]
+            }).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          } else {
+            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          }
+        }
+        
+        if (!items.length) return null;
+        
+        // Sort items: verified first, then unverified (both sorted by year descending)
+        const sortedItems = items.sort((a, b) => {
+          const aVerified = a.verified === true || (a.sourceLink && a.sourceLink.includes('.gov.in'));
+          const bVerified = b.verified === true || (b.sourceLink && b.sourceLink.includes('.gov.in'));
+          if (aVerified !== bVerified) return bVerified ? 1 : -1; // Verified first
+          return (b.year || 0) - (a.year || 0); // Then by year descending (most recent first)
+        });
+        
+        const verifiedCount = sortedItems.filter(q => q.verified === true || (q.sourceLink && q.sourceLink.includes('.gov.in'))).length;
+        const unverifiedCount = sortedItems.length - verifiedCount;
+        
+        // Group by year (more useful than decade)
+        const byYear = new Map();
+        for (const q of sortedItems) {
+          const year = q.year || 0;
+          if (year < 1990 || year > new Date().getFullYear()) continue; // Skip invalid years
+          
+          if (!byYear.has(year)) byYear.set(year, []);
+          
+          const isUnverified = q.verified === false && (!q.sourceLink || !q.sourceLink.includes('.gov.in'));
+          const topicTags = q.topicTags && q.topicTags.length > 0 ? q.topicTags.join(', ') : null;
+          
+          // Build cleaner label - truncate long questions
+          let questionText = q.question || '';
+          if (questionText.length > 150) {
+            questionText = questionText.substring(0, 147) + '...';
+          }
+          
+          let label = `[${q.paper || 'General'}] ${questionText}`;
+          
+          // Add topic/theme if available (only if different from question)
+          if (topicTags && !questionText.toLowerCase().includes(topicTags.toLowerCase().substring(0, 20))) {
+            label += ` (${topicTags})`;
+          }
+          
+          // Add verification status
+          if (isUnverified) {
+            label += ' ⚠️';
+          } else if (q.sourceLink && q.sourceLink.includes('.gov.in')) {
+            label += ' ✅';
+          }
+          
+          byYear.get(year).push(label);
+        }
+        
+        const lines = [];
+        
+        // Add header with summary
+        if (theme) {
+          lines.push(`📚 Previous Year Questions on "${theme}" (${examCode})`);
+        } else {
+          lines.push(`📚 Previous Year Questions (${examCode})`);
+        }
+        
+        if (fromYear || toYear) {
+          lines.push(`📅 Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}`);
+        }
+        lines.push('');
+        
+        // Group by year (most recent first)
+        const sortedYears = Array.from(byYear.keys()).sort((a, b) => b - a);
+        
+        for (const year of sortedYears) {
+          const yearQuestions = byYear.get(year);
+          if (yearQuestions.length === 0) continue;
+          
+          lines.push(`**${year}** (${yearQuestions.length} question${yearQuestions.length > 1 ? 's' : ''}):`);
+          yearQuestions.forEach((q, idx) => {
+            lines.push(`${idx + 1}. ${q}`);
+          });
+          lines.push('');
+        }
+        
+        // Summary with counts
+        lines.push('---');
+        if (verifiedCount > 0 && unverifiedCount > 0) {
+          lines.push(`📊 Total: ${sortedItems.length} questions (${verifiedCount} ✅ verified, ${unverifiedCount} ⚠️ unverified)`);
+        } else if (verifiedCount > 0) {
+          lines.push(`📊 Total: ${sortedItems.length} questions (✅ All verified from official sources)`);
+        } else {
+          lines.push(`📊 Total: ${sortedItems.length} questions (⚠️ All unverified - please verify before use)`);
+        }
+        
+        // Add helpful message if too many results
+        if (sortedItems.length >= limit) {
+          lines.push('');
+          lines.push('💡 Tip: To get more specific results, try:');
+          lines.push(`   - "PYQ on [specific topic]"`);
+          lines.push(`   - "PYQ from 2020 to 2024"`);
+          lines.push(`   - "PYQ about [subject]"`);
+        }
+        
+        return lines.join('\n');
+      } catch (error) {
+        // Log error but don't crash - fall back to AI response
+        console.error('PYQ database query error:', error.message);
+        return null; // Return null to allow fallback to AI
+      }
+    }
+
+    // Check for PYQs in database first
+    const pyqDb = await tryPyqFromDb(message);
+    if (pyqDb) {
+      // Send PYQs directly as complete response
+      res.write(pyqDb);
+      res.end();
+      return;
+    }
+
+    function buildPyqPrompt(userMsg) {
+      const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
+      if (!pyqMatch) return '';
+      const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
+      const theme = themeMatch ? themeMatch[1].trim() : '';
+      let fromYear = null, toYear = null;
+      const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
+      const decade = userMsg.match(/(\d{4})s/i);
+      if (range1) {
+        fromYear = parseInt(range1[1], 10);
+        toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
+      } else if (decade) {
+        fromYear = parseInt(decade[1], 10);
+        toYear = fromYear + 9;
+      }
+      const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
+      return `\n\nSTRICT PYQ LISTING MODE:\n- Return ONLY a list of PYQs without explanations.\n- Group by decade. Format: "[Year] – [Exam/Paper] – [Question]".\n- ${yearLine}\n- Theme: ${theme || 'as inferred from the query'}.\n- Focus on UPSC unless otherwise specified.\n- End with: "Total listed: N".`;
+    }
+
+    const pyqPrompt = buildPyqPrompt(message);
+    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext + (pyqPrompt || '');
 
     const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: model || 'sonar-pro',
+      model: selectedModel,
       messages: [
         { role: 'system', content: enhancedSystemPrompt },
         { role: 'user', content: message }
       ],
       max_tokens: calculateMaxTokens(message),
-      temperature: 0.7,
+      temperature: pyqPrompt ? 0.2 : 0.5,
       top_p: 0.9,
       stream: true
     }, {
@@ -333,7 +584,7 @@ EXAMPLE OF BAD RESPONSE:
         'Accept': 'text/event-stream'
       },
       responseType: 'stream',
-      timeout: 120000
+      timeout: 90000
     });
 
     let fullResponse = '';

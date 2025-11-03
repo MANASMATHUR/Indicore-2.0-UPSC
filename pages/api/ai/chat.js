@@ -4,6 +4,8 @@ import { withCache } from '@/lib/cache';
 import { contextualLayer } from '@/lib/contextual-layer';
 import examKnowledge from '@/lib/exam-knowledge';
 import axios from 'axios';
+import connectToDatabase from '@/lib/mongodb';
+import PYQ from '@/models/PYQ';
 
 function validateChatRequest(req) {
   const { message, model, systemPrompt, language } = req.body;
@@ -41,14 +43,14 @@ function validateChatRequest(req) {
     throw new Error('Unsupported language');
   }
 
-  const supportedModels = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo', 'claude-3-sonnet', 'claude-3-haiku', 'sonar-pro', 'sonar-medium', 'sonar-small'];
+  const supportedModels = ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research'];
   if (model && !supportedModels.includes(model)) {
     throw new Error('Unsupported model');
   }
 
   return {
     message: message.trim(),
-    model: model || 'gpt-3.5-turbo',
+    model: model || 'sonar-pro',
     systemPrompt: systemPrompt || '',
     language: language || 'en'
   };
@@ -110,6 +112,14 @@ async function chatHandler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
+
+  // Validate API key
+  if (!process.env.PERPLEXITY_API_KEY) {
+    console.error('PERPLEXITY_API_KEY is not configured');
+    return res.status(500).json({ 
+      error: 'AI service configuration error. Please contact support.',
+    });
+  }
   res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
@@ -318,7 +328,7 @@ RESPONSE STRUCTURE FOR TRUST-BUILDING:
 
 CRITICAL RESPONSE REQUIREMENTS:
 - Write complete, well-formed sentences
-- Provide comprehensive answers that fully address the question
+- Give complete answers that cover the question properly
 - Use proper grammar and punctuation
 - Structure your response logically with clear paragraphs
 - NEVER include reference numbers like [1], [2], [3], [7] or any citations
@@ -343,7 +353,7 @@ RESPONSE FORMAT:
 - Structure answers according to UPSC requirements when applicable
 
 EXAMPLE OF GOOD RESPONSE WITH REASONING:
-"Excellent question! Let me provide a comprehensive, exam-oriented explanation. According to Article 1 of the Indian Constitution, India is described as a 'Union of States' rather than a 'Federation of States'. Here's my detailed reasoning: The Indian federal structure is unique because it combines federal and unitary features. Federal features include: (1) Division of powers between center and states (List I, II, III in Schedule 7), (2) Written constitution with supremacy, (3) Independent judiciary (Articles 124-147), and (4) Bicameral legislature at center. Unitary features include: (1) Single citizenship (Article 5-11), (2) Strong center with residuary powers (Article 248), (3) Emergency provisions (Articles 352-360), and (4) All-India services. This is significant for UPSC because: (1) It's frequently asked in Prelims (2019, 2021), (2) Important for Mains GS Paper 2, and (3) Relevant for understanding center-state relations. The framers adopted this model because they learned from the failures of the Articles of Confederation in the US and adapted federalism to India's diverse needs. This understanding is crucial for questions on cooperative federalism, fiscal federalism, and recent developments like GST implementation."
+"Great question! Here's a clear explanation for exam prep. According to Article 1 of the Indian Constitution, India is called a 'Union of States' rather than a 'Federation of States'. Here's why: The Indian federal structure is unique because it combines federal and unitary features. Federal features include: (1) Division of powers between center and states (List I, II, III in Schedule 7), (2) Written constitution with supremacy, (3) Independent judiciary (Articles 124-147), and (4) Bicameral legislature at center. Unitary features include: (1) Single citizenship (Article 5-11), (2) Strong center with residuary powers (Article 248), (3) Emergency provisions (Articles 352-360), and (4) All-India services. This is significant for UPSC because: (1) It's frequently asked in Prelims (2019, 2021), (2) Important for Mains GS Paper 2, and (3) Relevant for understanding center-state relations. The framers adopted this model because they learned from the failures of the Articles of Confederation in the US and adapted federalism to India's diverse needs. This understanding is crucial for questions on cooperative federalism, fiscal federalism, and recent developments like GST implementation."
 
 EXAMPLE OF BAD RESPONSE:
 "Indian federalism is quasi-federal. It has federal and unitary features. This is important for exams."`;
@@ -362,16 +372,266 @@ EXAMPLE OF BAD RESPONSE:
     const contextualEnhancement = contextualLayer.generateContextualPrompt(message);
     const examContext = examKnowledge.generateContextualPrompt(message);
     
-    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
+    // Detect PYQ (previous year questions) themed requests and enforce strict list output
+    function buildPyqPrompt(userMsg) {
+      const lower = userMsg.toLowerCase();
+      const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
+      if (!pyqMatch) return '';
 
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
+      // Extract theme/topic words (everything except exam keywords)
+      // Simple heuristic: take text before/after pyq keywords
+      const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
+      const theme = themeMatch ? themeMatch[1].trim() : '';
+
+      // Extract year range
+      let fromYear = null, toYear = null;
+      const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
+      const decade = userMsg.match(/(\d{4})s/i);
+      if (range1) {
+        fromYear = parseInt(range1[1], 10);
+        toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
+      } else if (decade) {
+        fromYear = parseInt(decade[1], 10);
+        toYear = fromYear + 9;
+      }
+
+      const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
+
+      return `\n\nSTRICT PYQ LISTING MODE:\n- The user is asking for previous year questions (PYQs).\n- Return ONLY a clean list of PYQs without explanations or advice.\n- Group by decade. For each item: "[Year] – [Exam/Paper if known] – [Question]".\n- If a paper name is known (e.g., UPSC Mains GS-3), include it.\n- Do NOT include analysis, tips, or instructions.\n- Do NOT fabricate papers; if uncertain, mark as "(unverified)" at the end of the line.\n- If the theme is provided, filter strictly to the theme.\n- ${yearLine}\n- Theme: ${theme || 'as inferred from the query'}.\n- Exam focus: UPSC by default if not specified.\n- End with an explicit count line: "Total listed: N".`;
+    }
+    
+    // DB-first for PYQs with state exam detection
+    function detectExamCode(userMsg, lang) {
+      const s = (userMsg || '').toLowerCase();
+      // Check state PCS exams first (more specific)
+      if (/tnpsc|tamil nadu psc/i.test(userMsg) || lang === 'ta') return 'TNPSC';
+      if (/mpsc|maharashtra psc/i.test(userMsg) || lang === 'mr') return 'MPSC';
+      if (/bpsc|bihar psc/i.test(userMsg)) return 'BPSC';
+      if (/uppsc|uttar pradesh psc/i.test(userMsg)) return 'UPPSC';
+      if (/mppsc|madhya pradesh psc/i.test(userMsg)) return 'MPPSC';
+      if (/ras|rajasthan psc/i.test(userMsg)) return 'RAS';
+      if (/rpsc|rajasthan psc/i.test(userMsg)) return 'RPSC';
+      if (/gpsc|gujarat psc/i.test(userMsg) || lang === 'gu') return 'GPSC';
+      if (/(karnataka\s*psc|kpsc)\b/i.test(userMsg) || (lang === 'kn' && /karnataka/i.test(userMsg))) return 'KPSC';
+      if (/wbpsc|west bengal psc/i.test(userMsg) || /wb psc/i.test(userMsg) || lang === 'bn') return 'WBPSC';
+      if (/ppsc|punjab psc/i.test(userMsg) || lang === 'pa') return 'PPSC';
+      if (/opsc|odisha psc/i.test(userMsg)) return 'OPSC';
+      if (/apsc|assam psc/i.test(userMsg)) return 'APSC';
+      if (/appsc|andhra pradesh psc/i.test(userMsg)) return 'APPSC';
+      if (/tspsc|telangana psc/i.test(userMsg) || lang === 'te') return 'TSPSC';
+      if (/(kerala\s*psc)/i.test(userMsg) || lang === 'ml') return 'Kerala PSC';
+      if (/hpsc|haryana psc/i.test(userMsg)) return 'HPSC';
+      if (/jkpsc|j&k psc|jammu.*kashmir.*psc/i.test(userMsg)) return 'JKPSC';
+      if (/gpsc goa|goa psc/i.test(userMsg)) return 'Goa PSC';
+      // Then check generic exams
+      if (/upsc/i.test(userMsg)) return 'UPSC';
+      if (/pcs/i.test(userMsg)) return 'PCS';
+      // Default to UPSC
+      return 'UPSC';
+    }
+
+    async function tryPyqFromDb(userMsg) {
+      const isPyq = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
+      if (!isPyq) return null;
+      
+      try {
+        await connectToDatabase();
+        const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
+        const theme = themeMatch ? themeMatch[1].trim() : '';
+        let fromYear = null, toYear = null;
+        const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
+        const decade = userMsg.match(/(\d{4})s/i);
+        if (range1) {
+          fromYear = parseInt(range1[1], 10);
+          toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
+        } else if (decade) {
+          fromYear = parseInt(decade[1], 10);
+          toYear = fromYear + 9;
+        }
+        const examCode = detectExamCode(userMsg, language);
+        const filter = { exam: new RegExp(`^${examCode}$`, 'i') };
+        // Filter out invalid years - set defaults
+        filter.year = { $gte: 1990, $lte: new Date().getFullYear() };
+        
+        if (fromYear || toYear) {
+          // Override defaults if user specified year range
+          filter.year = {};
+          if (fromYear) filter.year.$gte = fromYear;
+          else filter.year.$gte = 1990; // Keep default lower bound
+          if (toYear) filter.year.$lte = toYear;
+          else filter.year.$lte = new Date().getFullYear(); // Keep default upper bound
+        }
+        
+        // Determine limit based on query specificity
+        let limit = 500;
+        if (!theme && !fromYear && !toYear) {
+          // General query - limit to most recent 30 questions
+          limit = 30;
+        } else if (theme && !fromYear && !toYear) {
+          // Theme query without year - limit to 50
+          limit = 50;
+        } else if (fromYear || toYear) {
+          // Year-specific query - allow more
+          limit = 100;
+        }
+        
+        let items = [];
+        try {
+          // Try with text search first if theme is provided
+          if (theme) {
+            const query = PYQ.find({
+              ...filter,
+              $or: [
+                { $text: { $search: theme } },
+                { topicTags: { $regex: theme, $options: 'i' } },
+                { question: { $regex: theme, $options: 'i' } }
+              ]
+            }).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          } else {
+            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          }
+        } catch (dbError) {
+          // Fallback: If $text index doesn't exist or query planner fails, use regex only
+          console.warn('PYQ database query error:', dbError.message);
+          if (theme) {
+            const query = PYQ.find({
+              ...filter,
+              $or: [
+                { topicTags: { $regex: theme, $options: 'i' } },
+                { question: { $regex: theme, $options: 'i' } }
+              ]
+            }).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          } else {
+            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
+            items = await query.lean();
+          }
+        }
+        
+        if (!items.length) return null;
+      
+      // Sort items: verified first, then unverified (both sorted by year descending)
+      const sortedItems = items.sort((a, b) => {
+        const aVerified = a.verified === true || (a.sourceLink && a.sourceLink.includes('.gov.in'));
+        const bVerified = b.verified === true || (b.sourceLink && b.sourceLink.includes('.gov.in'));
+        if (aVerified !== bVerified) return bVerified ? 1 : -1; // Verified first
+        return (b.year || 0) - (a.year || 0); // Then by year descending (most recent first)
+      });
+      
+      const verifiedCount = sortedItems.filter(q => q.verified === true || (q.sourceLink && q.sourceLink.includes('.gov.in'))).length;
+      const unverifiedCount = sortedItems.length - verifiedCount;
+      
+      // Group by year (more useful than decade)
+      const byYear = new Map();
+      for (const q of sortedItems) {
+        const year = q.year || 0;
+        if (year < 1990 || year > new Date().getFullYear()) continue; // Skip invalid years
+        
+        if (!byYear.has(year)) byYear.set(year, []);
+        
+        const isUnverified = q.verified === false && (!q.sourceLink || !q.sourceLink.includes('.gov.in'));
+        const topicTags = q.topicTags && q.topicTags.length > 0 ? q.topicTags.join(', ') : null;
+        
+        // Build cleaner label - truncate long questions
+        let questionText = q.question || '';
+        if (questionText.length > 150) {
+          questionText = questionText.substring(0, 147) + '...';
+        }
+        
+        let label = `[${q.paper || 'General'}] ${questionText}`;
+        
+        // Add topic/theme if available (only if different from question)
+        if (topicTags && !questionText.toLowerCase().includes(topicTags.toLowerCase().substring(0, 20))) {
+          label += ` (${topicTags})`;
+        }
+        
+        // Add verification status
+        if (isUnverified) {
+          label += ' ⚠️';
+        } else if (q.sourceLink && q.sourceLink.includes('.gov.in')) {
+          label += ' ✅';
+        }
+        
+        byYear.get(year).push(label);
+      }
+      
+      const lines = [];
+      
+      // Add header with summary
+      if (theme) {
+        lines.push(`📚 Previous Year Questions on "${theme}" (${examCode})`);
+      } else {
+        lines.push(`📚 Previous Year Questions (${examCode})`);
+      }
+      
+      if (fromYear || toYear) {
+        lines.push(`📅 Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}`);
+      }
+      lines.push('');
+      
+      // Group by year (most recent first)
+      const sortedYears = Array.from(byYear.keys()).sort((a, b) => b - a);
+      
+      for (const year of sortedYears) {
+        const yearQuestions = byYear.get(year);
+        if (yearQuestions.length === 0) continue;
+        
+        lines.push(`**${year}** (${yearQuestions.length} question${yearQuestions.length > 1 ? 's' : ''}):`);
+        yearQuestions.forEach((q, idx) => {
+          lines.push(`${idx + 1}. ${q}`);
+        });
+        lines.push('');
+      }
+      
+      // Summary with counts
+      lines.push('---');
+      if (verifiedCount > 0 && unverifiedCount > 0) {
+        lines.push(`📊 Total: ${sortedItems.length} questions (${verifiedCount} ✅ verified, ${unverifiedCount} ⚠️ unverified)`);
+      } else if (verifiedCount > 0) {
+        lines.push(`📊 Total: ${sortedItems.length} questions (✅ All verified from official sources)`);
+      } else {
+        lines.push(`📊 Total: ${sortedItems.length} questions (⚠️ All unverified - please verify before use)`);
+      }
+      
+      // Add helpful message if too many results
+      if (sortedItems.length >= limit) {
+        lines.push('');
+        lines.push('💡 Tip: To get more specific results, try:');
+        lines.push(`   - "PYQ on [specific topic]"`);
+        lines.push(`   - "PYQ from 2020 to 2024"`);
+        lines.push(`   - "PYQ about [subject]"`);
+      }
+      
+      return lines.join('\n');
+      } catch (error) {
+        // Log error but don't crash - fall back to AI response
+        console.error('PYQ database query error:', error.message);
+        return null; // Return null to allow fallback to AI
+      }
+    }
+
+    // If DB has PYQs, return immediately
+    const pyqDb = await tryPyqFromDb(message);
+    if (pyqDb) {
+      return res.status(200).json({ response: pyqDb, source: 'pyq-db' });
+    }
+
+    const pyqPrompt = buildPyqPrompt(message);
+    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext + (pyqPrompt || '');
+
+    // Parallelize primary and fast fallback model for lower latency
+    // Use longer timeouts for comprehensive research queries
+    // Note: sonar-pro automatically does web search - no additional config needed
+    const primaryReq = axios.post('https://api.perplexity.ai/chat/completions', {
       model: model || 'sonar-pro',
       messages: [
         { role: 'system', content: enhancedSystemPrompt },
         { role: 'user', content: message }
       ],
       max_tokens: calculateMaxTokens(message),
-      temperature: 0.7,
+      temperature: pyqPrompt ? 0.2 : 0.5,
       top_p: 0.9,
       stream: false
     }, {
@@ -379,10 +639,95 @@ EXAMPLE OF BAD RESPONSE:
         'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      }
+      },
+      timeout: 60000 // Increased to 60s for complex queries
     });
 
-    if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
+    // Use faster model (sonar) for parallel fallback, not deep-research
+    const fastReq = axios.post('https://api.perplexity.ai/chat/completions', {
+      model: 'sonar',
+      messages: [
+        { role: 'system', content: enhancedSystemPrompt },
+        { role: 'user', content: message }
+      ],
+      max_tokens: calculateMaxTokens(message),
+      temperature: pyqPrompt ? 0.2 : 0.5,
+      top_p: 0.9,
+      stream: false
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      timeout: 45000 // 45s for faster model
+    });
+
+    let response;
+    try {
+      response = await Promise.any([primaryReq, fastReq]);
+    } catch (aggregateError) {
+      // If both requests fail, try a single fallback request with simpler parameters
+      const errors = aggregateError.errors || [];
+      const errorMessages = errors.map(e => {
+        const msg = e.message || e.response?.data?.error?.message || String(e);
+        const status = e.response?.status;
+        const code = e.code || e.response?.status;
+        return `${msg} (status: ${status || code || 'N/A'})`;
+      }).join('; ');
+      
+      console.error('Chat API Error: All parallel API calls failed, trying fallback', {
+        primaryError: errors[0]?.message || errors[0]?.response?.status || errors[0]?.code,
+        primaryStatus: errors[0]?.response?.status,
+        primaryResponse: errors[0]?.response?.data,
+        fallbackError: errors[1]?.message || errors[1]?.response?.status || errors[1]?.code,
+        fallbackStatus: errors[1]?.response?.status,
+        fallbackResponse: errors[1]?.response?.data,
+        errorDetails: errorMessages
+      });
+      
+      // Try a single fallback request with simpler config but adequate timeout
+      try {
+        const fallbackResponse = await axios.post('https://api.perplexity.ai/chat/completions', {
+          model: 'sonar', // Use faster model for fallback
+          messages: [
+            { role: 'system', content: enhancedSystemPrompt },
+            { role: 'user', content: message }
+          ],
+          max_tokens: Math.min(calculateMaxTokens(message), 4000), // Increased from 2000
+          temperature: 0.7,
+          top_p: 0.9,
+          stream: false
+        }, {
+          headers: {
+            'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 30000 // Increased to 30s
+        });
+        
+        response = fallbackResponse;
+      } catch (fallbackError) {
+        // If fallback also fails, return error
+        const fallbackMsg = fallbackError.message || fallbackError.response?.data?.error?.message || String(fallbackError);
+        console.error('Chat API Error: Fallback request also failed', {
+          error: fallbackMsg,
+          status: fallbackError.response?.status,
+          statusText: fallbackError.response?.statusText,
+          responseData: fallbackError.response?.data,
+          code: fallbackError.code,
+          message: fallbackError.message
+        });
+        
+        return res.status(500).json({ 
+          error: 'AI service temporarily unavailable. Please try again in a moment.',
+          details: process.env.NODE_ENV === 'development' ? `${errorMessages}; Fallback: ${fallbackMsg}` : undefined
+        });
+      }
+    }
+
+    if (response && response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
       let aiResponse = response.data.choices[0].message.content;
       // Clean any citation patterns that might slip through
       aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
@@ -401,7 +746,7 @@ EXAMPLE OF BAD RESPONSE:
               { role: 'user', content: message }
             ],
             max_tokens: calculateMaxTokens(message),
-            temperature: 0.7,
+            temperature: 0.5,
             top_p: 0.9,
             stream: false
           }, {
@@ -409,7 +754,8 @@ EXAMPLE OF BAD RESPONSE:
               'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
               'Content-Type': 'application/json',
               'Accept': 'application/json'
-            }
+            },
+            timeout: 60000 // Increased to 60s for retry
           });
           
           if (retryResponse.data.choices && retryResponse.data.choices[0] && retryResponse.data.choices[0].message) {
@@ -417,6 +763,55 @@ EXAMPLE OF BAD RESPONSE:
             aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
           }
         } catch (retryError) {
+        }
+      }
+      
+      // If this was a PYQ request and DB was empty, attempt to parse & seed results as unverified
+      if (pyqPrompt) {
+        try {
+          await connectToDatabase();
+          const examCode = (function detectExam(userMsg) {
+            if (/tnpsc/i.test(userMsg)) return 'TNPSC';
+            if (/bpsc/i.test(userMsg)) return 'BPSC';
+            if (/mpsc/i.test(userMsg)) return 'MPSC';
+            if (/uppsc/i.test(userMsg)) return 'UPPSC';
+            if (/wbpsc/i.test(userMsg)) return 'WBPSC';
+            if (/gpsc/i.test(userMsg)) return 'GPSC';
+            if (/ppsc/i.test(userMsg)) return 'PPSC';
+            if (/rpsc/i.test(userMsg)) return 'RPSC';
+            if (/mppsc/i.test(userMsg)) return 'MPPSC';
+            if (/hpsc/i.test(userMsg)) return 'HPSC';
+            if (/jkpsc/i.test(userMsg)) return 'JKPSC';
+            if (/upsc/i.test(userMsg)) return 'UPSC';
+            if (/pcs/i.test(userMsg)) return 'PCS';
+            return 'UPSC';
+          })(message);
+
+          const themeMatch2 = message.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
+          const theme2 = themeMatch2 ? themeMatch2[1].trim() : '';
+
+          const lines = aiResponse.split(/\r?\n/);
+          const candidates = [];
+          for (const raw of lines) {
+            const line = raw.trim().replace(/^[-•]\s*/, '');
+            if (!line) continue;
+            const yMatch = line.match(/\b(19\d{2}|20\d{2})\b/);
+            const year = yMatch ? parseInt(yMatch[1], 10) : null;
+            // Extract text after last dash as question
+            let question = line;
+            const split = line.split('–');
+            if (split.length >= 2) {
+              question = split[split.length - 1].trim();
+            }
+            if (question.length < 8) continue;
+            candidates.push({ exam: examCode, level: '', paper: '', year, question, topicTags: theme2 ? [theme2] : [], sourceLink: '', verified: false });
+            if (candidates.length >= 400) break;
+          }
+          if (candidates.length) {
+            await PYQ.insertMany(candidates, { ordered: false });
+          }
+        } catch (e) {
+          // best-effort; ignore seeding failures
         }
       }
       

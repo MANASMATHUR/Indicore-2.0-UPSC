@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     const systemPrompt = `You are Indicore, an AI-powered mock evaluation specialist for ${examName} and other competitive exams. You excel at evaluating answers written in ${langName} for ${questionTypeName} questions.
 
 **Your Task:**
-Evaluate the student's answer comprehensively and provide detailed feedback for improvement.
+Evaluate the student's answer and give detailed feedback for improvement.
 
 **Evaluation Criteria:**
 1. **Content Quality (30%)**: Accuracy, relevance, depth of knowledge, and factual correctness
@@ -57,7 +57,7 @@ Evaluate the student's answer comprehensively and provide detailed feedback for 
 5. **Presentation (10%)**: Formatting, neatness, and adherence to word limits
 
 **Response Format:**
-Provide a comprehensive evaluation with:
+Give a detailed evaluation with:
 
 **📊 OVERALL SCORE: [X/100]**
 
@@ -107,7 +107,7 @@ ${answerText}
 ${wordLimit ? `- Word Limit: ${wordLimit} words` : ''}
 - Current Word Count: ${answerText.split(/\s+/).filter(word => word.length > 0).length} words
 
-Please provide a comprehensive evaluation following the format specified in your system prompt.`
+Please provide a detailed evaluation following the format specified in your system prompt.`
         }
       ],
       max_tokens: 4000,

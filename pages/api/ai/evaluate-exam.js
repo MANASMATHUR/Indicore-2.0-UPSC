@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 - Environment: Biodiversity, climate change, conservation strategies
 
 **Response Format:**
-Provide a comprehensive evaluation with:
+Give a detailed evaluation with:
 1. **Overall Score** (out of 100)
 2. **Strengths** (what was done well)
 3. **Areas for Improvement** (specific weaknesses)
@@ -96,7 +96,7 @@ Be encouraging but honest, specific but constructive. Focus on helping the stude
 **Exam Paper Content:**
 ${examPaper}
 
-Please provide a comprehensive evaluation following the format specified in your system prompt.`
+Please provide a detailed evaluation following the format specified in your system prompt.`
         }
       ],
       max_tokens: 4000,
