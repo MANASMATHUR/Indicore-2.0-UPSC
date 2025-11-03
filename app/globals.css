@@ -21,6 +21,14 @@
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
     padding: 0;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  
+  @media (min-width: 768px) {
+    html {
+      font-size: 17px;
+    }
   }
   
   body {
@@ -124,10 +132,12 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     backdrop-filter: blur(20px) saturate(180%);
     transform-origin: bottom;
-    line-height: 1.65;
+    line-height: 1.75;
+    letter-spacing: 0.01em;
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.2);
     will-change: transform;
+    font-weight: 400;
   }
 
   .message-content::before {
@@ -171,15 +181,21 @@
   }
   
   .message.assistant .message-content {
-    @apply text-gray-800 bg-white/95 border border-gray-200/80 hover:bg-white hover:border-gray-300/80 transition-all duration-300;
+    @apply text-gray-900 border transition-all duration-300;
+    background-color: rgba(255, 255, 255, 0.98);
+    border-color: rgba(229, 231, 235, 0.9);
     backdrop-filter: blur(20px) saturate(180%);
     box-shadow: 
       0 4px 16px rgba(0, 0, 0, 0.08),
       0 0 0 1px rgba(0, 0, 0, 0.04),
       0 2px 4px rgba(0, 0, 0, 0.04);
+    color: rgb(17 24 39);
+    text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.8);
   }
 
   .message.assistant .message-content:hover {
+    background-color: rgba(255, 255, 255, 1);
+    border-color: rgba(209, 213, 219, 0.9);
     transform: translateY(-1px);
     box-shadow: 
       0 6px 20px rgba(0, 0, 0, 0.1),
@@ -188,11 +204,39 @@
   }
 
   .dark .message.assistant .message-content {
-    @apply text-gray-100 bg-slate-800/95 border border-slate-700/80 hover:bg-slate-800 hover:border-slate-600/80;
+    @apply border transition-all duration-300;
+    background-color: rgba(45, 55, 72, 0.95);
+    border-color: rgba(71, 85, 105, 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
     box-shadow: 
-      0 4px 16px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(255, 255, 255, 0.05),
-      0 2px 4px rgba(0, 0, 0, 0.2);
+      0 4px 16px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      0 2px 4px rgba(0, 0, 0, 0.3);
+    color: rgb(255 255 255);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  .dark .message.assistant .message-content:hover {
+    background-color: rgba(55, 65, 81, 0.98);
+    border-color: rgba(100, 116, 139, 0.7);
+  }
+  
+  .dark .message.assistant .message-content * {
+    color: rgb(255 255 255) !important;
+  }
+  
+  .dark .message.assistant .message-content p {
+    color: rgb(255 255 255) !important;
+  }
+  
+  .dark .message.assistant .message-content strong,
+  .dark .message.assistant .message-content h1,
+  .dark .message.assistant .message-content h2,
+  .dark .message.assistant .message-content h3,
+  .dark .message.assistant .message-content h4 {
+    color: rgb(255 255 255) !important;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   }
 
   .dark .message.assistant .message-content:hover {
