@@ -73,10 +73,10 @@ A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparat
 - **Backend**: Node.js, Next.js API Routes
 - **Database**: MongoDB
 - **Authentication**: NextAuth.js
-- **AI Integration**: Gemini API (FREE TIER), Cohere API (FREE TIER), Mistral API (FREE TIER)
-- **Translation**: LibreTranslate (FREE), MyMemory API (FREE), Google Translate API (FREE TIER)
-- **OCR**: Tesseract.js (FREE)
-- **Speech Services**: Azure Speech Services (FREE TIER)
+- **AI Integration**: Gemini API, Cohere API , Mistral API 
+- **Translation**: LibreTranslate , MyMemory API , Google Translate API 
+- **OCR**: Tesseract.js 
+- **Speech Services**: Azure Speech Services 
 - **Deployment**: Vercel
 
 ## 📁 Project Structure
@@ -142,7 +142,7 @@ MONGODB_URI=mongodb://localhost:27017/indicore
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret-key
 
-# AI Services - FREE TIER APIs ONLY
+# AI Services 
 GEMINI_API_KEY=your-gemini-api-key
 COHERE_API_KEY=your-cohere-api-key
 MISTRAL_API_KEY=your-mistral-api-key
@@ -183,12 +183,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - GitHub: [@MANASMATHUR](https://github.com/MANASMATHUR)
 - Email: manasmathur1234@gmail.com
 
-## 🙏 Acknowledgments
 
-- OpenAI for AI capabilities
-- Microsoft Azure for speech services
-- Next.js team for the amazing framework
-- Tailwind CSS for styling utilities
 
 ---
 
