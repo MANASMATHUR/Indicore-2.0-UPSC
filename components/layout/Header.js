@@ -97,7 +97,7 @@ const Header = ({
   ];
 
   return (
-    <header className="bg-gradient-to-r from-red-50/95 via-orange-50/95 to-red-100/95 dark:bg-gradient-to-r dark:from-slate-900/95 dark:via-slate-800/95 dark:to-slate-900/95 border-b border-red-200/50 dark:border-slate-600/50 p-3 sm:p-4 text-center relative shadow-lg dark:shadow-xl backdrop-blur-md">
+    <header className="sticky top-0 z-[80] bg-gradient-to-r from-red-50/95 via-orange-50/95 to-red-100/95 dark:bg-gradient-to-r dark:from-slate-900/95 dark:via-slate-800/95 dark:to-slate-900/95 border-b border-red-200/50 dark:border-slate-600/50 p-3 sm:p-4 text-center shadow-lg dark:shadow-xl backdrop-blur-md">
       <button
         onClick={(e) => {
           e.preventDefault();
@@ -139,11 +139,11 @@ const Header = ({
           {showToolsMenu && (
             <>
               <div 
-                className="fixed inset-0 z-40" 
+                className="fixed inset-0 z-[90]" 
                 onClick={() => setShowToolsMenu(false)}
                 aria-hidden="true"
               />
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-red-200 dark:border-slate-600 z-50">
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-red-200 dark:border-slate-600 z-[100] max-h-[calc(100vh-120px)] overflow-y-auto">
                 <div className="p-3 border-b border-red-200 dark:border-slate-600">
                   <h3 className="font-semibold text-red-800 dark:text-slate-100">Tools & Features</h3>
                   <p className="text-xs text-red-600 dark:text-slate-300">Access all exam preparation tools</p>
@@ -268,11 +268,11 @@ const Header = ({
           {showUserMenu && (
             <>
               <div 
-                className="fixed inset-0 z-40" 
+                className="fixed inset-0 z-[90]" 
                 onClick={() => setShowUserMenu(false)}
                 aria-hidden="true"
               />
-              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-red-200 dark:border-slate-600 z-50">
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-red-200 dark:border-slate-600 z-[100]">
                 <div className="p-3 border-b border-red-200 dark:border-slate-600">
                   <p className="font-medium text-red-800 dark:text-slate-100">{user.name}</p>
                   <p className="text-sm text-red-600 dark:text-slate-300">{user.email}</p>
