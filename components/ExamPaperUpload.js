@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const supportedExamTypes = [
   { code: 'pcs', name: 'PCS (Provincial Civil Service)', color: 'bg-blue-100 text-blue-800' },
@@ -23,6 +24,7 @@ const supportedLanguages = [
 ];
 
 export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
+  const { showToast } = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
   const [examType, setExamType] = useState('pcs');
   const [subject, setSubject] = useState('');
@@ -49,14 +51,14 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       ];
       
       if (!allowedTypes.includes(file.type)) {
-        alert('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .jpg, .png)');
+        showToast('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .jpg, .png)', { type: 'error' });
         return;
       }
       
       // Validate file size (max 20MB for exam papers)
       const maxSize = 20 * 1024 * 1024; // 20MB
       if (file.size > maxSize) {
-        alert('File size too large. Please select a file smaller than 20MB.');
+        showToast('File size too large. Please select a file smaller than 20MB.', { type: 'error' });
         return;
       }
       
@@ -148,12 +150,12 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
     const textToEvaluate = manualText.trim() || extractedText.trim();
     
     if (!textToEvaluate) {
-      alert('Please upload a file or enter exam paper content manually.');
+      showToast('Please upload a file or enter exam paper content manually.', { type: 'error' });
       return;
     }
 
     if (!subject.trim()) {
-      alert('Please specify the subject of the exam paper.');
+      showToast('Please specify the subject of the exam paper.', { type: 'error' });
       return;
     }
 
@@ -176,9 +178,10 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       const data = await response.json();
       
       onEvaluate(data.evaluation, examType, subject);
+      showToast('Evaluation complete!', { type: 'success' });
       onClose();
     } catch (error) {
-      alert('Evaluation failed. Please try again.');
+      showToast('Evaluation failed. Please try again.', { type: 'error' });
     } finally {
       setIsUploading(false);
     }
@@ -196,13 +199,13 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       ];
       
       if (!allowedTypes.includes(file.type)) {
-        alert('Please select a valid file type');
+        showToast('Please select a valid file type', { type: 'error' });
         return;
       }
       
       const maxSize = 20 * 1024 * 1024;
       if (file.size > maxSize) {
-        alert('File size too large. Please select a file smaller than 20MB.');
+        showToast('File size too large. Please select a file smaller than 20MB.', { type: 'error' });
         return;
       }
       
@@ -223,14 +226,14 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-slide-up">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-card w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">📝 Exam Paper Evaluation</h2>
+                <h2 className="text-2xl font-bold text-gradient">📝 Exam Paper Review</h2>
                 <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
-                  Upload your exam paper for AI-powered evaluation and feedback
+                  Upload your practice paper and get detailed feedback on your answers
                 </p>
               </div>
               <button

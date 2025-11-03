@@ -3,12 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IndiCore- Multilingual Chatbot</title>
-</html> 
-<head>
-    
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Indicore AI - Multilingual Chatbot</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -17,7 +11,48 @@
 
 <body>
 
-    
+    <!-- Landing Hero -->
+    <section class="hero" aria-label="Indicore Hero">
+        <div class="badge">⚡ Smart Exam Prep</div>
+        <h1>
+            Ace PCS, UPSC &amp; SSC <span class="text-gradient">in Your Language</span>
+        </h1>
+        <p class="sub">Study smarter with 11 Indian languages, instant translations, mock tests, and previous year papers—all in one place.</p>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:10px;">
+            <button class="pill-btn primary" onclick="document.getElementById('messageInput')?.focus()">Start Free →</button>
+            <button class="pill-btn secondary" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'})">See Features</button>
+        </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section id="features" style="margin-bottom:28px;">
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>11 Indian Languages</h3>
+                <p>Study in Hindi, Tamil, Bengali, Marathi, Telugu, Gujarati, Punjabi, Kannada, Malayalam, and more.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Smart Study Chat</h3>
+                <p>Ask questions, get explanations, and practice answers—just like chatting with a tutor.</p>
+            </div>
+            <div class="feature-card">
+                <h3>PDF Analysis</h3>
+                <p>Upload study notes or question papers and get quick summaries or topic breakdowns.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Voice Study Mode</h3>
+                <p>Ask questions by voice or listen to answers—perfect for revising on the go.</p>
+            </div>
+            <div class="feature-card">
+                <h3>PYQ Archive</h3>
+                <p>Search past papers by topic, year, or exam—UPSC, state PSCs, and more.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Secure &amp; Private</h3>
+                <p>Your study data stays private. We don't share or sell your information.</p>
+            </div>
+        </div>
+    </section>
 
     <div class="chat-container">
         <div class="header">
@@ -65,12 +100,11 @@
                 <div class="form-group">
                     <label for="modelSelect">AI Model</label>
                     <select id="modelSelect">
-                        <option value="sonar-pro">Sonar Pro (Best)</option>
-                        <option value="sonar">Sonar (General)</option>
-                        <option value="sonar-small">Sonar Small</option>
-                        <option value="mistral-7b-instruct">Mistral 7B Instruct</option>
-                        <option value="codellama-34b-instruct">CodeLlama 34B</option>
-                        <option value="llama-2-70b-chat">Llama 2 70B Chat</option>
+                        <option value="sonar-pro">Sonar Pro (Recommended - Best for complex queries)</option>
+                        <option value="sonar">Sonar (Fast - Best for quick responses)</option>
+                        <option value="sonar-reasoning">Sonar Reasoning (Analytical tasks)</option>
+                        <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Advanced reasoning)</option>
+                        <option value="sonar-deep-research">Sonar Deep Research (Comprehensive reports)</option>
                     </select>
                     <div class="model-info" id="modelInfo">Advanced search-enabled model with comprehensive answers</div>
                 </div>

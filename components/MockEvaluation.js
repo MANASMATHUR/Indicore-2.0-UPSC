@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const supportedLanguages = [
   { code: 'en', name: 'English' },
@@ -31,6 +32,7 @@ const questionTypes = [
 ];
 
 export default function MockEvaluation({ isOpen, onClose, onEvaluate }) {
+  const { showToast } = useToast();
   const [examType, setExamType] = useState('pcs');
   const [language, setLanguage] = useState('hi');
   const [questionType, setQuestionType] = useState('essay');
@@ -43,12 +45,12 @@ export default function MockEvaluation({ isOpen, onClose, onEvaluate }) {
 
   const handleEvaluate = async () => {
     if (!answerText.trim()) {
-      alert('Please enter your answer for evaluation.');
+      showToast('Please enter your answer for evaluation.', { type: 'error' });
       return;
     }
 
     if (!subject.trim()) {
-      alert('Please specify the subject/topic.');
+      showToast('Please specify the subject/topic.', { type: 'error' });
       return;
     }
 
@@ -73,8 +75,9 @@ export default function MockEvaluation({ isOpen, onClose, onEvaluate }) {
       
       setEvaluation(data.evaluation);
       setShowResults(true);
+      showToast('Evaluation complete!', { type: 'success' });
     } catch (error) {
-      alert('Evaluation failed. Please try again.');
+      showToast('Evaluation failed. Please try again.', { type: 'error' });
     } finally {
       setIsEvaluating(false);
     }
@@ -99,14 +102,14 @@ export default function MockEvaluation({ isOpen, onClose, onEvaluate }) {
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-slide-up">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-card w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">📊 Regional Language Mock Evaluation</h2>
+                <h2 className="text-2xl font-bold text-gradient">📊 Mock Answer Evaluation</h2>
                 <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
-                  Get AI-powered evaluation for your answers in regional languages
+                  Submit your answers and get instant feedback in your preferred language
                 </p>
               </div>
               <button

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const supportedLanguages = [
   { code: 'en', name: 'English' },
@@ -17,6 +18,7 @@ const supportedLanguages = [
 ];
 
 export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
+  const { showToast } = useToast();
   const [selectedFile, setSelectedFile] = useState(null);
   const [sourceLanguage, setSourceLanguage] = useState('en');
   const [targetLanguage, setTargetLanguage] = useState('hi');
@@ -82,14 +84,14 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
       ];
       
       if (!allowedTypes.includes(file.type)) {
-        alert('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .png, .jpg, .webp)');
+        showToast('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .png, .jpg, .webp)', { type: 'error' });
         return;
       }
       
       // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        alert('File size too large. Please select a file smaller than 10MB.');
+        showToast('File size too large. Please select a file smaller than 10MB.', { type: 'error' });
         return;
       }
       
@@ -251,7 +253,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
     const textToTranslate = manualText.trim() || extractedText.trim();
     
     if (!textToTranslate) {
-      alert('Please upload a file or enter text manually.');
+      showToast('Please upload a file or enter text manually.', { type: 'error' });
       return;
     }
 
@@ -272,9 +274,10 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
       const data = await response.json();
       
       onTranslate(data.translatedText, targetLanguage);
+      showToast('Translation complete!', { type: 'success' });
       onClose();
     } catch (error) {
-      alert('Translation failed. Please try again.');
+      showToast('Translation failed. Please try again.', { type: 'error' });
     } finally {
       setIsUploading(false);
     }
@@ -296,14 +299,14 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
       ];
       
       if (!allowedTypes.includes(file.type)) {
-        alert('Please select a valid file type (.txt, .md, .pdf, .doc, .docx)');
+        showToast('Please select a valid file type (.txt, .md, .pdf, .doc, .docx)', { type: 'error' });
         return;
       }
       
       // Validate file size (max 10MB)
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size > maxSize) {
-        alert('File size too large. Please select a file smaller than 10MB.');
+        showToast('File size too large. Please select a file smaller than 10MB.', { type: 'error' });
         return;
       }
       
@@ -335,7 +338,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
               <div>
                 <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Document Translation</h2>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                  AI-powered translation for study materials with exam-specific vocabulary
+                  Translate study notes into your language—keeps exam vocabulary accurate
                 </p>
               </div>
               <button
@@ -428,7 +431,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                     </label>
                   </div>
                   <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                    ✨ AI-powered with exam vocabulary
+                    ✨ Preserves exam terminology
                   </div>
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">

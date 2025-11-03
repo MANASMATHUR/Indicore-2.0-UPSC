@@ -102,23 +102,23 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         };
 
         recognition.onnomatch = () => {
-          console.log('No speech was recognized');
+          // No speech was recognized
         };
 
         recognition.onspeechstart = () => {
-          console.log('Speech has been detected');
+          // Speech has been detected
         };
 
         recognition.onspeechend = () => {
-          console.log('Speech has stopped being detected');
+          // Speech has stopped being detected
         };
 
         recognition.onsoundstart = () => {
-          console.log('Some sound has been detected');
+          // Some sound has been detected
         };
 
         recognition.onsoundend = () => {
-          console.log('Some sound has stopped being detected');
+          // Some sound has stopped being detected
         };
 
       } else {
@@ -158,7 +158,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
     };
     
     const selectedLang = languageMap[lang] || lang;
-    console.log('Selected language code for speech recognition:', selectedLang, 'for input language:', lang);
     return selectedLang;
   };
 
@@ -178,7 +177,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         }
         
         recognitionRef.current.start();
-        console.log('Started speech recognition for language:', getLanguageCode(language));
       } catch (error) {
         console.error('Error starting speech recognition:', error);
         setRecognitionError('Failed to start speech recognition. Please try again.');
@@ -192,7 +190,6 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         recognitionRef.current.stop();
         setIsListening(false);
         stopAudioLevelAnimation();
-        console.log('Stopped speech recognition');
       } catch (error) {
         console.error('Error stopping speech recognition:', error);
       }

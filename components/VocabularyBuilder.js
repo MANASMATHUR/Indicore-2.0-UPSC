@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const supportedLanguages = [
   { code: 'en', name: 'English' },
@@ -29,6 +30,7 @@ const examCategories = [
 ];
 
 export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
+  const { showToast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState('general');
   const [sourceLanguage, setSourceLanguage] = useState('en');
   const [targetLanguage, setTargetLanguage] = useState('hi');
@@ -62,8 +64,9 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
       setCurrentCardIndex(0);
       setShowAnswer(false);
       setStudyMode(true);
+      showToast('Flashcards generated successfully!', { type: 'success' });
     } catch (error) {
-      alert('Failed to generate vocabulary. Please try again.');
+      showToast('Failed to generate vocabulary. Please try again.', { type: 'error' });
     } finally {
       setIsGenerating(false);
     }
@@ -113,12 +116,12 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-slide-up">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-card w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">📚 Bilingual Vocabulary Builder</h2>
+                <h2 className="text-2xl font-bold text-gradient">📚 Bilingual Vocabulary Builder</h2>
                 <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
                   Learn exam-relevant vocabulary with bilingual flashcards
                 </p>

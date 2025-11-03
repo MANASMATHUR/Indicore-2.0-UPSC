@@ -80,11 +80,11 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                     onChange={(e) => handleChange('model', e.target.value)}
                     className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                   >
-                    <option value="sonar-pro">Sonar Pro (Recommended)</option>
-                    <option value="llama-3.1-sonar-small-128k-chat">Llama 3.1 Sonar Chat</option>
-                    <option value="sonar-reasoning">Sonar Reasoning</option>
-                    <option value="sonar-reasoning-pro">Sonar Reasoning Pro</option>
-                    <option value="sonar-deep-research">Sonar Deep Research</option>
+                    <option value="sonar-pro">Sonar Pro (Recommended - Best for complex queries)</option>
+                    <option value="sonar">Sonar (Fast - Best for quick responses)</option>
+                    <option value="sonar-reasoning">Sonar Reasoning (Analytical tasks)</option>
+                    <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Advanced reasoning)</option>
+                    <option value="sonar-deep-research">Sonar Deep Research (Comprehensive reports)</option>
                   </select>
                 </div>
               </div>

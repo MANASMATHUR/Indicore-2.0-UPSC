@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect, memo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Button from '../ui/Button';
 import speechService from '@/lib/speechService';
 import Badge from '../ui/Badge';
 import errorHandler from '@/lib/errorHandler';
 import { validateInput } from '@/lib/validation';
 import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingStates';
+import { useToast } from '../ui/ToastProvider';
+import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 
 const supportedLanguages = [
   { code: 'en', name: 'English' },
@@ -21,7 +25,7 @@ const supportedLanguages = [
   { code: 'kn', name: 'Kannada' },
 ];
 
-const StreamingChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, streamingMessage = null }) => {
+const StreamingChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, streamingMessage = null, onRegenerate, onPromptClick }) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
   const translationLoading = useLoadingState();
@@ -103,15 +107,58 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
 
   if (!messages.length && !isLoading && !streamingMessage) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="text-center max-w-2xl">
-          <div className="text-6xl mb-6">🤖</div>
-          <h3 className="text-2xl font-semibold text-red-900 dark:text-gray-100 mb-4">
+      <div className="flex-1 flex items-center justify-center p-8 min-h-full">
+        <div className="text-center max-w-2xl animate-fade-in">
+          <div className="relative mb-8">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-32 h-32 bg-gradient-to-br from-red-400 to-orange-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
+            </div>
+            <div className="relative text-7xl mb-6 animate-float">🎓</div>
+          </div>
+          <h3 className="text-3xl font-bold text-red-900 dark:text-gray-100 mb-4 bg-gradient-to-r from-red-600 to-red-800 dark:from-red-400 dark:to-red-200 bg-clip-text text-transparent">
             Welcome to Indicore AI!
           </h3>
-          <p className="text-red-700 dark:text-gray-300 text-lg leading-relaxed">
-            I'm your multilingual AI assistant. I can help you with questions in multiple languages 
-            and remember our conversations. Start by typing a message below!
+          <p className="text-red-700 dark:text-gray-300 text-lg leading-relaxed mb-6">
+            Your intelligent exam preparation assistant for PCS, UPSC, and SSC exams
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
+              <div className="text-2xl mb-2">🌐</div>
+              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">Multilingual</div>
+              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Support for 10+ languages</div>
+            </div>
+            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
+              <div className="text-2xl mb-2">📚</div>
+              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">PYQ Database</div>
+              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Previous year questions</div>
+            </div>
+            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
+              <div className="text-2xl mb-2">🔍</div>
+              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">Web Search</div>
+              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Up-to-date information</div>
+            </div>
+          </div>
+          {/* Suggested Prompts */}
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto">
+            {[
+              "What is the UPSC syllabus for 2025?",
+              "Give me notes on Indian History",
+              "Search UPSC PYQs for Geography",
+              "Translate this to Hindi: Modern History",
+              "Explain the Indian Constitution",
+              "What are the best books for UPSC preparation?"
+            ].map((prompt, idx) => (
+              <button
+                key={idx}
+                onClick={() => onPromptClick && onPromptClick(prompt)}
+                className="px-4 py-3 text-left bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-red-200/50 dark:border-slate-700/50 rounded-xl text-sm text-red-900 dark:text-slate-200 hover:border-red-400 dark:hover:border-red-600 hover:shadow-md transition-all duration-200 backdrop-blur-sm"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+          <p className="text-red-600 dark:text-slate-500 text-sm mt-6">
+            Start by typing a message below or click a suggestion above!
           </p>
         </div>
       </div>
@@ -120,7 +167,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
 
   return (
     <div className="flex-1 overflow-y-auto messages" style={{ minHeight: 'calc(100vh - 200px)' }}>
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-6 py-8">
         {messages.map((message, index) => (
           <MessageItem
             key={index}
@@ -129,26 +176,48 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
             onTranslate={handleTranslate}
             translatingMessage={translatingMessage}
             translatedText={translatedText}
+            onRegenerate={onRegenerate}
+            onPromptClick={onPromptClick}
+            messages={messages}
           />
         ))}
 
         {/* Streaming Message */}
         {streamingMessage && (
-          <div className="message assistant mb-8">
-            <div className="message-content">
+          <div className="message assistant mb-4 flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50 animate-pulse">
+              🎓
+            </div>
+            <div className="message-content relative rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-slate-800/70 shadow-sm flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                <span className="text-sm text-sky-700 dark:text-sky-300 font-medium">
                   AI is responding...
                 </span>
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
               </div>
-            <div className="whitespace-pre-wrap break-words">
-                {streamingMessage}
-                <span className="animate-pulse">|</span>
+              <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
+                    strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
+                    em: ({ children }) => <em className="italic text-inherit">{children}</em>,
+                    ul: ({ children }) => <ul className="mb-1.5 mt-1.5 list-disc list-inside space-y-0.5 pl-4">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-1.5 mt-1.5 list-decimal list-inside space-y-0.5 pl-4">{children}</ol>,
+                    li: ({ children }) => <li className="my-0.5 leading-relaxed">{children}</li>,
+                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-2 mt-3 first:mt-0 text-slate-900 dark:text-slate-100">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-bold mb-1.5 mt-3 first:mt-0 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 pb-1">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-1.5 mt-2 first:mt-0 text-slate-700 dark:text-slate-300">{children}</h3>,
+                    h4: ({ children }) => <h4 className="text-base font-semibold mb-1 mt-2 text-slate-700 dark:text-slate-300">{children}</h4>,
+                  }}
+                >
+                  {streamingMessage}
+                </ReactMarkdown>
+                <span className="animate-pulse ml-1">|</span>
               </div>
             </div>
           </div>
@@ -167,8 +236,13 @@ const MessageItem = memo(({
   index, 
   onTranslate, 
   translatingMessage, 
-  translatedText 
+  translatedText,
+  onRegenerate,
+  onPromptClick,
+  messages = []
 }) => {
+  const { showToast } = useToast();
+  const [isHovered, setIsHovered] = useState(false);
   const sender = message?.sender || message?.role || 'assistant';
   const text = message?.text || message?.content || '';
   const ts = message?.timestamp ? new Date(message.timestamp) : null;
@@ -177,10 +251,100 @@ const MessageItem = memo(({
 
   const cleanText = (text) => text || '';
 
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        showToast('Copied to clipboard', { type: 'success' });
+      }
+    } catch (e) {
+      showToast('Failed to copy', { type: 'error' });
+    }
+  };
+
   return (
-    <div className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-8`}>
-      <div className="message-content">
-        {cleanText(text)}
+    <div 
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-4 flex items-start gap-3 animate-fade-in`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {sender === 'assistant' && (
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
+          🎓
+        </div>
+      )}
+      <div
+        className={`message-content relative rounded-2xl border shadow-sm shadow-card flex-1 ${
+          sender === 'user'
+            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl hover:shadow-blue-500/25 ml-auto'
+            : 'bg-white/90 dark:bg-slate-800/70 border-slate-200/80 dark:border-slate-700 hover:shadow-md'
+        }`}
+      >
+        {/* Message Action Buttons - Visible on Hover */}
+        {isHovered && text.trim() && (
+          <div className={`absolute top-2 ${sender === 'user' ? 'left-2' : 'right-2'} flex gap-1 z-10 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg p-1 shadow-md border border-slate-200 dark:border-slate-700`}>
+            <button
+              onClick={handleCopy}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
+              title="Copy message"
+              aria-label="Copy message"
+            >
+              <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+            {sender === 'assistant' && onRegenerate && (
+              <button
+                onClick={() => onRegenerate(index)}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
+                title="Regenerate response"
+                aria-label="Regenerate response"
+              >
+                <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+        <div className={`prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-code:text-sm prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] ${sender === 'user' ? 'prose-invert' : ''}`}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
+              em: ({ children }) => <em className="italic text-inherit">{children}</em>,
+              ul: ({ children }) => <ul className="mb-1.5 mt-1.5 list-disc list-inside space-y-0.5 pl-4">{children}</ul>,
+              ol: ({ children }) => <ol className="mb-1.5 mt-1.5 list-decimal list-inside space-y-0.5 pl-4">{children}</ol>,
+              li: ({ children }) => <li className="my-0.5 leading-relaxed">{children}</li>,
+              h1: ({ children }) => <h1 className="text-2xl font-bold mb-2 mt-3 first:mt-0 text-slate-900 dark:text-slate-100">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-xl font-bold mb-1.5 mt-3 first:mt-0 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 pb-1">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-lg font-semibold mb-1.5 mt-2 first:mt-0 text-slate-700 dark:text-slate-300">{children}</h3>,
+              h4: ({ children }) => <h4 className="text-base font-semibold mb-1 mt-2 text-slate-700 dark:text-slate-300">{children}</h4>,
+              code: ({ inline, children, ...props }) => {
+                if (inline) {
+                  return (
+                    <code className="bg-slate-100 dark:bg-slate-800 text-sm px-1.5 py-0.5 rounded font-mono" {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+                return (
+                  <code className="block bg-slate-100 dark:bg-slate-800 text-sm p-3 rounded overflow-x-auto" {...props}>
+                    {children}
+                  </code>
+                );
+              },
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-4 border-red-300 dark:border-red-600 pl-4 my-2 italic">
+                  {children}
+                </blockquote>
+              ),
+            }}
+          >
+            {cleanText(text)}
+          </ReactMarkdown>
+        </div>
         
         {/* Translation dropdown for AI messages and OCR results */}
         {((sender === 'assistant') || text.includes('📷 Image OCR Result') || text.includes('Translated to')) && text.trim() && (
@@ -193,7 +357,7 @@ const MessageItem = memo(({
                 }
               }}
               disabled={isTranslating}
-              className="text-xs px-3 py-2 bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 rounded-md border border-red-200 dark:border-red-700 hover:bg-red-200 dark:hover:bg-red-700 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer"
+              className="text-xs px-3 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer backdrop-blur focus:outline-none"
             >
               <option value="">🌐 Translate to...</option>
               {supportedLanguages.map((lang) => (
@@ -223,30 +387,88 @@ const MessageItem = memo(({
         })}
 
         {timeStr && (
-          <div className={`mt-2 text-xs opacity-60 ${sender === 'user' ? 'text-red-600' : 'text-red-600 dark:text-gray-400'}`}>
+          <div className={`mt-3 text-xs opacity-60 ${sender === 'user' ? 'text-white/70' : 'text-red-600 dark:text-gray-400'}`}>
             {timeStr}
           </div>
         )}
+
+        {/* Quick Reply Suggestions for Assistant Messages */}
+        {sender === 'assistant' && text.trim() && (
+          <QuickReplySuggestions 
+            messageText={text}
+            onSelect={onPromptClick}
+            isLastMessage={index === messages.length - 1}
+          />
+        )}
       </div>
+      {sender === 'user' && (
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-blue-100 dark:ring-blue-900/50">
+          👤
+        </div>
+      )}
+    </div>
+  );
+});
+
+const QuickReplySuggestions = memo(({ messageText, onSelect, isLastMessage }) => {
+  const [suggestions, setSuggestions] = useState([]);
+
+  useEffect(() => {
+    // Generate contextual suggestions based on message content
+    const lowerText = messageText.toLowerCase();
+    const newSuggestions = [];
+
+    if (lowerText.includes('upsc') || lowerText.includes('syllabus')) {
+      newSuggestions.push('Give me a detailed study plan for UPSC');
+      newSuggestions.push('What are the best books for UPSC preparation?');
+    } else if (lowerText.includes('history')) {
+      newSuggestions.push('Explain the causes of Indian independence');
+      newSuggestions.push('What are important dates in Indian History?');
+    } else if (lowerText.includes('geography')) {
+      newSuggestions.push('Explain climate patterns in India');
+      newSuggestions.push('What are the major rivers in India?');
+    } else if (lowerText.includes('pyq') || lowerText.includes('previous year')) {
+      newSuggestions.push('Search more PYQs for this topic');
+      newSuggestions.push('Give me tips for answering this type of question');
+    } else {
+      newSuggestions.push('Can you explain this in more detail?');
+      newSuggestions.push('Give me related study notes');
+    }
+
+    setSuggestions(newSuggestions.slice(0, 2));
+  }, [messageText]);
+
+  // Only show for the last assistant message
+  if (!isLastMessage || !suggestions.length || !onSelect) return null;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {suggestions.map((suggestion, idx) => (
+        <button
+          key={idx}
+          onClick={() => onSelect(suggestion)}
+          className="px-3 py-1.5 text-xs bg-red-50 dark:bg-slate-800/80 hover:bg-red-100 dark:hover:bg-slate-700 border border-red-200 dark:border-slate-700 rounded-lg text-red-700 dark:text-slate-300 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
+        >
+          {suggestion}
+        </button>
+      ))}
     </div>
   );
 });
 
 const TranslationResult = memo(({ text, language, langCode }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const { showToast } = useToast();
+  const [dense, setDense] = useState(false);
 
   const handleSpeak = async () => {
-    console.log('Speak button clicked!', { text, langCode, language });
-    
-   
     if (!window.speechSynthesis) {
-      console.error('Speech synthesis not supported in this browser');
-      alert('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.');
+      showToast('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.', { type: 'error' });
       return;
     }
     
    
-    let cleanText = text
+    let cleanText = sanitizeTranslationOutput(text)
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
       .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
@@ -255,26 +477,19 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       .replace(/\n+/g, ' ') // Replace newlines with spaces
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .trim();
-    
-    console.log('Cleaned text for speech:', cleanText);
-    console.log('Cleaned text length:', cleanText.length);
-    
+
     // Ensure speech service is initialized
     if (!speechService) {
-      console.error('Speech service not available');
       return;
     }
     
     try {
       const validation = validateInput('multilingualText', cleanText);
       if (!validation.isValid) {
-        console.error('Text validation failed:', validation.errors);
         return;
       }
 
       setIsSpeaking(true);
-      
-      console.log('Speaking text:', validation.value, 'in language:', langCode);
       
       await speechService.speak(validation.value, langCode, {
         rate: 0.9,
@@ -283,45 +498,79 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       });
       
     } catch (error) {
-      console.error('Speech error:', error);
+      // Speech error handled silently
     } finally {
       setIsSpeaking(false);
     }
   };
 
   return (
-    <div className="mt-4 p-4 bg-red-100 dark:bg-gray-800/50 border border-red-200 dark:border-gray-700 rounded-lg shadow-sm dark:shadow-lg">
+    <div className="mt-4 p-4 bg-gradient-to-r from-red-50/80 to-orange-50/80 dark:from-gray-800/60 dark:to-slate-800/60 border border-red-200/50 dark:border-gray-700/50 rounded-xl shadow-md dark:shadow-lg backdrop-blur-sm animate-fade-in">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-sm text-red-700 dark:text-gray-300 font-medium">
+        <div className="text-sm text-red-700 dark:text-gray-300 font-semibold">
           Translated to {language}:
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSpeak}
-          disabled={isSpeaking}
-          className={`text-xs px-3 py-1.5 bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200 rounded-md hover:bg-red-300 dark:hover:bg-red-700 transition-colors duration-150 font-medium shadow-sm ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {isSpeaking ? '🔊 Speaking...' : '🔊 Speak'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSpeak}
+            disabled={isSpeaking}
+            className={`text-xs px-3 py-1.5 bg-gradient-to-r from-red-200 to-orange-200 dark:from-red-800/50 dark:to-red-900/50 text-red-700 dark:text-red-200 rounded-lg hover:from-red-300 hover:to-orange-300 dark:hover:from-red-700 dark:hover:to-red-800 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500/20 ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {isSpeaking ? '🔊 Speaking...' : '🔊 Speak'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                if (navigator.clipboard) {
+                  await navigator.clipboard.writeText(sanitizeTranslationOutput(text));
+                  showToast('Copied', { type: 'success' });
+                }
+              } catch (e) { showToast('Copy failed', { type: 'error' }); }
+            }}
+            className="text-xs px-3 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+          >
+            📋 Copy
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDense(v => !v)}
+            className="text-xs px-2 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-all duration-200 font-medium shadow-sm backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
+          >
+            Aa
+          </Button>
+        </div>
       </div>
-      <div className="text-sm text-red-800 dark:text-gray-200 leading-relaxed">
-        {text}
+      <div className={`text-base ${dense ? 'leading-6' : 'leading-7'} text-red-900 dark:text-gray-100 break-words whitespace-pre-wrap`}>
+        {sanitizeTranslationOutput(text)}
       </div>
     </div>
   );
 });
 
 const LoadingMessage = memo(() => (
-  <div className="message assistant mb-8">
-    <div className="message-content">
+  <div className="message assistant animate-fade-in flex items-start gap-3">
+    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50 animate-pulse">
+      🎓
+    </div>
+    <div className="message-content flex-1">
       <div className="flex items-center gap-3">
-        <div className="animate-pulse-slow flex space-x-1">
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+        <div className="flex space-x-2">
+          <div className="w-2.5 h-2.5 bg-gradient-to-r from-red-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+          <div className="w-2.5 h-2.5 bg-gradient-to-r from-red-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+          <div className="w-2.5 h-2.5 bg-gradient-to-r from-red-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
         </div>
-        <span className="text-sm text-red-600 dark:text-gray-400">AI is thinking...</span>
+        <span className="text-sm text-red-600 dark:text-gray-400 font-medium">AI is thinking...</span>
+      </div>
+      {/* Skeleton loader for message content */}
+      <div className="mt-3 space-y-2">
+        <div className="h-3 bg-red-200/30 dark:bg-slate-700/50 rounded animate-pulse" style={{ width: '85%' }}></div>
+        <div className="h-3 bg-red-200/30 dark:bg-slate-700/50 rounded animate-pulse" style={{ width: '70%' }}></div>
+        <div className="h-3 bg-red-200/30 dark:bg-slate-700/50 rounded animate-pulse" style={{ width: '60%' }}></div>
       </div>
     </div>
   </div>

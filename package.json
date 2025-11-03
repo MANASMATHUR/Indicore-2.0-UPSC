@@ -6,13 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "ingest:pyq": "node scripts/pyq-ingest-all-pscs.js",
+    "ingest:pyq:help": "node scripts/pyq-ingest-all-pscs.js --help",
+    "ingest:pyq:all": "node scripts/pyq-ingest-all-pscs.js --all"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@vercel/analytics": "^1.5.0",
     "autoprefixer": "^10.4.16",
-    "axios": "^1.6.0",
+    "axios": "^1.13.1",
     "bcryptjs": "^2.4.3",
+    "cheerio": "^1.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "google-auth-library": "^10.3.0",
@@ -23,10 +27,13 @@
     "mongoose": "^7.8.1",
     "next": "^14.0.0",
     "next-auth": "^4.24.0",
+    "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.149",
     "postcss": "^8.4.31",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.3.0",
     "tesseract.js": "^5.0.5"
   },
@@ -34,8 +41,6 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "eslint": "^8.0.0",
-    "eslint-config-next": "^14.0.0",
     "typescript": "^5.0.0"
   }
 }

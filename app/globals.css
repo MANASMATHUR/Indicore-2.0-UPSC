@@ -15,6 +15,7 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     scroll-behavior: smooth;
+    scroll-padding-top: 20px;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -29,12 +30,35 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(239, 68, 68, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(249, 115, 22, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 40% 20%, rgba(251, 146, 60, 0.06) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
   }
 
   /* Enhanced dark theme base */
   .dark body {
     @apply bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900;
     background-attachment: fixed;
+  }
+
+  .dark body::before {
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(239, 68, 68, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(249, 115, 22, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 40% 20%, rgba(251, 146, 60, 0.04) 0%, transparent 50%);
   }
 
   /* Dark mode scrollbar styling */
@@ -60,11 +84,26 @@
     @apply bg-gradient-to-br from-red-50 via-orange-50 to-red-100 w-full h-screen flex flex-col backdrop-blur-sm;
     min-height: 100vh;
     padding-bottom: 0;
-    transition: margin-left 0.3s ease-in-out;
     margin: 0;
     padding-left: 0;
     padding-right: 0;
     overflow-x: hidden;
+    transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: margin-left;
+  }
+
+  .chat-container-sidebar-open {
+    margin-left: 20rem;
+  }
+
+  .chat-container-sidebar-closed {
+    margin-left: 0;
+  }
+
+  @media (max-width: 768px) {
+    .chat-container-sidebar-open {
+      margin-left: 0;
+    }
   }
 
   .dark .chat-container {
@@ -72,7 +111,8 @@
   }
   
   .message {
-    @apply flex items-start w-full mb-6;
+    @apply w-full mb-3;
+    animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
   
   .message.user {
@@ -80,27 +120,86 @@
   }
   
   .message-content {
-    @apply px-5 py-4 text-sm leading-relaxed whitespace-pre-wrap break-words max-w-3xl rounded-2xl shadow-sm transition-all duration-200;
+    @apply px-6 py-4 text-base leading-relaxed whitespace-pre-wrap break-words max-w-3xl rounded-3xl shadow-lg transition-all duration-300;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    backdrop-filter: blur(10px);
-    animation: fadeInUp 0.3s ease-out;
+    backdrop-filter: blur(20px) saturate(180%);
     transform-origin: bottom;
+    line-height: 1.65;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    will-change: transform;
+  }
+
+  .message-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .message-content:hover::before {
+    opacity: 1;
   }
   
   .message.user .message-content {
-    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-[1.02];
+    @apply bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  }
+
+  .message.user .message-content:hover {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
   }
 
   .dark .message.user .message-content {
-    @apply bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-xl hover:shadow-2xl;
+    @apply bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white shadow-2xl;
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  }
+
+  .dark .message.user .message-content:hover {
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
   }
   
   .message.assistant .message-content {
-    @apply text-gray-800 bg-white/80 border border-gray-200/50 hover:bg-white/90 hover:shadow-md;
+    @apply text-gray-800 bg-white/95 border border-gray-200/80 hover:bg-white hover:border-gray-300/80 transition-all duration-300;
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(0, 0, 0, 0.04),
+      0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  .message.assistant .message-content:hover {
+    transform: translateY(-1px);
+    box-shadow: 
+      0 6px 20px rgba(0, 0, 0, 0.1),
+      0 0 0 1px rgba(0, 0, 0, 0.05),
+      0 2px 8px rgba(0, 0, 0, 0.05);
   }
 
   .dark .message.assistant .message-content {
-    @apply text-gray-100 bg-slate-800/70 border border-slate-600/50 hover:bg-slate-800/90 hover:shadow-lg;
+    @apply text-gray-100 bg-slate-800/95 border border-slate-700/80 hover:bg-slate-800 hover:border-slate-600/80;
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .dark .message.assistant .message-content:hover {
+    box-shadow: 
+      0 6px 20px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 2px 8px rgba(0, 0, 0, 0.3);
   }
   
   .sidebar {
@@ -115,11 +214,14 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    transition: transform 0.3s ease-in-out;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     overflow-y: auto;
     overflow-x: hidden;
     margin: 0 !important;
     padding: 0 !important;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
   }
 
   @media (max-width: 768px) {
@@ -141,12 +243,28 @@
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
   }
   
+  .sidebar-closed {
+    transform: translateX(-100%) !important;
+  }
+  
+  .sidebar-open {
+    transform: translateX(0) !important;
+  }
+
   .sidebar.collapsed {
     transform: translateX(-100%);
   }
 
   .sidebar-backdrop {
-    @apply fixed inset-0 bg-black bg-opacity-50 z-30 transition-opacity duration-300 ease-in-out;
+    @apply fixed inset-0 bg-black bg-opacity-50 z-30;
+    transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;
+    opacity: 0;
+  }
+  
+  .sidebar-backdrop.opacity-100 {
+    visibility: visible;
+    opacity: 1;
   }
   
   .chat-item {
@@ -237,9 +355,25 @@
 
   /* Mobile optimizations */
   @media (max-width: 768px) {
+    .message {
+      @apply mb-3;
+    }
+
     .message-content {
-      @apply px-3 py-3 text-xs leading-relaxed;
-      max-width: 100%;
+      @apply px-4 py-3 text-sm leading-relaxed;
+      max-width: 90%;
+    }
+
+    .message.assistant {
+      @apply gap-2;
+    }
+
+    .message.assistant > div:first-child {
+      @apply w-6 h-6 text-xs;
+    }
+
+    .message.user > div:last-child {
+      @apply w-6 h-6 text-xs;
     }
     
     .mic-button {
@@ -269,7 +403,7 @@
   }
   
   .send-button {
-    @apply bg-gradient-to-r from-red-500 to-red-600 text-white border-none p-4 rounded-2xl cursor-pointer transition-all duration-300 hover:from-red-600 hover:to-red-700 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:scale-105 active:scale-95 relative overflow-hidden;
+    @apply bg-gradient-to-r from-red-500 to-orange-600 text-white border-none p-4 rounded-2xl cursor-pointer transition-all duration-300 hover:from-red-600 hover:to-orange-700 hover:shadow-xl hover:shadow-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:scale-105 active:scale-95 relative overflow-hidden;
   }
 
   .send-button::before {
@@ -279,12 +413,20 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left 0.5s;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    transition: left 0.6s ease;
   }
 
   .send-button:hover::before {
     left: 100%;
+  }
+
+  .send-button:active {
+    transform: scale(0.95);
+  }
+
+  .send-button:focus-visible {
+    @apply outline-none ring-2 ring-red-500 ring-offset-2;
   }
 
   .dark .send-button {
@@ -423,12 +565,113 @@
   }
 }
 
+/* Design System tokens from Lovable (HSL-based) */
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 160 84% 39%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(160 84% 39%));
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60% / 0.1), hsl(160 84% 39% / 0.1));
+    --shadow-glow: 0 10px 40px hsl(217 91% 60% / 0.3);
+    --shadow-card: 0 4px 20px hsl(222 47% 11% / 0.08);
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 13%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 13%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 160 84% 39%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(160 84% 39%));
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60% / 0.15), hsl(160 84% 39% / 0.15));
+    --shadow-glow: 0 10px 40px hsl(217 91% 60% / 0.4);
+    --shadow-card: 0 4px 20px hsl(0 0% 0% / 0.3);
+  }
+}
+
+@layer base {
+  * { border-color: hsl(var(--border)); }
+  body { @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))]; }
+  h1,h2,h3,h4,h5,h6 { @apply font-semibold tracking-tight; }
+}
+
+@layer utilities {
+  .gradient-primary { background: var(--gradient-primary); }
+  .gradient-hero { background: var(--gradient-hero); }
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0px);} 50% { transform: translateY(-20px);} }
+  .animate-slide-up { animation: slide-up 0.5s ease-out; }
+  @keyframes slide-up { from { opacity:0; transform: translateY(20px);} to { opacity:1; transform: translateY(0);} }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -754,8 +997,46 @@
   top: 6px;
 }
 
+/* Enhanced button and interactive states */
+button, .btn {
+  @apply transition-all duration-200;
+  transition-timing-function: var(--transition-smooth);
+}
+
+button:active:not(:disabled), .btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+button:focus-visible, .btn:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+button:disabled, .btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Enhanced input focus states */
+input:focus, textarea:focus, select:focus {
+  @apply ring-2 ring-blue-500 ring-offset-2 outline-none;
+  transition: all 0.2s var(--transition-smooth);
+}
+
+/* Smooth hover transitions for links */
+a {
+  @apply transition-colors duration-200;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
   .message-content,
   .send-button,
   .chat-item,

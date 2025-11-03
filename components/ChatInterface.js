@@ -16,7 +16,7 @@ import VocabularyBuilder from './VocabularyBuilder';
 import MockEvaluation from './MockEvaluation';
 import { useChat } from '@/hooks/useChat';
 import { useSettings } from '@/hooks/useSettings';
-import Toast, { useToast } from './Toast';
+import { ToastProvider, useToast } from './ui/ToastProvider';
 import speechService from '@/lib/speechService';
 import errorHandler from '@/lib/errorHandler';
 import { validateInput, validateSecurity, security } from '@/lib/validation';
@@ -43,7 +43,7 @@ export default function ChatInterface({ user }) {
 
   const { chats, messages, setMessages, loadChats, createNewChat, loadChat, sendMessage, addAIMessage, deleteChat, setChats, setCurrentChat } = useChat(user.email);
   const { settings, updateSettings, loadSettings } = useSettings();
-  const toast = useToast();
+  const { showToast } = useToast();
   
   const chatLoading = useLoadingState();
   const speechLoading = useLoadingState();
@@ -157,13 +157,13 @@ export default function ChatInterface({ user }) {
       const validation = validateInput('chatMessage', message);
       if (!validation.isValid) {
         const error = validation.errors[0];
-        toast.error(error.message);
+        showToast(error.message, { type: 'error' });
         return;
       }
 
       const securityCheck = validateSecurity(validation.value);
       if (!securityCheck.isValid) {
-        toast.error('Security validation failed. Please check your input.');
+        showToast('Security validation failed. Please check your input.', { type: 'error' });
         errorHandler.logError(new Error('Security validation failed'), {
           type: 'security_validation',
           message: message.substring(0, 100),
@@ -177,7 +177,7 @@ export default function ChatInterface({ user }) {
       try {
         security.checkRateLimit(user.email, 30, 60000);
       } catch (rateLimitError) {
-        toast.error('Too many requests. Please wait a moment before sending another message.');
+        showToast('Too many requests. Please wait a moment before sending another message.', { type: 'error' });
         return;
       }
 
@@ -199,14 +199,19 @@ export default function ChatInterface({ user }) {
 
       chatLoading.updateProgress(40, 'Generating response...');
 
+      // Check for simple greetings ONLY (not greetings with additional content)
+      // Only match if message is JUST a greeting or greeting followed only by punctuation/whitespace
+      const trimmedMessage = sanitizedMessage.toLowerCase().trim();
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
-      const isSimpleGreeting = simpleGreetings.some(greeting => 
-        sanitizedMessage.toLowerCase().trim() === greeting || 
-        sanitizedMessage.toLowerCase().trim().startsWith(greeting + ' ')
-      );
+      const isSimpleGreeting = simpleGreetings.some(greeting => {
+        const exactMatch = trimmedMessage === greeting;
+        // Match greeting followed by optional punctuation/whitespace and nothing else
+        const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
+        return exactMatch || greetingOnly.test(trimmedMessage);
+      });
       
       if (isSimpleGreeting) {
-        const hardcodedResponse = "Hello! I'm Indicore, your AI-powered exam preparation assistant. I specialize in helping students prepare for PCS, UPSC, and SSC exams through comprehensive study materials, answer writing practice, and multilingual support. I can assist you with: Study material translation, Essay and answer writing enhancement, Mock exam evaluation, Vocabulary building, and Multilingual practice. How can I help you with your exam preparation today?";
+        const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
         
         chatLoading.updateProgress(80, 'Preparing response...');
         await addAIMessage(chatId, hardcodedResponse, messageLanguage);
@@ -240,7 +245,15 @@ export default function ChatInterface({ user }) {
         });
 
         if (!response.ok) {
-          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+          // Try to extract error message from response
+          let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } catch {
+            // If response is not JSON, use default error message
+          }
+          throw new Error(errorMessage);
         }
         
         const data = await response.json();
@@ -277,7 +290,15 @@ export default function ChatInterface({ user }) {
         });
 
         if (!response.ok) {
-          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+          // Try to extract error message from response
+          let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } catch {
+            // If response is not JSON, use default error message
+          }
+          throw new Error(errorMessage);
         }
         
         const data = await response.json();
@@ -306,10 +327,10 @@ export default function ChatInterface({ user }) {
       chatLoading.setError(errorResult.userMessage);
       
       if (errorResult.requiresAuth) {
-        toast.error('Session expired. Please refresh and log in again.');
+        showToast('Session expired. Please refresh and log in again.', { type: 'error' });
         setTimeout(() => window.location.reload(), 2000);
       } else {
-        toast.error(errorResult.userMessage);
+        showToast(errorResult.userMessage, { type: 'error' });
       }
       
       errorHandler.logError(error, {
@@ -324,7 +345,7 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
     }
-  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, chatLoading, speechLoading, toast, user.email]);
+  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, chatLoading, speechLoading, showToast, user.email]);
 
   const handleStreamingResponse = async (message, messageLanguage, chatId, isVoiceInput) => {
     try {
@@ -345,15 +366,19 @@ export default function ChatInterface({ user }) {
         }
       }
 
-      // Check for simple greetings and provide hardcoded responses
+      // Check for simple greetings ONLY (not greetings with additional content)
+      // Only match if message is JUST a greeting or greeting followed only by punctuation/whitespace
+      const trimmedMessage = message.toLowerCase().trim();
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
-      const isSimpleGreeting = simpleGreetings.some(greeting => 
-        message.toLowerCase().trim() === greeting || 
-        message.toLowerCase().trim().startsWith(greeting + ' ')
-      );
+      const isSimpleGreeting = simpleGreetings.some(greeting => {
+        const exactMatch = trimmedMessage === greeting;
+        // Match greeting followed by optional punctuation/whitespace and nothing else
+        const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
+        return exactMatch || greetingOnly.test(trimmedMessage);
+      });
       
       if (isSimpleGreeting) {
-        const hardcodedResponse = "Hello! I'm Indicore, your AI-powered exam preparation assistant. I specialize in helping students prepare for PCS, UPSC, and SSC exams through comprehensive study materials, answer writing practice, and multilingual support. I can assist you with: Study material translation, Essay and answer writing enhancement, Mock exam evaluation, Vocabulary building, and Multilingual practice. How can I help you with your exam preparation today?";
+        const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
         
         await addAIMessage(chatId, hardcodedResponse, messageLanguage);
         setStreamingMessage('');
@@ -374,7 +399,17 @@ export default function ChatInterface({ user }) {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get streaming response');
+      if (!response.ok) {
+        // Try to extract error message from response
+        let errorMessage = 'Failed to get streaming response';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -478,13 +513,13 @@ export default function ChatInterface({ user }) {
         if (currentChatId === chatId) {
           setCurrentChat((prev) => prev ? { ...prev, name: data.chat.name } : prev);
         }
-        toast.success('Chat name updated');
+        showToast('Chat name updated', { type: 'success' });
       } else {
         const err = await response.json();
-        toast.error(err.error || 'Failed to update chat name');
+        showToast(err.error || 'Failed to update chat name', { type: 'error' });
       }
     } catch (e) {
-      toast.error('Failed to update chat name');
+      showToast('Failed to update chat name', { type: 'error' });
     }
   };
 
@@ -508,13 +543,13 @@ export default function ChatInterface({ user }) {
                 : c
             )
           );
-          toast.success(`Chat ${newPinnedState ? 'pinned' : 'unpinned'}`);
+          showToast(`Chat ${newPinnedState ? 'pinned' : 'unpinned'}`, { type: 'success' });
         } else {
           const errorData = await response.json();
-          toast.error(errorData.error || `Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`);
+          showToast(errorData.error || `Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`, { type: 'error' });
         }
       } catch (error) {
-        toast.error(`Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`);
+        showToast(`Failed to ${newPinnedState ? 'pin' : 'unpin'} chat`, { type: 'error' });
       }
     }
   };
@@ -569,9 +604,9 @@ export default function ChatInterface({ user }) {
       });
       
       doc.save(`chat-export-${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success('Chat exported as PDF');
+      showToast('Chat exported as PDF', { type: 'success' });
     } catch (error) {
-      toast.error('Failed to export PDF');
+      showToast('Failed to export PDF', { type: 'error' });
     }
   };
 
@@ -594,7 +629,46 @@ export default function ChatInterface({ user }) {
     handleSendMessage(evaluationMessage, false, language);
   };
 
+  const handleRegenerate = useCallback(async (messageIndex) => {
+    if (messageIndex <= 0) return;
+    // Get the user message that preceded this AI response
+    const userMessage = messages[messageIndex - 1];
+    if (userMessage && userMessage.sender === 'user') {
+      // Remove the AI response and regenerate
+      setMessages(prev => prev.slice(0, messageIndex));
+      await handleSendMessage(userMessage.text || userMessage.content, false, userMessage.language || settings.language);
+    }
+  }, [messages, handleSendMessage, settings.language]);
+
+  const handlePromptClick = useCallback((prompt) => {
+    handleSendMessage(prompt, false, settings.language);
+  }, [handleSendMessage, settings.language]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ctrl+K or Cmd+K: New chat
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        handleNewChat();
+      }
+      // Escape: Close sidebar if open
+      if (e.key === 'Escape' && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+      // Ctrl+/ or Cmd+/: Toggle settings
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setIsSettingsOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [handleNewChat, isSidebarOpen]);
+
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-red-50 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-x-hidden">
       {/* Skip link for accessibility */}
       <a href="#main-content" className="skip-link">
@@ -621,12 +695,9 @@ export default function ChatInterface({ user }) {
       />
 
       <div 
-        className="chat-container transition-all duration-300 ease-in-out min-h-screen flex flex-col"
-        style={{
-          marginLeft: isSidebarOpen ? '20rem' : '0'
-        }}
+        className={`chat-container min-h-screen flex flex-col ${isSidebarOpen ? 'chat-container-sidebar-open' : 'chat-container-sidebar-closed'}`}
       >
-        <Toast toasts={toast.toasts} onRemove={toast.removeToast} />
+        
         
         {/* Header */}
         <Header
@@ -651,18 +722,22 @@ export default function ChatInterface({ user }) {
               isLoading={isLoading} 
               messagesEndRef={messagesEndRef}
               streamingMessage={streamingMessage}
+              onRegenerate={handleRegenerate}
+              onPromptClick={handlePromptClick}
             />
           ) : (
             <ChatMessages 
               messages={messages} 
               isLoading={isLoading} 
-              messagesEndRef={messagesEndRef} 
+              messagesEndRef={messagesEndRef}
+              onRegenerate={handleRegenerate}
+              onPromptClick={handlePromptClick}
             />
           )}
         </main>
 
         {/* Chat Input */}
-        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-700" role="region" aria-label="Chat input">
+        <div className="sticky bottom-0 z-10" role="region" aria-label="Chat input">
           <ChatInput
             onSendMessage={(msg) => handleSendMessage(msg, false, settings.language)}
             onVoiceClick={() => setIsVoiceDialogOpen(true)}
@@ -725,5 +800,6 @@ export default function ChatInterface({ user }) {
 
       </div>
     </div>
+    </ToastProvider>
   );
 }

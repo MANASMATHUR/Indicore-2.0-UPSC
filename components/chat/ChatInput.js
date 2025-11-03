@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const ChatInput = ({ 
   onSendMessage, 
@@ -11,6 +12,7 @@ const ChatInput = ({
   onSendAssistantMessage,
   disabled = false 
 }) => {
+  const { showToast } = useToast();
   const [message, setMessage] = useState('');
   const [showImageDropdown, setShowImageDropdown] = useState(false);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
@@ -39,14 +41,14 @@ const ChatInput = ({
     // Validate file type
     const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
-      alert('Please select a valid image file (.png, .jpg, .jpeg, .webp)');
+      showToast('Please select a valid image file (.png, .jpg, .jpeg, .webp)', { type: 'error' });
       return;
     }
-
+    
     // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      alert('Image size too large. Please select an image smaller than 10MB.');
+      showToast('Image size too large. Please select an image smaller than 10MB.', { type: 'error' });
       return;
     }
 
@@ -54,33 +56,24 @@ const ChatInput = ({
     setShowImageDropdown(false);
 
     try {
-      console.log('Starting OCR for image:', file.name, 'Size:', file.size);
-      
       // OCR the image
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng');
-      console.log('Worker created, recognizing text...');
       
       const { data: { text: ocrText } } = await worker.recognize(file);
-      console.log('OCR result received, text length:', (ocrText || '').length);
       
       await worker.terminate();
-
+      
       const extractedText = (ocrText || '').trim();
       
       if (extractedText) {
-        console.log('Extracted text:', extractedText.substring(0, 100) + '...');
-        
         // Send the OCR text as a normal user message
-        
         onSendMessage(extractedText);
       } else {
-        console.warn('No text extracted from image');
         onSendMessage(' No readable text found in the image. Please try a clearer photo with better lighting.');
       }
     } catch (error) {
-      console.error('OCR error:', error);
-      onSendMessage(` Failed to process the image: ${error.message}. Please try again or upload a clearer image.`);
+      onSendMessage(` Failed to process the image: ${error.message || 'Unknown error'}. Please try again or upload a clearer image.`);
     } finally {
       setIsProcessingImage(false);
       // Reset file input
@@ -112,23 +105,27 @@ const ChatInput = ({
   }, [showImageDropdown]);
 
   return (
-    <div className="input-container p-3 sm:p-4">
-      <form onSubmit={handleSubmit} className="chat-input-form flex gap-2 sm:gap-3 items-center">
-        <Input
-          ref={inputRef}
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Message Indicore AI..."
-          className="flex-1 text-sm sm:text-base"
-          disabled={disabled}
-          aria-label="Chat message input"
-          aria-describedby="chat-input-help"
-        />
-        
-        <div id="chat-input-help" className="sr-only">
-          Type your message and press Enter to send, or Shift+Enter for a new line
+    <div className="input-container p-4 sm:p-5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-slate-700/50 shadow-2xl dark:shadow-2xl">
+      <form onSubmit={handleSubmit} className="chat-input-form flex gap-3 sm:gap-4 items-end max-w-4xl mx-auto">
+        <div className="flex-1 relative space-y-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask me anything about PCS, UPSC, or SSC exams..."
+            className="w-full text-base sm:text-lg px-6 py-5 rounded-3xl border-2 border-gray-200/80 dark:border-slate-700/80 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl focus:border-red-500 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/15 dark:focus:ring-red-500/25 transition-all duration-300 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none shadow-lg hover:shadow-xl focus:shadow-2xl focus:shadow-red-500/10 dark:focus:shadow-red-500/20"
+            disabled={disabled}
+            aria-label="Chat message input"
+            aria-describedby="chat-input-help"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85))',
+            }}
+          />
+          <div id="chat-input-help" className="sr-only">
+            Type your message and press Enter to send, or Shift+Enter for a new line
+          </div>
         </div>
         
         <Button
@@ -138,9 +135,9 @@ const ChatInput = ({
           onClick={onVoiceClick}
           disabled={disabled}
           title="Voice input"
-          className="mic-button p-2 sm:p-3 hover:bg-red-100 dark:hover:bg-red-900/20 hover:scale-110 transition-all duration-200 group"
+          className="mic-button p-3 sm:p-4 rounded-2xl hover:bg-red-100 dark:hover:bg-red-900/30 hover:scale-110 transition-all duration-300 group shadow-md hover:shadow-lg backdrop-blur-sm border border-transparent hover:border-red-200 dark:hover:border-red-800"
         >
-          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
         </Button>
@@ -154,7 +151,7 @@ const ChatInput = ({
             onClick={() => setShowImageDropdown(!showImageDropdown)}
             disabled={disabled || isProcessingImage}
             title="Upload Image"
-            className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 p-2 sm:p-3 hover:scale-110 transition-all duration-200 group"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-700/80 p-3 sm:p-4 rounded-2xl hover:scale-110 transition-all duration-300 group shadow-md hover:shadow-lg backdrop-blur-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
           >
             {isProcessingImage ? (
               <svg className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -169,7 +166,7 @@ const ChatInput = ({
           </Button>
 
           {showImageDropdown && (
-            <div className="absolute bottom-full right-0 mb-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+            <div className="absolute bottom-full right-0 mb-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
               <div className="p-2">
                 <Button
                   variant="ghost"
@@ -201,12 +198,12 @@ const ChatInput = ({
         <Button
           type="submit"
           disabled={!message.trim() || disabled || isProcessingImage}
-          className="send-button group"
+          className="send-button group bg-gradient-to-r from-red-500 via-red-600 to-orange-600 hover:from-red-600 hover:via-red-700 hover:to-orange-700 text-white p-3 sm:p-4 rounded-2xl shadow-xl hover:shadow-2xl hover:shadow-red-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 transform hover:scale-105 active:scale-95"
           title="Send message"
           aria-label="Send message"
         >
-          <svg className="w-5 h-5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          <svg className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
         </Button>
       </form>

@@ -97,27 +97,28 @@ const Header = ({
   ];
 
   return (
-    <header className="bg-gradient-to-r from-red-50/95 via-orange-50/95 to-red-100/95 dark:bg-gradient-to-r dark:from-slate-900/95 dark:via-slate-800/95 dark:to-slate-900/95 border-b border-red-200/50 dark:border-slate-600/50 p-2 sm:p-4 text-center relative shadow-lg dark:shadow-xl backdrop-blur-md">
+    <header className="bg-gradient-to-r from-red-50/95 via-orange-50/95 to-red-100/95 dark:bg-gradient-to-r dark:from-slate-900/95 dark:via-slate-800/95 dark:to-slate-900/95 border-b border-red-200/50 dark:border-slate-600/50 p-3 sm:p-4 text-center relative shadow-lg dark:shadow-xl backdrop-blur-md">
       <button
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           onMenuClick();
         }}
-        className="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 bg-red-500 text-white p-2 sm:p-3 rounded-lg hover:bg-red-600 cursor-pointer z-50 transition-all duration-200"
+        className="absolute left-2 sm:left-4 top-1/2 bg-red-500 text-white p-2 sm:p-3 rounded-lg hover:bg-red-600 active:bg-red-700 cursor-pointer z-50 transition-colors duration-200 touch-none select-none"
         style={{ 
           fontSize: '12px',
-          fontWeight: 'bold'
+          fontWeight: '600',
+          transform: 'translateY(-50%)',
         }}
         aria-label="Toggle sidebar"
       >
-        <span className="hidden sm:inline">☰ MENU</span>
+        <span className="hidden sm:inline">☰ Menu</span>
         <span className="sm:hidden">☰</span>
       </button>
 
       <div className="animate-fade-in">
-        <h1 className="text-lg sm:text-xl font-semibold text-red-900 dark:text-slate-100 bg-gradient-to-r from-red-600 to-red-800 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">🎓 Indicore</h1>
-        <p className="text-xs sm:text-sm text-red-700 dark:text-slate-300 font-medium">PCS • UPSC • SSC Exam Prep AI</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-red-900 dark:text-slate-100 bg-gradient-to-r from-red-600 to-red-800 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">🎓 Indicore</h1>
+        <p className="text-xs sm:text-sm text-red-700 dark:text-slate-300 font-medium mt-0.5">PCS • UPSC • SSC Exam Prep AI</p>
       </div>
 
       <div className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 flex gap-1 sm:gap-2">

@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 
 // Simple in-memory cache for translations
 const translationCache = new Map();
@@ -143,83 +144,63 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     'kn': 'Kannada'
   };
 
-  // For study materials, try AI models first for better quality
+  // For study materials, try AI models first for better quality (run in parallel to reduce latency)
   if (isStudyMaterial) {
-    // Try Gemini API first (free tier available)
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const geminiResponse = await translateWithGemini(text, sourceLang, targetLang);
-        if (geminiResponse) {
-          return geminiResponse;
-        }
-      } catch (error) {
-      }
-    }
-
-    // Try Cohere API (free tier available)
-    if (process.env.COHERE_API_KEY) {
-      try {
-        const cohereResponse = await translateWithCohere(text, sourceLang, targetLang);
-        if (cohereResponse) {
-          return cohereResponse;
-        }
-      } catch (error) {
-      }
-    }
-
-    // Try Mistral API (free tier available)
-    if (process.env.MISTRAL_API_KEY) {
-      try {
-        const mistralResponse = await translateWithMistral(text, sourceLang, targetLang);
-        if (mistralResponse) {
-          return mistralResponse;
-        }
-      } catch (error) {
-      }
-    }
-  }
-
-  // Try LibreTranslate (FREE) as fallback
-  try {
-    const libreTranslateResponse = await fetch('https://libretranslate.de/translate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        q: text,
-        source: sourceLang,
-        target: targetLang,
-        format: 'text'
-      })
+    const attempts = [];
+    const tryModel = (p) => p.then(r => {
+      if (r && typeof r === 'string' && r.trim()) return r;
+      throw new Error('empty_translation');
     });
 
-    if (libreTranslateResponse.ok) {
-      const data = await libreTranslateResponse.json();
-      if (data.translatedText && data.translatedText.trim()) {
-        return data.translatedText;
+    if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, 8000)));
+    if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, 8000)));
+    if (process.env.MISTRAL_API_KEY) attempts.push(tryModel(translateWithMistral(text, sourceLang, targetLang, 8000)));
+
+    if (attempts.length) {
+      try {
+        const best = await Promise.any(attempts);
+        return best;
+      } catch (e) {
+        // fall through to free providers
       }
     }
-  } catch (error) {
   }
 
-  // Try MyMemory API (FREE tier)
+  // Try free providers in parallel and take the first successful
   try {
-    const myMemoryResponse = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`);
-    
-    if (myMemoryResponse.ok) {
-      const data = await myMemoryResponse.json();
-      if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
-        return data.responseData.translatedText;
-      }
-    }
+    const tryProvider = (fn) => fn().then(r => {
+      if (r && typeof r === 'string' && r.trim()) return r;
+      throw new Error('empty_translation');
+    });
+
+    const libre = () => fetchWithTimeout('https://libretranslate.de/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: text, source: sourceLang, target: targetLang, format: 'text' })
+    }, 7000).then(async res => {
+      if (!res.ok) throw new Error('libre_error');
+      const data = await res.json();
+      return sanitizeTranslationOutput(data.translatedText || '');
+    });
+
+    const myMemory = () => fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`, {}, 7000)
+      .then(async res => {
+        if (!res.ok) throw new Error('mymemory_error');
+        const data = await res.json();
+        return sanitizeTranslationOutput((data && data.responseData && data.responseData.translatedText) || '');
+      });
+
+    const freeAttempts = [tryProvider(libre()), tryProvider(myMemory())];
+    const firstFree = await Promise.any(freeAttempts);
+    if (firstFree) return firstFree;
   } catch (error) {
+    // continue to Google if available
   }
 
   // Try Google Translate API if available
   if (process.env.GOOGLE_TRANSLATE_API_KEY) {
     try {
-      const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${process.env.GOOGLE_TRANSLATE_API_KEY}`, {
+      const response = await fetchWithTimeout(`https://translation.googleapis.com/language/translate/v2?key=${process.env.GOOGLE_TRANSLATE_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -230,11 +211,11 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           target: targetLang,
           format: 'text'
         })
-      });
+      }, 8000);
 
       if (response.ok) {
         const data = await response.json();
-        return data.data.translations[0].translatedText;
+        return sanitizeTranslationOutput(data.data.translations[0].translatedText);
       }
     } catch (error) {
     }
@@ -271,11 +252,11 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
   }
 
   // Return clean translation without metadata for better speech synthesis
-  return translatedText;
+  return sanitizeTranslationOutput(translatedText);
 }
 
 // Gemini API translation for study materials (FREE TIER)
-async function translateWithGemini(text, sourceLang, targetLang) {
+async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = 8000) {
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -301,7 +282,7 @@ ${text}
 Translation:`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -319,12 +300,12 @@ Translation:`;
           topK: 40
         }
       })
-    });
+    }, timeoutMs);
 
     if (response.ok) {
       const data = await response.json();
       if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
-        return data.candidates[0].content.parts[0].text.trim();
+        return sanitizeTranslationOutput(data.candidates[0].content.parts[0].text.trim());
       }
     }
   } catch (error) {
@@ -333,7 +314,7 @@ Translation:`;
 }
 
 // Cohere API translation for study materials
-async function translateWithCohere(text, sourceLang, targetLang) {
+async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = 8000) {
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -358,7 +339,7 @@ ${text}
 Translation:`;
 
   try {
-    const response = await fetch('https://api.cohere.ai/v1/generate', {
+    const response = await fetchWithTimeout('https://api.cohere.ai/v1/generate', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.COHERE_API_KEY}`,
@@ -371,11 +352,11 @@ Translation:`;
         temperature: 0.3,
         stop_sequences: ['---']
       })
-    });
+    }, timeoutMs);
 
     if (response.ok) {
       const data = await response.json();
-      return data.generations[0].text.trim();
+      return sanitizeTranslationOutput(data.generations[0].text.trim());
     }
   } catch (error) {
   }
@@ -383,7 +364,7 @@ Translation:`;
 }
 
 // Mistral API translation for study materials
-async function translateWithMistral(text, sourceLang, targetLang) {
+async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = 8000) {
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -408,7 +389,7 @@ ${text}
 Translation:`;
 
   try {
-    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    const response = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
@@ -425,11 +406,11 @@ Translation:`;
         max_tokens: 2000,
         temperature: 0.3
       })
-    });
+    }, timeoutMs);
 
     if (response.ok) {
       const data = await response.json();
-      return data.choices[0].message.content.trim();
+      return sanitizeTranslationOutput(data.choices[0].message.content.trim());
     }
   } catch (error) {
   }
@@ -693,4 +674,18 @@ function basicTranslation(text, sourceLang, targetLang) {
   }
   
   return translatedText;
+}
+
+// Note: sanitizeTranslationOutput is imported from @/lib/translationUtils
+
+// Fetch with timeout utility to avoid long hangs and reduce perceived latency
+async function fetchWithTimeout(resource, options = {}, timeout = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useToast } from '@/components/ui/ToastProvider';
 
 const supportedLanguages = [
   { code: 'en', name: 'English' },
@@ -29,6 +30,7 @@ const essayTypes = [
 ];
 
 export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
+  const { showToast } = useToast();
   const [essayText, setEssayText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState('en');
   const [targetLanguage, setTargetLanguage] = useState('hi');
@@ -40,7 +42,7 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
 
   const handleEnhance = async () => {
     if (!essayText.trim()) {
-      alert('Please enter your essay text.');
+      showToast('Please enter your essay text.', { type: 'error' });
       return;
     }
 
@@ -64,8 +66,9 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
       
       setEnhancedText(data.enhancedEssay);
       setShowEnhanced(true);
+      showToast('Essay enhanced successfully!', { type: 'success' });
     } catch (error) {
-      alert('Enhancement failed. Please try again.');
+      showToast('Enhancement failed. Please try again.', { type: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -90,14 +93,14 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-slide-up">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-card w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-slate-700">
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100">✍️ Essay & Answer Writing Enhancement</h2>
+                <h2 className="text-2xl font-bold text-gradient">✍️ Essay & Answer Enhancement</h2>
                 <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
-                  Improve your essay writing with AI-powered enhancement and translation
+                  Refine your writing and get it translated into your exam language
                 </p>
               </div>
               <button
