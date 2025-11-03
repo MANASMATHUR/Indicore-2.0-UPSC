@@ -22,8 +22,6 @@ try {
   console.warn('pdf-parse not installed. Install with: npm i pdf-parse');
 }
 
-// Note: We use Gemini's native PDF support for OCR, so no additional libraries needed
-
 const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   console.error('❌ MONGO_URI (or MONGODB_URI) environment variable is not set!');

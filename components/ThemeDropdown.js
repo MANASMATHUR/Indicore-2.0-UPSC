@@ -33,10 +33,10 @@ export default function ThemeDropdown({ currentTheme, onThemeChange }) {
       {isOpen && (
         <>
           <div 
-            className="fixed inset-0 z-50" 
+            className="fixed inset-0 z-[90]" 
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 z-50">
+          <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-gray-200 dark:border-slate-700 z-[100]">
             <div className="p-2">
               {themes.map((theme) => (
                 <button

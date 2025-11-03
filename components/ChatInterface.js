@@ -766,8 +766,6 @@ export default function ChatInterface({ user }) {
           isOpen={isVoiceDialogOpen}
           onClose={useCallback(() => setIsVoiceDialogOpen(false), [])}
           onSendMessage={useCallback(async (msg, speakLanguage) => {
-            // Use the language from VoiceDialog if provided, otherwise use settings.language
-            // This is the language the user is speaking in
             const langToUse = speakLanguage || settings.language;
             await handleSendMessage(msg, true, langToUse);
           }, [handleSendMessage, settings.language])}

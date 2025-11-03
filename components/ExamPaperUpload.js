@@ -78,7 +78,6 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
         text = `[Image File: ${file.name}]\n\n📸 Image uploaded for evaluation\n\nPlease provide a description of the exam paper or questions in the text area below for AI evaluation.`;
         setShowTextInput(true);
       } else {
-        // Handle text files
         text = await readFileAsText(file);
       }
       

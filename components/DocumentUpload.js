@@ -204,7 +204,6 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
           text = `❌ OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
         }
       } else {
-        // Handle text files
         text = await readFileAsText(file);
       }
       

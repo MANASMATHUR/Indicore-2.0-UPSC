@@ -118,7 +118,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     return text;
   }
 
-  // Handle auto-detection by assuming English if source is 'auto'
   if (sourceLang === 'auto') {
     sourceLang = 'en';
   }
@@ -676,9 +675,6 @@ function basicTranslation(text, sourceLang, targetLang) {
   return translatedText;
 }
 
-// Note: sanitizeTranslationOutput is imported from @/lib/translationUtils
-
-// Fetch with timeout utility to avoid long hangs and reduce perceived latency
 async function fetchWithTimeout(resource, options = {}, timeout = 8000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);

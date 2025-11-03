@@ -786,7 +786,6 @@ EXAMPLE OF BAD RESPONSE:
   } catch (error) {
     console.error('Chat API Error:', error);
 
-    // Handle validation errors
     if (error.message.includes('malicious') || error.message.includes('unsupported') || error.message.includes('required')) {
       return res.status(400).json({ 
         error: error.message,
@@ -795,7 +794,6 @@ EXAMPLE OF BAD RESPONSE:
       });
     }
 
-    // Handle API errors
     if (error.response) {
       const status = error.response.status;
       let errorMessage = 'An error occurred while processing your request.';

@@ -73,13 +73,6 @@ export function useSettings() {
         setSettings(defaultSettings);
         localStorage.setItem('indicore-settings', JSON.stringify(defaultSettings));
       }
-
-      // TODO: Load user preferences from API
-      // const response = await fetch('/api/user/preferences');
-      // if (response.ok) {
-      //   const data = await response.json();
-      //   setSettings(prev => ({ ...prev, ...data.preferences }));
-      // }
     } catch (error) {
       // Fallback to defaults if there's an error
       setSettings(defaultSettings);
@@ -90,17 +83,7 @@ export function useSettings() {
     try {
       setSettings(newSettings);
       
-      // Save to localStorage
       localStorage.setItem('indicore-settings', JSON.stringify(newSettings));
-
-      // TODO: Save to API
-      // const response = await fetch('/api/user/preferences', {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ preferences: newSettings }),
-      // });
     } catch (error) {
     }
   }, []);
