@@ -1,5 +1,3 @@
-
-
 const { MongoClient } = require('mongodb');
 
 // Your MongoDB connection string
