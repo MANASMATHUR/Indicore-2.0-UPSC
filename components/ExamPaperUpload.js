@@ -2,25 +2,13 @@
 
 import { useState, useRef } from 'react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { supportedLanguages } from '@/lib/messageUtils';
 
 const supportedExamTypes = [
   { code: 'pcs', name: 'PCS (Provincial Civil Service)', color: 'bg-blue-100 text-blue-800' },
   { code: 'upsc', name: 'UPSC (Union Public Service Commission)', color: 'bg-green-100 text-green-800' },
   { code: 'ssc', name: 'SSC (Staff Selection Commission)', color: 'bg-purple-100 text-purple-800' },
   { code: 'other', name: 'Other Competitive Exam', color: 'bg-gray-100 text-gray-800' }
-];
-
-const supportedLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'mr', name: 'Marathi' },
-  { code: 'ta', name: 'Tamil' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'pa', name: 'Punjabi' },
-  { code: 'gu', name: 'Gujarati' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ml', name: 'Malayalam' },
-  { code: 'kn', name: 'Kannada' },
 ];
 
 export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {

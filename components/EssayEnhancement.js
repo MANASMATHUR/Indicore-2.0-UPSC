@@ -2,19 +2,7 @@
 
 import { useState } from 'react';
 import { useToast } from '@/components/ui/ToastProvider';
-
-const supportedLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'mr', name: 'Marathi' },
-  { code: 'ta', name: 'Tamil' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'pa', name: 'Punjabi' },
-  { code: 'gu', name: 'Gujarati' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ml', name: 'Malayalam' },
-  { code: 'kn', name: 'Kannada' },
-];
+import { supportedLanguages } from '@/lib/messageUtils';
 
 const essayTypes = [
   { code: 'general', name: 'General Essay', description: 'General topic essay writing' },
