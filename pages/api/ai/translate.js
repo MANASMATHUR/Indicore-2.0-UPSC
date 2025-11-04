@@ -1,4 +1,4 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+// Next.js API types (removed direct import to fix warning)
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 
 // Simple in-memory cache for translations
@@ -82,8 +82,22 @@ export default async function handler(req, res) {
     
     // Enhanced translation with AI models for study materials
     const startTime = Date.now();
+    console.log(`[Translation] Starting translation: ${sourceLanguage} -> ${targetLanguage}, Length: ${text.length}, StudyMaterial: ${isStudyMaterial}`);
+    
     const translatedText = await translateText(text, sourceLanguage, targetLanguage, isStudyMaterial);
     const processingTime = Date.now() - startTime;
+    
+    // Verify translation actually changed
+    if (!translatedText || translatedText.trim() === text.trim()) {
+      console.error(`[Translation] Translation returned same text - translation failed`);
+      return res.status(500).json({
+        error: `Translation service returned the original text. Unable to translate from ${sourceLanguage} to ${targetLanguage}.`,
+        code: 'TRANSLATION_FAILED',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    console.log(`[Translation] Success: ${sourceLanguage} -> ${targetLanguage}, Time: ${processingTime}ms`);
     
     res.status(200).json({ 
       translatedText,
@@ -143,57 +157,254 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     'kn': 'Kannada'
   };
 
-  // For study materials, try AI models first for better quality (run in parallel to reduce latency)
-  if (isStudyMaterial) {
+  // For long texts (>2000 chars) or study materials, try AI models first for better quality
+  // AI models handle long texts much better than free APIs
+  const shouldUseAI = isStudyMaterial || text.length > 2000;
+  
+  if (shouldUseAI) {
     const attempts = [];
     const tryModel = (p) => p.then(r => {
       if (r && typeof r === 'string' && r.trim()) return r;
       throw new Error('empty_translation');
     });
 
-    if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, 8000)));
-    if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, 8000)));
-    if (process.env.MISTRAL_API_KEY) attempts.push(tryModel(translateWithMistral(text, sourceLang, targetLang, 8000)));
+    if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, 15000)));
+    if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, 15000)));
+    if (process.env.MISTRAL_API_KEY) attempts.push(tryModel(translateWithMistral(text, sourceLang, targetLang, 15000)));
 
     if (attempts.length) {
       try {
         const best = await Promise.any(attempts);
+        // Cache successful translation
+        translationCache.set(cacheKey, {
+          translation: best,
+          timestamp: Date.now()
+        });
         return best;
       } catch (e) {
+        console.warn('AI translation models failed, falling back to free providers:', e.message);
         // fall through to free providers
       }
     }
   }
 
   // Try free providers in parallel and take the first successful
+  let freeTranslationError = null;
   try {
-    const tryProvider = (fn) => fn().then(r => {
-      if (r && typeof r === 'string' && r.trim()) return r;
-      throw new Error('empty_translation');
+    const tryProvider = (fn, name) => fn().then(r => {
+      if (r && typeof r === 'string' && r.trim() && r.trim() !== text.trim()) {
+        return r;
+      }
+      throw new Error(`empty_translation_${name}`);
+    }).catch(err => {
+      console.warn(`Translation provider ${name} failed:`, err.message);
+      throw err;
     });
 
-    const libre = () => fetchWithTimeout('https://libretranslate.de/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text, source: sourceLang, target: targetLang, format: 'text' })
-    }, 7000).then(async res => {
-      if (!res.ok) throw new Error('libre_error');
-      const data = await res.json();
-      return sanitizeTranslationOutput(data.translatedText || '');
-    });
+    // Split long text into chunks for APIs with URL length limits
+    // MyMemory uses GET requests, so we need smaller chunks (URL encoding adds ~30% overhead)
+    const chunkText = (str, maxLen = 250) => {
+      const chunks = [];
+      let current = '';
+      
+      // Split by sentences first, then by words if needed
+      const sentences = str.split(/([.!?]\s+|\.\s+|\.$|\n\n)/);
+      
+      for (let i = 0; i < sentences.length; i++) {
+        const sentence = sentences[i];
+        const combinedLength = (current + sentence).length;
+        
+        if (combinedLength <= maxLen) {
+          current += sentence;
+        } else {
+          // If current is not empty, save it
+          if (current.trim()) {
+            chunks.push(current.trim());
+          }
+          
+          // If the sentence itself is longer than maxLen, split it by words
+          if (sentence.length > maxLen) {
+            const words = sentence.split(/(\s+)/);
+            let wordChunk = '';
+            for (const word of words) {
+              if ((wordChunk + word).length <= maxLen) {
+                wordChunk += word;
+              } else {
+                if (wordChunk.trim()) chunks.push(wordChunk.trim());
+                wordChunk = word;
+              }
+            }
+            current = wordChunk;
+          } else {
+            current = sentence;
+          }
+        }
+      }
+      
+      if (current.trim()) {
+        chunks.push(current.trim());
+      }
+      
+      return chunks.length > 0 ? chunks : [str.substring(0, maxLen)];
+    };
 
-    const myMemory = () => fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`, {}, 7000)
-      .then(async res => {
-        if (!res.ok) throw new Error('mymemory_error');
-        const data = await res.json();
-        return sanitizeTranslationOutput((data && data.responseData && data.responseData.translatedText) || '');
-      });
+    const libre = async () => {
+      try {
+        // LibreTranslate has a limit, so chunk long texts
+        if (text.length > 2000) {
+          const chunks = chunkText(text, 1500);
+          const translatedChunks = await Promise.all(
+            chunks.map(chunk => 
+              fetchWithTimeout('https://libretranslate.de/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  q: chunk, 
+                  source: sourceLang, 
+                  target: targetLang, 
+                  format: 'text' 
+                })
+              }, 15000).then(async res => {
+                if (!res.ok) {
+                  const errorText = await res.text().catch(() => '');
+                  throw new Error(`LibreTranslate HTTP ${res.status}: ${errorText.substring(0, 100)}`);
+                }
+                
+                const contentType = res.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                  throw new Error('LibreTranslate returned non-JSON response (likely HTML error page)');
+                }
+                
+                const data = await res.json();
+                const translated = sanitizeTranslationOutput(data.translatedText || '');
+                if (!translated || translated.trim() === chunk.trim()) {
+                  throw new Error('LibreTranslate returned same text');
+                }
+                return translated;
+              })
+            )
+          );
+          return translatedChunks.join(' ');
+        } else {
+          const res = await fetchWithTimeout('https://libretranslate.de/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q: text, source: sourceLang, target: targetLang, format: 'text' })
+          }, 15000);
+          
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => '');
+            throw new Error(`LibreTranslate HTTP ${res.status}: ${errorText.substring(0, 100)}`);
+          }
+          
+          const contentType = res.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('LibreTranslate returned non-JSON response (likely HTML error page)');
+          }
+          
+          const data = await res.json();
+          const translated = sanitizeTranslationOutput(data.translatedText || '');
+          if (!translated || translated.trim() === text.trim()) {
+            throw new Error('LibreTranslate returned same text');
+          }
+          return translated;
+        }
+      } catch (err) {
+        console.warn('LibreTranslate error:', err.message);
+        throw err;
+      }
+    };
 
-    const freeAttempts = [tryProvider(libre()), tryProvider(myMemory())];
+    const myMemory = async () => {
+      try {
+        // MyMemory uses GET requests, so URL length is limited
+        // Account for URL encoding overhead (~30-40%) and keep chunks small
+        // Use 200 chars to be safe (200 * 1.4 = 280 chars encoded, well under 2048 URL limit)
+        if (text.length > 200) {
+          const chunks = chunkText(text, 200);
+          const translatedChunks = [];
+          
+          // Process chunks sequentially with small delays to avoid rate limiting
+          for (let i = 0; i < chunks.length; i++) {
+            if (i > 0) {
+              // Small delay between requests (except first one)
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            try {
+              const res = await fetchWithTimeout(
+                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunks[i])}&langpair=${sourceLang}|${targetLang}`, 
+                {}, 
+                10000
+              );
+              
+              if (!res.ok) {
+                const errorText = await res.text().catch(() => '');
+                throw new Error(`MyMemory HTTP ${res.status}: ${errorText.substring(0, 100)}`);
+              }
+              
+              const data = await res.json();
+              const translated = sanitizeTranslationOutput(
+                (data && data.responseData && data.responseData.translatedText) || ''
+              );
+              if (!translated || translated.trim() === chunks[i].trim()) {
+                throw new Error('MyMemory returned same text');
+              }
+              translatedChunks.push(translated);
+            } catch (err) {
+              console.warn(`MyMemory chunk ${i + 1}/${chunks.length} failed:`, err.message);
+              // Continue with next chunk even if one fails
+            }
+          }
+          
+          if (translatedChunks.length === 0) {
+            throw new Error('MyMemory failed to translate any chunks');
+          }
+          return translatedChunks.join(' ');
+        } else {
+          const res = await fetchWithTimeout(
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`, 
+            {}, 
+            10000
+          );
+          
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => '');
+            throw new Error(`MyMemory HTTP ${res.status}: ${errorText.substring(0, 100)}`);
+          }
+          
+          const data = await res.json();
+          const translated = sanitizeTranslationOutput(
+            (data && data.responseData && data.responseData.translatedText) || ''
+          );
+          if (!translated || translated.trim() === text.trim()) {
+            throw new Error('MyMemory returned same text');
+          }
+          return translated;
+        }
+      } catch (err) {
+        console.warn('MyMemory error:', err.message);
+        throw err;
+      }
+    };
+
+    const freeAttempts = [
+      tryProvider(libre, 'LibreTranslate'),
+      tryProvider(myMemory, 'MyMemory')
+    ];
+    
     const firstFree = await Promise.any(freeAttempts);
-    if (firstFree) return firstFree;
+    if (firstFree && firstFree.trim() && firstFree.trim() !== text.trim()) {
+      // Cache successful translation
+      translationCache.set(cacheKey, {
+        translation: firstFree,
+        timestamp: Date.now()
+      });
+      return firstFree;
+    }
   } catch (error) {
-    // continue to Google if available
+    freeTranslationError = error;
+    console.warn('All free translation providers failed:', error.message);
   }
 
   // Try Google Translate API if available
@@ -210,19 +421,71 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           target: targetLang,
           format: 'text'
         })
-      }, 8000);
+      }, 10000);
 
       if (response.ok) {
         const data = await response.json();
-        return sanitizeTranslationOutput(data.data.translations[0].translatedText);
+        const translated = sanitizeTranslationOutput(data.data.translations[0].translatedText);
+        if (translated && translated.trim() && translated.trim() !== text.trim()) {
+          translationCache.set(cacheKey, {
+            translation: translated,
+            timestamp: Date.now()
+          });
+          return translated;
+        }
       }
     } catch (error) {
+      console.warn('Google Translate API error:', error.message);
     }
   }
 
   // Enhanced fallback with study material context
   const sourceLangName = languageNames[sourceLang] || sourceLang;
   const targetLangName = languageNames[targetLang] || targetLang;
+  
+  // Try one more free service as fallback - use Google Translate web scraping alternative
+  // Or use a simpler online translation service
+  try {
+    // Try using a different LibreTranslate instance or alternative
+    const altLibre = await fetchWithTimeout('https://translate.argosopentech.com/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        q: text.substring(0, 5000), // Limit to avoid issues
+        source: sourceLang, 
+        target: targetLang, 
+        format: 'text' 
+      })
+    }, 10000).then(async res => {
+      if (!res.ok) throw new Error(`Alt LibreTranslate HTTP ${res.status}`);
+      
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Alt LibreTranslate returned non-JSON response (likely HTML error page)');
+      }
+      
+      const data = await res.json();
+      const translated = sanitizeTranslationOutput(data.translatedText || '');
+      if (translated && translated.trim() && translated.trim() !== text.trim()) {
+        translationCache.set(cacheKey, {
+          translation: translated,
+          timestamp: Date.now()
+        });
+        return translated;
+      }
+      throw new Error('Alt LibreTranslate returned same text');
+    }).catch(err => {
+      console.warn('Alternative translation service failed:', err.message);
+      return null;
+    });
+
+    if (altLibre) return altLibre;
+  } catch (error) {
+    console.warn('Fallback translation attempt failed:', error.message);
+  }
+
+  // Last resort: Enhanced word mapping for study materials (but log warning)
+  console.warn(`Translation falling back to word mapping - all services failed. Source: ${sourceLang}, Target: ${targetLang}, Text length: ${text.length}`);
   
   let translatedText = text;
   
@@ -234,7 +497,12 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     translatedText = basicTranslation(text, sourceLang, targetLang);
   }
 
-  // Cache the result
+  // If translation didn't change the text at all, throw an error instead of returning original
+  if (translatedText === text || translatedText.trim() === text.trim()) {
+    throw new Error(`Unable to translate from ${sourceLangName} to ${targetLangName}. All translation services failed. Please try again or use a different language.`);
+  }
+
+  // Only cache if translation actually changed
   translationCache.set(cacheKey, {
     translation: translatedText,
     timestamp: Date.now()
@@ -267,18 +535,30 @@ async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = 800
 
   const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
 
-Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
-- Preserve the academic tone and exam-relevant vocabulary
-- Use formal language appropriate for competitive exams
-- Maintain technical terms and concepts accurately
-- Ensure the translation is suitable for state-level PCS exam preparation
-- Keep the structure and formatting intact
-- Provide natural, fluent translation
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
+
+CRITICAL REQUIREMENTS:
+1. Preserve the EXACT academic tone, formality level, and professional context
+2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
+3. Keep the natural flow, sentence structure, and readability of the original
+4. Preserve the emotional tone (formal, instructive, explanatory) exactly as intended
+5. Ensure the translation sounds natural and fluent in ${targetLangName}, not word-for-word
+6. Maintain all numerical data, dates, proper nouns, and technical terminology
+7. Preserve question marks, exclamations, and punctuation for proper intonation
+8. Keep paragraph structure and formatting markers for clear presentation
+9. Use regionally appropriate ${targetLangName} that sounds native and professional
+10. Ensure suitability for competitive exam preparation (maintains seriousness and clarity)
+
+CONTEXT: This is study material for competitive exams - the translation must be:
+- Professional and authoritative
+- Clear and easy to understand
+- Suitable for speech synthesis (natural phrasing)
+- Contextually accurate
 
 Text to translate:
 ${text}
 
-Translation:`;
+Provide ONLY the translation in ${targetLangName}, without any explanations, notes, or metadata:`;
 
   try {
     const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
@@ -294,7 +574,7 @@ Translation:`;
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 2000,
+          maxOutputTokens: Math.min(8000, Math.ceil(text.length * 2.5)), // Scale with input length
           topP: 0.8,
           topK: 40
         }
@@ -325,17 +605,30 @@ async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = 800
 
   const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
 
-Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
-- Preserve the academic tone and exam-relevant vocabulary
-- Use formal language appropriate for competitive exams
-- Maintain technical terms and concepts accurately
-- Ensure the translation is suitable for state-level PCS exam preparation
-- Keep the structure and formatting intact
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
+
+CRITICAL REQUIREMENTS:
+1. Preserve the EXACT academic tone, formality level, and professional context
+2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
+3. Keep the natural flow, sentence structure, and readability of the original
+4. Preserve the emotional tone (formal, instructive, explanatory) exactly as intended
+5. Ensure the translation sounds natural and fluent in ${targetLangName}, not word-for-word
+6. Maintain all numerical data, dates, proper nouns, and technical terminology
+7. Preserve question marks, exclamations, and punctuation for proper intonation
+8. Keep paragraph structure and formatting markers for clear presentation
+9. Use regionally appropriate ${targetLangName} that sounds native and professional
+10. Ensure suitability for competitive exam preparation (maintains seriousness and clarity)
+
+CONTEXT: This is study material for competitive exams - the translation must be:
+- Professional and authoritative
+- Clear and easy to understand
+- Suitable for speech synthesis (natural phrasing)
+- Contextually accurate
 
 Text to translate:
 ${text}
 
-Translation:`;
+Provide ONLY the translation in ${targetLangName}, without any explanations, notes, or metadata:`;
 
   try {
     const response = await fetchWithTimeout('https://api.cohere.ai/v1/generate', {
@@ -344,10 +637,10 @@ Translation:`;
         'Authorization': `Bearer ${process.env.COHERE_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
+        body: JSON.stringify({
         model: 'command',
         prompt: prompt,
-        max_tokens: 2000,
+        max_tokens: Math.min(4000, Math.ceil(text.length * 2.5)), // Scale with input length
         temperature: 0.3,
         stop_sequences: ['---']
       })
@@ -375,17 +668,30 @@ async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = 80
 
   const prompt = `You are an expert translator specializing in educational content for competitive exams like PCS, UPSC, and SSC. 
 
-Translate the following ${sourceLangName} study material to ${targetLangName}. The translation should:
-- Preserve the academic tone and exam-relevant vocabulary
-- Use formal language appropriate for competitive exams
-- Maintain technical terms and concepts accurately
-- Ensure the translation is suitable for state-level PCS exam preparation
-- Keep the structure and formatting intact
+Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
+
+CRITICAL REQUIREMENTS:
+1. Preserve the EXACT academic tone, formality level, and professional context
+2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
+3. Keep the natural flow, sentence structure, and readability of the original
+4. Preserve the emotional tone (formal, instructive, explanatory) exactly as intended
+5. Ensure the translation sounds natural and fluent in ${targetLangName}, not word-for-word
+6. Maintain all numerical data, dates, proper nouns, and technical terminology
+7. Preserve question marks, exclamations, and punctuation for proper intonation
+8. Keep paragraph structure and formatting markers for clear presentation
+9. Use regionally appropriate ${targetLangName} that sounds native and professional
+10. Ensure suitability for competitive exam preparation (maintains seriousness and clarity)
+
+CONTEXT: This is study material for competitive exams - the translation must be:
+- Professional and authoritative
+- Clear and easy to understand
+- Suitable for speech synthesis (natural phrasing)
+- Contextually accurate
 
 Text to translate:
 ${text}
 
-Translation:`;
+Provide ONLY the translation in ${targetLangName}, without any explanations, notes, or metadata:`;
 
   try {
     const response = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
@@ -402,7 +708,7 @@ Translation:`;
             content: prompt
           }
         ],
-        max_tokens: 2000,
+        max_tokens: Math.min(4000, Math.ceil(text.length * 2.5)), // Scale with input length
         temperature: 0.3
       })
     }, timeoutMs);
@@ -675,12 +981,17 @@ function basicTranslation(text, sourceLang, targetLang) {
   return translatedText;
 }
 
-async function fetchWithTimeout(resource, options = {}, timeout = 8000) {
+async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(resource, { ...options, signal: controller.signal });
     return response;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
+    throw error;
   } finally {
     clearTimeout(id);
   }
