@@ -6,5 +6,5 @@
   "/api/chat": "pages/api/chat.js",
   "/api/ai/speech": "pages/api/ai/speech.js",
   "/api/chat/[id]": "pages/api/chat/[id].js",
-  "/api/ai/chat": "pages/api/ai/chat.js"
+  "/api/ai/generate-vocabulary": "pages/api/ai/generate-vocabulary.js"
 }

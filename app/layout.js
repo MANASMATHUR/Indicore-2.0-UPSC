@@ -7,7 +7,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Indicore - PCS/UPSC/SSC Exam Prep AI',
+  title: 'Indicore - PCS/UPSC/SSC',
   description: 'AI-powered exam preparation platform with multilingual support, document evaluation, and regional language assistance for PCS, UPSC, and SSC exams',
 };
 
