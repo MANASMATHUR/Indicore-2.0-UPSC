@@ -2455,6 +2455,9 @@ h1,h2,h3,h4,h5,h6{
 .right-4{
   right: 1rem;
 }
+.top-0{
+  top: 0px;
+}
 .top-1\/2{
   top: 50%;
 }
@@ -2470,15 +2473,33 @@ h1,h2,h3,h4,h5,h6{
 .z-10{
   z-index: 10;
 }
-.z-40{
-  z-index: 40;
-}
 .z-50{
   z-index: 50;
 }
-.mx-2{
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
+.z-\[100\]{
+  z-index: 100;
+}
+.z-\[200\]{
+  z-index: 200;
+}
+.z-\[210\]{
+  z-index: 210;
+}
+.z-\[80\]{
+  z-index: 80;
+}
+.z-\[90\]{
+  z-index: 90;
+}
+.z-\[10000\]{
+  z-index: 10000;
+}
+.z-\[9999\]{
+  z-index: 9999;
+}
+.-mx-4{
+  margin-left: -1rem;
+  margin-right: -1rem;
 }
 .mx-4{
   margin-left: 1rem;
@@ -2488,26 +2509,22 @@ h1,h2,h3,h4,h5,h6{
   margin-left: auto;
   margin-right: auto;
 }
-.my-0\.5{
-  margin-top: 0.125rem;
-  margin-bottom: 0.125rem;
+.my-0{
+  margin-top: 0px;
+  margin-bottom: 0px;
 }
 .my-1{
   margin-top: 0.25rem;
   margin-bottom: 0.25rem;
 }
-.my-3{
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
-}
 .-ml-1{
   margin-left: -0.25rem;
 }
+.mb-0\.5{
+  margin-bottom: 0.125rem;
+}
 .mb-1{
   margin-bottom: 0.25rem;
-}
-.mb-1\.5{
-  margin-bottom: 0.375rem;
 }
 .mb-2{
   margin-bottom: 0.5rem;
@@ -2544,9 +2561,6 @@ h1,h2,h3,h4,h5,h6{
 }
 .mt-1{
   margin-top: 0.25rem;
-}
-.mt-1\.5{
-  margin-top: 0.375rem;
 }
 .mt-10{
   margin-top: 2.5rem;
@@ -2638,6 +2652,9 @@ h1,h2,h3,h4,h5,h6{
 .h-96{
   height: 24rem;
 }
+.h-full{
+  height: 100%;
+}
 .max-h-32{
   max-height: 8rem;
 }
@@ -2647,8 +2664,11 @@ h1,h2,h3,h4,h5,h6{
 .max-h-\[90vh\]{
   max-height: 90vh;
 }
-.max-h-\[95vh\]{
-  max-height: 95vh;
+.max-h-\[calc\(100vh-120px\)\]{
+  max-height: calc(100vh - 120px);
+}
+.max-h-screen{
+  max-height: 100vh;
 }
 .min-h-\[100px\]{
   min-height: 100px;
@@ -2730,9 +2750,6 @@ h1,h2,h3,h4,h5,h6{
 }
 .max-w-4xl{
   max-width: 56rem;
-}
-.max-w-5xl{
-  max-width: 64rem;
 }
 .max-w-6xl{
   max-width: 72rem;
@@ -2853,6 +2870,9 @@ h1,h2,h3,h4,h5,h6{
 .touch-none{
   touch-action: none;
 }
+.touch-manipulation{
+  touch-action: manipulation;
+}
 .select-none{
   -webkit-user-select: none;
      -moz-user-select: none;
@@ -2950,15 +2970,10 @@ h1,h2,h3,h4,h5,h6{
   margin-right: calc(1rem * var(--tw-space-x-reverse));
   margin-left: calc(1rem * calc(1 - var(--tw-space-x-reverse)));
 }
-.space-y-0\.5 > :not([hidden]) ~ :not([hidden]){
+.space-y-0 > :not([hidden]) ~ :not([hidden]){
   --tw-space-y-reverse: 0;
-  margin-top: calc(0.125rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(0.125rem * var(--tw-space-y-reverse));
-}
-.space-y-1 > :not([hidden]) ~ :not([hidden]){
-  --tw-space-y-reverse: 0;
-  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
+  margin-top: calc(0px * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0px * var(--tw-space-y-reverse));
 }
 .space-y-2 > :not([hidden]) ~ :not([hidden]){
   --tw-space-y-reverse: 0;
@@ -3039,6 +3054,9 @@ h1,h2,h3,h4,h5,h6{
 .rounded-md{
   border-radius: 0.375rem;
 }
+.rounded-none{
+  border-radius: 0px;
+}
 .rounded-xl{
   border-radius: 0.75rem;
 }
@@ -3048,6 +3066,9 @@ h1,h2,h3,h4,h5,h6{
 }
 .border{
   border-width: 1px;
+}
+.border-0{
+  border-width: 0px;
 }
 .border-2{
   border-width: 2px;
@@ -3563,6 +3584,9 @@ h1,h2,h3,h4,h5,h6{
   -webkit-background-clip: text;
           background-clip: text;
 }
+.p-0{
+  padding: 0px;
+}
 .p-1{
   padding: 0.25rem;
 }
@@ -3652,14 +3676,17 @@ h1,h2,h3,h4,h5,h6{
   padding-top: 2rem;
   padding-bottom: 2rem;
 }
-.pb-1{
-  padding-bottom: 0.25rem;
+.pb-0\.5{
+  padding-bottom: 0.125rem;
 }
-.pb-2{
-  padding-bottom: 0.5rem;
+.pb-4{
+  padding-bottom: 1rem;
 }
 .pl-2{
   padding-left: 0.5rem;
+}
+.pl-3{
+  padding-left: 0.75rem;
 }
 .pl-4{
   padding-left: 1rem;
@@ -5119,13 +5146,21 @@ a{
     right: 1rem;
   }
 
-  .sm\:mx-4{
-    margin-left: 1rem;
-    margin-right: 1rem;
+  .sm\:-mx-6{
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
   }
 
   .sm\:mb-3{
     margin-bottom: 0.75rem;
+  }
+
+  .sm\:ml-4{
+    margin-left: 1rem;
+  }
+
+  .sm\:mt-6{
+    margin-top: 1.5rem;
   }
 
   .sm\:inline{
@@ -5148,6 +5183,18 @@ a{
     height: 1.5rem;
   }
 
+  .sm\:h-8{
+    height: 2rem;
+  }
+
+  .sm\:h-auto{
+    height: auto;
+  }
+
+  .sm\:max-h-\[95vh\]{
+    max-height: 95vh;
+  }
+
   .sm\:w-4{
     width: 1rem;
   }
@@ -5160,6 +5207,14 @@ a{
     width: 1.5rem;
   }
 
+  .sm\:w-8{
+    width: 2rem;
+  }
+
+  .sm\:max-w-5xl{
+    max-width: 64rem;
+  }
+
   .sm\:flex-row{
     flex-direction: row;
   }
@@ -5168,8 +5223,36 @@ a{
     gap: 0.5rem;
   }
 
+  .sm\:gap-3{
+    gap: 0.75rem;
+  }
+
   .sm\:gap-4{
     gap: 1rem;
+  }
+
+  .sm\:gap-6{
+    gap: 1.5rem;
+  }
+
+  .sm\:space-y-4 > :not([hidden]) ~ :not([hidden]){
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+  }
+
+  .sm\:space-y-6 > :not([hidden]) ~ :not([hidden]){
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
+  }
+
+  .sm\:rounded-2xl{
+    border-radius: 1rem;
+  }
+
+  .sm\:border{
+    border-width: 1px;
   }
 
   .sm\:p-2{
@@ -5188,9 +5271,18 @@ a{
     padding: 1.25rem;
   }
 
+  .sm\:p-6{
+    padding: 1.5rem;
+  }
+
   .sm\:px-6{
     padding-left: 1.5rem;
     padding-right: 1.5rem;
+  }
+
+  .sm\:py-2\.5{
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
   }
 
   .sm\:py-3{
@@ -5203,6 +5295,14 @@ a{
     padding-bottom: 2rem;
   }
 
+  .sm\:pb-0{
+    padding-bottom: 0px;
+  }
+
+  .sm\:pl-4{
+    padding-left: 1rem;
+  }
+
   .sm\:text-2xl{
     font-size: 1.5rem;
     line-height: 2rem;
@@ -5213,9 +5313,18 @@ a{
     line-height: 1;
   }
 
+  .sm\:text-\[15px\]{
+    font-size: 15px;
+  }
+
   .sm\:text-base{
     font-size: 1rem;
     line-height: 1.5rem;
+  }
+
+  .sm\:text-lg{
+    font-size: 1.125rem;
+    line-height: 1.75rem;
   }
 
   .sm\:text-sm{
@@ -5679,11 +5788,6 @@ a{
   .dark\:text-slate-400{
     --tw-text-opacity: 1;
     color: rgb(148 163 184 / var(--tw-text-opacity, 1));
-  }
-
-  .dark\:text-slate-50{
-    --tw-text-opacity: 1;
-    color: rgb(248 250 252 / var(--tw-text-opacity, 1));
   }
 
   .dark\:text-slate-500{
