@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useEffect } from 'react';
+import { useState, memo, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Button from '../ui/Button';
@@ -11,37 +11,43 @@ import errorHandler from '@/lib/errorHandler';
 import { validateInput } from '@/lib/validation';
 import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingStates';
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
-
-const supportedLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'mr', name: 'Marathi' },
-  { code: 'ta', name: 'Tamil' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'pa', name: 'Punjabi' },
-  { code: 'gu', name: 'Gujarati' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ml', name: 'Malayalam' },
-  { code: 'kn', name: 'Kannada' },
-];
+import { stripMarkdown, supportedLanguages } from '@/lib/messageUtils';
 
 const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, onRegenerate, onPromptClick }) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
   const translationLoading = useLoadingState();
+  const { showToast } = useToast();
 
   const handleTranslate = async (messageIndex, targetLang) => {
     const message = messages[messageIndex];
-    const text = message?.text || message?.content || '';
+    let text = message?.text || message?.content || '';
     
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      console.warn('Translation: No text found in message');
+      return;
+    }
+
+    // Strip markdown before translation
+    text = stripMarkdown(text);
+    
+    if (!text.trim()) {
+      console.warn('Translation: No text after stripping markdown');
+      return;
+    }
 
     try {
-      const validation = validateInput('chatMessage', text);
+      // Use multilingualText validation for translations (allows up to 10,000 chars)
+      const validation = validateInput('multilingualText', text);
       if (!validation.isValid) {
+        const error = validation.errors[0];
+        console.error('Translation validation failed:', error.message);
+        showToast(`Translation failed: ${error.message}`, { type: 'error' });
         return;
       }
 
+      console.log('Starting translation:', { messageIndex, targetLang, textLength: text.length });
+      
       translationLoading.setLoading('Translating message...', 0);
       setTranslatingMessage(messageIndex);
       
@@ -119,10 +125,10 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
             <div className="relative text-7xl mb-6 animate-float filter drop-shadow-lg">🎓</div>
           </div>
           <h3 className="text-4xl sm:text-5xl font-bold text-red-900 dark:text-gray-100 mb-4 bg-gradient-to-r from-red-600 via-red-700 to-red-800 dark:from-red-400 dark:via-red-300 dark:to-red-200 bg-clip-text text-transparent leading-tight">
-            Welcome to Indicore AI!
+            Welcome to Indicore!
           </h3>
           <p className="text-red-700/90 dark:text-gray-300 text-lg sm:text-xl leading-relaxed mb-8 font-medium">
-            Your intelligent exam preparation assistant for PCS, UPSC, and SSC exams
+            Your intelligent assistant for PCS, UPSC, and SSC exams
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-10">
             <div className="group p-6 bg-white/80 dark:bg-slate-800/80 rounded-2xl border border-red-200/60 dark:border-slate-700/60 backdrop-blur-xl hover:shadow-xl hover:shadow-red-500/10 dark:hover:shadow-red-500/20 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
@@ -173,7 +179,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
 
   return (
     <div className="flex-1 overflow-y-auto messages scroll-smooth" style={{ minHeight: 'calc(100vh - 200px)' }}>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4">
+      <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-3 sm:space-y-4">
         {messages.map((message, index) => (
           <MessageItem
             key={index}
@@ -201,7 +207,6 @@ const MessageItem = memo(({
   onTranslate, 
   translatingMessage, 
   translatedText,
-  onCopy,
   onRegenerate,
   onPromptClick,
   messages = []
@@ -214,7 +219,7 @@ const MessageItem = memo(({
   const timeStr = ts && !isNaN(ts) ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const isTranslating = translatingMessage === index;
 
-  const cleanText = (text) => text || '';
+  const cleanText = useCallback((text) => text || '', []);
 
   const handleCopy = async () => {
     try {
@@ -225,18 +230,17 @@ const MessageItem = memo(({
     } catch (e) {
       showToast('Failed to copy', { type: 'error' });
     }
-    if (onCopy) onCopy(index);
   };
 
   return (
     <div 
-      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-3`} 
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3`} 
       style={{ animationDelay: `${index * 0.05}s` }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {sender === 'assistant' && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
+        <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
           🎓
         </div>
       )}
@@ -245,16 +249,16 @@ const MessageItem = memo(({
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed text-gray-900 dark:text-slate-50 text-[15px] font-normal">{children}</p>,
+              p: ({ children }) => <p className="mb-0.5 last:mb-0 leading-relaxed text-gray-900 dark:text-white text-sm sm:text-[15px] font-normal">{children}</p>,
               strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>,
               em: ({ children }) => <em className="italic text-gray-800 dark:text-slate-200">{children}</em>,
-              ul: ({ children }) => <ul className="mb-2 mt-2 list-disc list-inside space-y-1 pl-4 text-gray-900 dark:text-slate-50">{children}</ul>,
-              ol: ({ children }) => <ol className="mb-2 mt-2 list-decimal list-inside space-y-1 pl-4 text-gray-900 dark:text-slate-50">{children}</ol>,
-              li: ({ children }) => <li className="my-1 leading-relaxed text-gray-900 dark:text-slate-50">{children}</li>,
-              h1: ({ children }) => <h1 className="text-3xl font-bold mb-3 mt-4 first:mt-0 text-gray-900 dark:text-white leading-tight">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-2xl font-bold mb-2 mt-4 first:mt-0 text-gray-800 dark:text-slate-100 border-b border-gray-200 dark:border-slate-700 pb-2 leading-tight">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-xl font-semibold mb-2 mt-3 first:mt-0 text-gray-800 dark:text-slate-100 leading-snug">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-lg font-semibold mb-1.5 mt-3 text-gray-800 dark:text-slate-200 leading-snug">{children}</h4>,
+              ul: ({ children }) => <ul className="mb-1 mt-1 list-disc list-inside space-y-0 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ul>,
+              ol: ({ children }) => <ol className="mb-1 mt-1 list-decimal list-inside space-y-0 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ol>,
+              li: ({ children }) => <li className="ml-2 sm:ml-4 text-gray-900 dark:text-white my-0 leading-relaxed">{children}</li>,
+              h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-0.5 mt-1 first:mt-0 text-gray-900 dark:text-white leading-tight">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-0.5 mt-1 first:mt-0 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-0.5 leading-tight">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-0.5 mt-1 first:mt-0 text-gray-800 dark:text-white leading-snug">{children}</h3>,
+              h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-0.5 mt-1 text-gray-800 dark:text-white leading-snug">{children}</h4>,
               code: ({ inline, children, ...props }) => {
                 if (inline) {
                   return (
@@ -270,7 +274,7 @@ const MessageItem = memo(({
                 );
               },
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-3 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-2 rounded-r-lg">
+                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-1 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-1 rounded-r-lg">
                   {children}
                 </blockquote>
               ),
@@ -427,7 +431,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const [dense, setDense] = useState(false);
 
   const handleSpeak = async () => {
-    const cleanText = text
+    let cleanText = sanitizeTranslationOutput(text)
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
       .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
@@ -452,11 +456,8 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       
       speechLoading.updateProgress(50, 'Synthesizing speech...');
       
-      await speechService.speak(validation.value, langCode, {
-        rate: 0.9,
-        pitch: 1.0,
-        volume: 1.0
-      });
+      // Use optimal speech parameters for natural tonality
+      await speechService.speak(validation.value, langCode);
       
       speechLoading.setSuccess('Speech completed');
       

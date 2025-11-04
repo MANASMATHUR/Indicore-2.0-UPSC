@@ -2,19 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/ToastProvider';
-
-const supportedLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'mr', name: 'Marathi' },
-  { code: 'ta', name: 'Tamil' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'pa', name: 'Punjabi' },
-  { code: 'gu', name: 'Gujarati' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ml', name: 'Malayalam' },
-  { code: 'kn', name: 'Kannada' },
-];
+import { supportedLanguages } from '@/lib/messageUtils';
 
 const examCategories = [
   { code: 'general', name: 'General Studies', color: 'bg-blue-100 text-blue-800' },
