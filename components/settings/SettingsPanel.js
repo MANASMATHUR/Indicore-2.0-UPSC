@@ -1,48 +1,78 @@
 'use client';
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import Modal from '../ui/Modal';
-import Input from '../ui/Input';
 import Button from '../ui/Button';
-import Card from '../ui/Card';
+
+// Debug: Log when component is imported
+console.log('[SettingsPanel] Component module loaded');
 
 const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => {
-  const [localSettings, setLocalSettings] = useState(settings);
+  // Debug logging
+  useEffect(() => {
+    console.log('[SettingsPanel] Render:', { isOpen, hasSettings: !!settings, hasOnClose: !!onClose, hasOnUpdateSettings: !!onUpdateSettings });
+  }, [isOpen, settings, onClose, onUpdateSettings]);
+
+  // Default settings to prevent errors if settings prop is not loaded yet
+  const defaultLocalSettings = {
+    language: 'en',
+    model: 'sonar-pro',
+    useStreaming: true,
+    enableCaching: true,
+    quickResponses: true,
+    autoSave: true,
+    voiceResponses: false,
+    totalQuestions: 0,
+    sessionQuestions: 0,
+    ...(settings || {})
+  };
+  
+  const [localSettings, setLocalSettings] = useState(defaultLocalSettings);
 
   useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
+    if (isOpen && settings) {
+      setLocalSettings(prev => ({
+        ...prev,
+        ...settings
+      }));
+    }
+  }, [settings, isOpen]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     try {
+      if (!localSettings || !onUpdateSettings) {
+        console.error('Settings or onUpdateSettings is missing');
+        return;
+      }
       onUpdateSettings(localSettings);
       onClose();
     } catch (error) {
       console.error('Error saving settings:', error);
     }
-  };
+  }, [localSettings, onUpdateSettings, onClose]);
 
-  const handleChange = (key, value) => {
+  const handleChange = useCallback((key, value) => {
     setLocalSettings(prev => {
+      if (!prev) return { [key]: value };
       if (prev[key] === value) return prev;
       return {
         ...prev,
         [key]: value
       };
     });
-  };
+  }, []);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="⚙️ Settings"
-      size="lg"
-      className="max-w-5xl max-h-[95vh] overflow-y-auto mx-2 sm:mx-4"
+      size="full"
+      className="sm:max-w-5xl"
     >
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Main Settings Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           {/* Language & Model Settings */}
           <div className="space-y-4">
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
@@ -54,9 +84,9 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                     Language
                   </label>
                   <select
-                    value={localSettings.language}
+                    value={localSettings?.language || 'en'}
                     onChange={(e) => handleChange('language', e.target.value)}
-                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    className="w-full p-3 sm:p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 touch-manipulation"
                   >
                     <option value="en">English</option>
                     <option value="hi">Hindi</option>
@@ -76,9 +106,9 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                     AI Model
                   </label>
                   <select
-                    value={localSettings.model}
+                    value={localSettings?.model || 'sonar-pro'}
                     onChange={(e) => handleChange('model', e.target.value)}
-                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    className="w-full p-3 sm:p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 touch-manipulation"
                   >
                     <option value="sonar-pro">Sonar Pro (Recommended - Best for complex queries)</option>
                     <option value="sonar">Sonar (Fast - Best for quick responses)</option>
@@ -97,13 +127,13 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {settings.totalQuestions || 0}
+                  {settings?.totalQuestions || localSettings?.totalQuestions || 0}
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Total Questions</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {settings.sessionQuestions || 0}
+                  {settings?.sessionQuestions || localSettings?.sessionQuestions || 0}
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">This Session</div>
               </div>
@@ -128,7 +158,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                 </div>
                 <input
                   type="checkbox"
-                  checked={localSettings.useStreaming !== false}
+                  checked={localSettings?.useStreaming !== false}
                   onChange={(e) => handleChange('useStreaming', e.target.checked)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
@@ -145,7 +175,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                 </div>
                 <input
                   type="checkbox"
-                  checked={localSettings.enableCaching !== false}
+                  checked={localSettings?.enableCaching !== false}
                   onChange={(e) => handleChange('enableCaching', e.target.checked)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
@@ -162,7 +192,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                 </div>
                 <input
                   type="checkbox"
-                  checked={localSettings.quickResponses !== false}
+                  checked={localSettings?.quickResponses !== false}
                   onChange={(e) => handleChange('quickResponses', e.target.checked)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
@@ -185,7 +215,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                 </div>
                 <input
                   type="checkbox"
-                  checked={localSettings.autoSave || true}
+                  checked={localSettings?.autoSave !== false}
                   onChange={(e) => handleChange('autoSave', e.target.checked)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
@@ -202,7 +232,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                 </div>
                 <input
                   type="checkbox"
-                  checked={localSettings.voiceResponses || false}
+                  checked={localSettings?.voiceResponses === true}
                   onChange={(e) => handleChange('voiceResponses', e.target.checked)}
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
@@ -233,17 +263,17 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex flex-col sm:flex-row gap-3 mt-4 sm:mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-slate-900 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-4 sm:pb-0 flex-shrink-0">
         <Button
           variant="secondary"
           onClick={onClose}
-          className="flex-1 py-2.5 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+          className="flex-1 py-3 sm:py-2.5 text-base sm:text-sm text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 touch-manipulation"
         >
           Cancel
         </Button>
         <Button
           onClick={handleSave}
-          className="flex-1 py-2.5 bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="flex-1 py-3 sm:py-2.5 text-base sm:text-sm bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 touch-manipulation"
         >
           Save Settings
         </Button>
