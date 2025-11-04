@@ -59,7 +59,7 @@ async function testPrompt(promptObj, index, total) {
   console.log(`${'='.repeat(80)}`);
   
   if (prompt === '') {
-    console.log('⚠️  Skipping empty prompt (validation test)');
+    console.log('  Skipping empty prompt (validation test)');
     return { category, prompt, status: 'skipped', reason: 'empty prompt' };
   }
   
@@ -93,7 +93,7 @@ async function testPrompt(promptObj, index, total) {
         const preview = responseData.response.substring(0, 150).replace(/\n/g, ' ');
         console.log(`   Preview: ${preview}...`);
       } else {
-        console.log(`   ⚠️  Empty response received`);
+        console.log(`     Empty response received`);
       }
       
       // Check for greeting-specific behavior
@@ -102,13 +102,13 @@ async function testPrompt(promptObj, index, total) {
           if (responseData.response && responseData.response.includes('help you prepare')) {
             console.log(`   ✓ Correctly identified as standalone greeting`);
           } else {
-            console.log(`   ⚠️  Might not be using greeting response`);
+            console.log(`     Might not be using greeting response`);
           }
         } else {
           if (!responseData.response.includes('help you prepare') || responseData.response.length > 200) {
             console.log(`   ✓ Correctly processed full query (not just greeting)`);
           } else {
-            console.log(`   ⚠️  Might be treating as greeting when it should process full query`);
+            console.log(`     Might be treating as greeting when it should process full query`);
           }
         }
       }

@@ -20,7 +20,7 @@ import { ToastProvider, useToast } from './ui/ToastProvider';
 import speechService from '@/lib/speechService';
 import errorHandler from '@/lib/errorHandler';
 import { validateInput, validateSecurity, security } from '@/lib/validation';
-import { useLoadingState, LoadingStates, LoadingTypes, StatusIndicator } from '@/lib/loadingStates';
+import { useLoadingState } from '@/lib/loadingStates';
 
 export default function ChatInterface({ user }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -59,7 +59,12 @@ export default function ChatInterface({ user }) {
   }, [loadChats, loadSettings, settings.useStreaming]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Throttle scrolling to prevent lag with many messages
+    const timeoutId = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, [messages]);
 
   useEffect(() => {
@@ -123,18 +128,206 @@ export default function ChatInterface({ user }) {
     let chatId = currentChatId;
     if (!chatId) {
       const newChat = await createNewChat();
-      chatId = newChat?._id;
-      setCurrentChatId(chatId);
+      if (newChat?._id) {
+        chatId = typeof newChat._id === 'string' ? newChat._id : String(newChat._id);
+        setCurrentChatId(chatId);
+      }
     }
     
-    // Ensure chatId is a string, not an object
-    if (!chatId || typeof chatId !== 'string') {
-      console.error('Invalid chatId:', chatId);
+    if (!chatId) {
       return;
     }
     
     await addAIMessage(chatId, message, settings.language);
   }, [currentChatId, createNewChat, addAIMessage, settings.language]);
+
+  const handleStreamingResponse = useCallback(async (message, messageLanguage, chatId, isVoiceInput) => {
+    try {
+      // Detect if user is asking for translation in voice input
+      let speechLanguage = messageLanguage; // For speech output
+      if (isVoiceInput) {
+        const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
+        if (translationMatch) {
+          const requestedLang = translationMatch[1].toLowerCase();
+          const languageMap = {
+            'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
+            'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+            'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+          };
+          if (languageMap[requestedLang]) {
+            speechLanguage = languageMap[requestedLang]; // Only for speech, not text
+          }
+        }
+      }
+
+      // Check for simple greetings ONLY (not greetings with additional content)
+      // Only match if message is JUST a greeting or greeting followed only by punctuation/whitespace
+      const trimmedMessage = message.toLowerCase().trim();
+      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
+      const isSimpleGreeting = simpleGreetings.some(greeting => {
+        const exactMatch = trimmedMessage === greeting;
+        // Match greeting followed by optional punctuation/whitespace and nothing else
+        const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
+        return exactMatch || greetingOnly.test(trimmedMessage);
+      });
+      
+      if (isSimpleGreeting) {
+        const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
+        
+        await addAIMessage(chatId, hardcodedResponse, messageLanguage);
+        setStreamingMessage('');
+        if (isVoiceInput) await speakResponse(hardcodedResponse, speechLanguage);
+        return;
+      }
+
+      const response = await fetch('/api/ai/chat-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          chatId,
+          model: settings.model,
+          systemPrompt: settings.systemPrompt,
+          language: messageLanguage,
+          enableCaching: settings.enableCaching,
+          quickResponses: settings.quickResponses
+        }),
+      });
+
+      if (!response.ok) {
+        // Try to extract error message from response
+        let errorMessage = 'Failed to get streaming response';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]' || data === '[REGENERATING_INCOMPLETE_RESPONSE]') {
+              break;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.choices?.[0]?.delta?.content) {
+                fullResponse += parsed.choices[0].delta.content;
+                setStreamingMessage(fullResponse);
+              } else if (parsed.error) {
+                throw new Error(parsed.error.message || parsed.error);
+              }
+            } catch (e) {
+              if (line.includes('error') || line.includes('Error')) {
+                throw new Error('Stream parsing error');
+              }
+            }
+          } else if (line.trim() && !line.startsWith(':')) {
+            const textMatch = line.match(/^data:\s*(.+)$/);
+            if (textMatch) {
+              try {
+                const parsed = JSON.parse(textMatch[1]);
+                if (parsed.choices?.[0]?.delta?.content) {
+                  fullResponse += parsed.choices[0].delta.content;
+                  setStreamingMessage(fullResponse);
+                }
+              } catch (e) {
+              }
+            }
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const line = buffer.trim();
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.choices?.[0]?.delta?.content) {
+                fullResponse += parsed.choices[0].delta.content;
+                setStreamingMessage(fullResponse);
+              }
+            } catch (e) {
+            }
+          }
+        }
+      }
+
+      // Check if response is complete and not garbled
+      const isGarbled = /(greeting to conversation|used in and, first print|earlyth time|beco\.\.\.|for competitive, and offering|support, languages you of|effective writing, or in your preferred)/i.test(fullResponse);
+      const isIncomplete = fullResponse.trim().length < 50 || !fullResponse.endsWith('.') && !fullResponse.endsWith('!') && !fullResponse.endsWith('?') || fullResponse.includes('...');
+      
+      if (isGarbled || isIncomplete) {
+        // Try non-streaming API as fallback
+        try {
+          const fallbackResponse = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              model: settings.model,
+              systemPrompt: settings.systemPrompt,
+              language: messageLanguage
+            }),
+          });
+
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            if (fallbackData.response && fallbackData.response.length > fullResponse.length) {
+              await addAIMessage(chatId, fallbackData.response, messageLanguage);
+              setStreamingMessage('');
+              if (isVoiceInput) await speakResponse(fallbackData.response, speechLanguage);
+              return;
+            }
+          }
+        } catch (fallbackError) {
+          // Fallback failed - continue with original response
+        }
+      }
+
+      await addAIMessage(chatId, fullResponse, messageLanguage);
+      setStreamingMessage('');
+
+      if (isVoiceInput) await speakResponse(fullResponse, speechLanguage);
+
+    } catch (error) {
+      chatLoading.setError('Failed to stream response. Please try again.');
+      setIsLoading(false);
+      setStreamingMessage('');
+      
+      const errorResult = errorHandler.handleChatError(error, {
+        type: 'streaming_error',
+        message: message.substring(0, 100),
+        user: user.email
+      });
+      
+      showToast(errorResult.userMessage || 'An error occurred while generating the response.', { type: 'error' });
+      
+      errorHandler.logError(error, {
+        type: 'streaming_error',
+        message: message.substring(0, 100),
+        user: user.email
+      }, 'error');
+    }
+  }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading]);
 
   const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
     // Detect if user is asking for translation in voice input
@@ -192,9 +385,10 @@ export default function ChatInterface({ user }) {
       chatLoading.updateProgress(20, 'Sending message...');
       
       const updatedChat = await sendMessage(chatId, sanitizedMessage, messageLanguage);
-      if (!chatId && updatedChat?._id) {
-        chatId = updatedChat._id;
-        setCurrentChatId(chatId);
+      if (updatedChat?._id) {
+        const newChatId = typeof updatedChat._id === 'string' ? updatedChat._id : String(updatedChat._id);
+        chatId = newChatId;
+        setCurrentChatId(newChatId);
       }
 
       chatLoading.updateProgress(40, 'Generating response...');
@@ -230,50 +424,8 @@ export default function ChatInterface({ user }) {
       chatLoading.updateProgress(60, 'Processing with AI...');
 
       if (useStreaming) {
-        const response = await fetch('/api/ai/chat', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': security.generateCSRFToken()
-          },
-          body: JSON.stringify({
-            message: sanitizedMessage,
-            model: settings.model,
-            systemPrompt: settings.systemPrompt,
-            language: messageLanguage
-          }),
-        });
-
-        if (!response.ok) {
-          // Try to extract error message from response
-          let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorData.message || errorMessage;
-          } catch {
-            // If response is not JSON, use default error message
-          }
-          throw new Error(errorMessage);
-        }
-        
-        const data = await response.json();
-        
-        chatLoading.updateProgress(90, 'Finalizing response...');
-        await addAIMessage(chatId, data.response, messageLanguage);
-        
-        chatLoading.updateProgress(100, 'Response ready!');
-        chatLoading.setSuccess('Message sent successfully');
-        
-        if (isVoiceInput) {
-          speechLoading.setLoading('Speaking response...');
-          await speakResponse(data.response, speechLanguage);
-          speechLoading.setSuccess('Speech completed');
-        }
-        return;
-      }
-
-      if (useStreaming) {
-        await handleStreamingResponse(sanitizedMessage, messageLanguage, chatId, isVoiceInput);
+        const chatIdForStream = chatId ? (typeof chatId === 'string' ? chatId : String(chatId)) : null;
+        await handleStreamingResponse(sanitizedMessage, messageLanguage, chatIdForStream, isVoiceInput);
       } else {
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
@@ -345,126 +497,7 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
     }
-  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, chatLoading, speechLoading, showToast, user.email]);
-
-  const handleStreamingResponse = async (message, messageLanguage, chatId, isVoiceInput) => {
-    try {
-      // Detect if user is asking for translation in voice input
-      let speechLanguage = messageLanguage; // For speech output
-      if (isVoiceInput) {
-        const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
-        if (translationMatch) {
-          const requestedLang = translationMatch[1].toLowerCase();
-          const languageMap = {
-            'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
-            'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
-            'kannada': 'kn', 'spanish': 'es', 'english': 'en'
-          };
-          if (languageMap[requestedLang]) {
-            speechLanguage = languageMap[requestedLang]; // Only for speech, not text
-          }
-        }
-      }
-
-      // Check for simple greetings ONLY (not greetings with additional content)
-      // Only match if message is JUST a greeting or greeting followed only by punctuation/whitespace
-      const trimmedMessage = message.toLowerCase().trim();
-      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'];
-      const isSimpleGreeting = simpleGreetings.some(greeting => {
-        const exactMatch = trimmedMessage === greeting;
-        // Match greeting followed by optional punctuation/whitespace and nothing else
-        const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
-        return exactMatch || greetingOnly.test(trimmedMessage);
-      });
-      
-      if (isSimpleGreeting) {
-        const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
-        
-        await addAIMessage(chatId, hardcodedResponse, messageLanguage);
-        setStreamingMessage('');
-        if (isVoiceInput) await speakResponse(hardcodedResponse, speechLanguage);
-        return;
-      }
-
-      const response = await fetch('/api/ai/chat-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          model: settings.model,
-          systemPrompt: settings.systemPrompt,
-          language: messageLanguage,
-          enableCaching: settings.enableCaching,
-          quickResponses: settings.quickResponses
-        }),
-      });
-
-      if (!response.ok) {
-        // Try to extract error message from response
-        let errorMessage = 'Failed to get streaming response';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch {
-          // If response is not JSON, use default error message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        fullResponse += chunk;
-        setStreamingMessage(fullResponse);
-      }
-
-      // Check if response is complete and not garbled
-      const isGarbled = /(greeting to conversation|used in and, first print|earlyth time|beco\.\.\.|for competitive, and offering|support, languages you of|effective writing, or in your preferred)/i.test(fullResponse);
-      const isIncomplete = fullResponse.trim().length < 50 || !fullResponse.endsWith('.') && !fullResponse.endsWith('!') && !fullResponse.endsWith('?') || fullResponse.includes('...');
-      
-      if (isGarbled || isIncomplete) {
-        // Try non-streaming API as fallback
-        try {
-          const fallbackResponse = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message,
-              model: settings.model,
-              systemPrompt: settings.systemPrompt,
-              language: messageLanguage
-            }),
-          });
-
-          if (fallbackResponse.ok) {
-            const fallbackData = await fallbackResponse.json();
-            if (fallbackData.response && fallbackData.response.length > fullResponse.length) {
-              await addAIMessage(chatId, fallbackData.response, messageLanguage);
-              setStreamingMessage('');
-              if (isVoiceInput) await speakResponse(fallbackData.response, speechLanguage);
-              return;
-            }
-          }
-        } catch (fallbackError) {
-          // Fallback failed - continue with original response
-        }
-      }
-
-      await addAIMessage(chatId, fullResponse, messageLanguage);
-      setStreamingMessage('');
-
-      if (isVoiceInput) await speakResponse(fullResponse, speechLanguage);
-
-    } catch (error) {
-      throw error;
-    }
-  };
+  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse]);
 
   const handleChatSelect = useCallback(async (chatId) => {
     setCurrentChatId(chatId);
@@ -667,6 +700,11 @@ export default function ChatInterface({ user }) {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [handleNewChat, isSidebarOpen]);
 
+  // Debug: Log settings state
+  useEffect(() => {
+    console.log('[ChatInterface] isSettingsOpen state:', isSettingsOpen);
+  }, [isSettingsOpen]);
+
   return (
     <ToastProvider>
     <div className="min-h-screen bg-red-50 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-x-hidden">
@@ -703,7 +741,13 @@ export default function ChatInterface({ user }) {
         <Header
           user={user}
           onMenuClick={useCallback(() => setIsSidebarOpen(!isSidebarOpen), [isSidebarOpen])}
-          onSettingsClick={useCallback(() => setIsSettingsOpen(!isSettingsOpen), [isSettingsOpen])}
+          onSettingsClick={useCallback(() => {
+            console.log('[ChatInterface] Settings button clicked, current state:', isSettingsOpen);
+            setIsSettingsOpen(prev => {
+              console.log('[ChatInterface] Setting isSettingsOpen to:', !prev);
+              return !prev;
+            });
+          }, [isSettingsOpen])}
           onLogout={handleLogout}
           onExamUpload={useCallback(() => setIsExamUploadOpen(true), [])}
           onEssayEnhancement={useCallback(() => setIsEssayEnhancementOpen(true), [])}
@@ -739,9 +783,9 @@ export default function ChatInterface({ user }) {
         {/* Chat Input */}
         <div className="sticky bottom-0 z-10" role="region" aria-label="Chat input">
           <ChatInput
-            onSendMessage={(msg) => handleSendMessage(msg, false, settings.language)}
-            onVoiceClick={() => setIsVoiceDialogOpen(true)}
-            onImageUpload={(msg) => handleSendMessage(msg, false, settings.language)}
+            onSendMessage={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
+            onVoiceClick={useCallback(() => setIsVoiceDialogOpen(true), [])}
+            onImageUpload={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
             onSendAssistantMessage={handleSendAssistantMessage}
             disabled={isLoading}
           />
@@ -757,7 +801,10 @@ export default function ChatInterface({ user }) {
 
         <SettingsPanel
           isOpen={isSettingsOpen}
-          onClose={useCallback(() => setIsSettingsOpen(false), [])}
+          onClose={useCallback(() => {
+            console.log('[ChatInterface] Settings close called');
+            setIsSettingsOpen(false);
+          }, [])}
           settings={settings}
           onUpdateSettings={updateSettings}
         />
