@@ -34,6 +34,7 @@ export default function ChatInterface({ user }) {
   const [renameInitial, setRenameInitial] = useState('');
   const [currentChatId, setCurrentChatId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Temporarily disabled dark mode - force light mode only
   const [currentTheme, setCurrentTheme] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
@@ -68,11 +69,13 @@ export default function ChatInterface({ user }) {
   }, [messages]);
 
   useEffect(() => {
+    // Temporarily disabled dark mode - always keep light mode
     const root = document.documentElement;
     root.classList.remove('dark');
-    if (currentTheme === 'dark') {
-      root.classList.add('dark');
-    }
+    // Force light mode - dark mode temporarily disabled
+    // if (currentTheme === 'dark') {
+    //   root.classList.add('dark');
+    // }
   }, [currentTheme]);
 
   const getLanguageCode = useCallback((lang) => {
@@ -514,7 +517,9 @@ export default function ChatInterface({ user }) {
   const handleLogout = useCallback(() => signOut({ callbackUrl: '/' }), []);
 
   const handleThemeChange = useCallback((theme) => {
-    setCurrentTheme(theme);
+    // Temporarily disabled dark mode - always keep light mode
+    // setCurrentTheme(theme);
+    setCurrentTheme('light'); // Force light mode only
   }, []);
 
   const handleSearchChat = useCallback((query) => {

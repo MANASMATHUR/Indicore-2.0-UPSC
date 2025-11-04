@@ -231,7 +231,8 @@ const Header = ({
           )}
         </div>
 
-        <ThemeDropdown currentTheme={currentTheme} onThemeChange={onThemeChange} />
+        {/* Temporarily disabled dark mode - ThemeDropdown hidden */}
+        {/* <ThemeDropdown currentTheme={currentTheme} onThemeChange={onThemeChange} /> */}
         <Button
           variant="ghost"
           size="icon"

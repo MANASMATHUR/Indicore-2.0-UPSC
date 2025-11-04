@@ -20,88 +20,178 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
   const { showToast } = useToast();
 
   const handleTranslate = async (messageIndex, targetLang) => {
+    console.log('handleTranslate called:', { messageIndex, targetLang, messagesLength: messages.length });
+    
     const message = messages[messageIndex];
+    if (!message) {
+      console.error('Translation: Message not found at index', messageIndex);
+      showToast('Message not found', { type: 'error' });
+      return;
+    }
+    
     let text = message?.text || message?.content || '';
+    console.log('Translation: Extracted text:', { textLength: text.length, hasText: !!text.trim() });
     
     if (!text.trim()) {
-      console.warn('Translation: No text found in message');
+      console.warn('Translation: No text found in message', { message });
+      showToast('No text found to translate', { type: 'error' });
       return;
     }
 
     // Strip markdown before translation
-    text = stripMarkdown(text);
+    try {
+      text = stripMarkdown(text);
+    } catch (stripError) {
+      console.error('Error stripping markdown:', stripError);
+      // Continue with original text if stripMarkdown fails
+    }
     
-    if (!text.trim()) {
+    if (!text || !text.trim()) {
       console.warn('Translation: No text after stripping markdown');
+      showToast('No text found to translate after processing', { type: 'error' });
       return;
     }
 
     try {
       // Use multilingualText validation for translations (allows up to 10,000 chars)
-      const validation = validateInput('multilingualText', text);
-      if (!validation.isValid) {
-        const error = validation.errors[0];
+      let validation;
+      try {
+        validation = validateInput('multilingualText', text);
+      } catch (validationError) {
+        console.error('Validation function error:', validationError);
+        showToast('Validation error. Please try again.', { type: 'error' });
+        return;
+      }
+
+      if (!validation || !validation.isValid) {
+        const error = validation?.errors?.[0] || { message: 'Invalid input' };
         console.error('Translation validation failed:', error.message);
         showToast(`Translation failed: ${error.message}`, { type: 'error' });
         return;
       }
 
-      console.log('Starting translation:', { messageIndex, targetLang, textLength: text.length });
-      
-      translationLoading.setLoading('Translating message...', 0);
-      setTranslatingMessage(messageIndex);
-      
-      translationLoading.updateProgress(30, 'Sending translation request...');
-      
-      const response = await fetch('/api/ai/translate', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': sessionStorage.getItem('csrfToken') || ''
-        },
-        body: JSON.stringify({
-          text: validation.value,
-          sourceLanguage: 'auto',
-          targetLanguage: targetLang,
-          isStudyMaterial: true
-        }),
-      });
-
-      translationLoading.updateProgress(70, 'Processing translation...');
-
-      if (!response.ok) {
-        throw new Error(`Translation API failed: ${response.status} ${response.statusText}`);
+      if (!validation.value) {
+        console.error('Validation returned empty value');
+        showToast('No text to translate after validation', { type: 'error' });
+        return;
       }
 
-      const data = await response.json();
+      console.log('Starting translation:', { messageIndex, targetLang, textLength: text.length });
       
-      translationLoading.updateProgress(90, 'Finalizing translation...');
+      try {
+        if (translationLoading && typeof translationLoading.setLoading === 'function') {
+          translationLoading.setLoading('Translating message...', 0);
+        }
+        setTranslatingMessage(messageIndex);
+        
+        if (translationLoading && typeof translationLoading.updateProgress === 'function') {
+          translationLoading.updateProgress(30, 'Sending translation request...');
+        }
+      } catch (loadingError) {
+        console.error('Error setting loading state:', loadingError);
+      }
+      
+      let response;
+      try {
+        response = await fetch('/api/ai/translate', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csrfToken') : null) || ''
+          },
+          body: JSON.stringify({
+            text: validation.value,
+            sourceLanguage: 'auto',
+            targetLanguage: targetLang,
+            isStudyMaterial: true
+          }),
+        });
+      } catch (fetchError) {
+        console.error('Network error during translation:', fetchError);
+        throw new Error('Network error: Unable to connect to translation service. Please check your internet connection.');
+      }
+
+      if (translationLoading && typeof translationLoading.updateProgress === 'function') {
+        translationLoading.updateProgress(70, 'Processing translation...');
+      }
+
+      if (!response.ok) {
+        let errorMessage = `Translation API failed: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+          const errorText = await response.text().catch(() => '');
+          if (errorText) errorMessage = errorText.substring(0, 200);
+        }
+        throw new Error(errorMessage);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('Failed to parse translation response:', parseError);
+        throw new Error('Invalid response from translation service');
+      }
+
+      if (!data || !data.translatedText) {
+        console.error('Translation response missing translatedText:', data);
+        throw new Error('Translation service returned invalid response');
+      }
+      
+      if (translationLoading && typeof translationLoading.updateProgress === 'function') {
+        translationLoading.updateProgress(90, 'Finalizing translation...');
+      }
       
       setTranslatedText(prev => ({
         ...prev,
         [`${messageIndex}-${targetLang}`]: data.translatedText
       }));
       
-      translationLoading.setSuccess('Translation completed');
+      if (translationLoading && typeof translationLoading.setSuccess === 'function') {
+        translationLoading.setSuccess('Translation completed');
+      }
       
     } catch (error) {
-    
-      const errorResult = errorHandler.handleChatError(error, {
-        type: 'translation_error',
-        messageIndex,
-        targetLang,
-        textLength: text.length
-      });
+      console.error('Translation error:', error);
       
-      translationLoading.setError(errorResult.userMessage || 'Translation failed');
+      let errorMessage = 'Translation failed';
+      try {
+        if (errorHandler && typeof errorHandler.handleChatError === 'function') {
+          const errorResult = errorHandler.handleChatError(error, {
+            type: 'translation_error',
+            messageIndex,
+            targetLang,
+            textLength: text.length
+          });
+          errorMessage = errorResult?.userMessage || error?.message || 'Translation failed';
+        } else {
+          errorMessage = error?.message || 'Translation failed';
+        }
+      } catch (handlerError) {
+        console.error('Error handler failed:', handlerError);
+        errorMessage = error?.message || 'Translation failed';
+      }
       
-    
-      errorHandler.logError(error, {
-        type: 'translation_error',
-        messageIndex,
-        targetLang,
-        textLength: text.length
-      }, 'warning');
+      if (translationLoading && typeof translationLoading.setError === 'function') {
+        translationLoading.setError(errorMessage);
+      }
+      showToast(errorMessage, { type: 'error' });
+      
+      try {
+        if (errorHandler && typeof errorHandler.logError === 'function') {
+          errorHandler.logError(error, {
+            type: 'translation_error',
+            messageIndex,
+            targetLang,
+            textLength: text.length
+          }, 'warning');
+        }
+      } catch (logError) {
+        console.error('Failed to log error:', logError);
+      }
       
     } finally {
       setTranslatingMessage(null);
@@ -285,13 +375,16 @@ const MessageItem = memo(({
         </div>
         
         {/* Translation dropdown for AI messages and OCR results */}
-        {((sender === 'assistant') || text.includes(' Image OCR Result') || text.includes('Translated to')) && text.trim() && (
+        {sender === 'assistant' && text.trim() && onTranslate && (
           <div className="mt-4">
             <select
               onChange={(e) => {
-                if (e.target.value) {
+                if (e.target.value && onTranslate) {
+                  console.log('Translate button clicked:', { messageIndex: index, targetLang: e.target.value, textLength: text.length });
                   onTranslate(index, e.target.value);
                   e.target.value = ''; // Reset selection
+                } else {
+                  console.warn('Translate button issue:', { hasValue: !!e.target.value, hasOnTranslate: !!onTranslate });
                 }
               }}
               disabled={isTranslating}
