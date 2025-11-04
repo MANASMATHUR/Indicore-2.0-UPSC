@@ -152,7 +152,10 @@ PERPLEXITY_API_KEY=your-perplexity-api-key
 AZURE_SPEECH_KEY=your-azure-key
 AZURE_SPEECH_REGION=your-azure-region
 
-# Translation Services - FREE TIER
+# Translation Services - FREE TIER (Azure Translator recommended for best quality)
+AZURE_TRANSLATOR_KEY=your-azure-translator-key
+AZURE_TRANSLATOR_REGION=your-azure-region
+# Alternative: AZURE_TRANSLATOR_SUBSCRIPTION_KEY and AZURE_TRANSLATOR_LOCATION
 GOOGLE_TRANSLATE_API_KEY=your-google-translate-key
 ```
 
