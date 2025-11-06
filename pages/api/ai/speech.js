@@ -46,6 +46,9 @@ export default async function handler(req, res) {
     }
     
     // Convert short language code to full language code
+    // Handle both short codes ('en') and full codes ('en-IN')
+    const shortLang = language?.split('-')[0] || language || 'en';
+    
     const languageMap = {
       'en': 'en-IN',
       'hi': 'hi-IN',
@@ -60,7 +63,7 @@ export default async function handler(req, res) {
       'es': 'es-ES'
     };
     
-    const fullLanguageCode = languageMap[language] || language || 'en-IN';
+    const fullLanguageCode = languageMap[shortLang] || language || 'en-IN';
     
     const speechConfig = {
       text: text,
@@ -113,36 +116,31 @@ export default async function handler(req, res) {
 }
 
 function getDefaultVoice(language) {
+  // Handle both short codes ('en') and full codes ('en-IN')
+  const shortLang = language?.split('-')[0] || language;
+  
   const voiceMap = {
     'en': 'en-IN-NeerjaNeural',
-    'en-IN': 'en-IN-NeerjaNeural',
     'hi': 'hi-IN-SwaraNeural',
-    'hi-IN': 'hi-IN-SwaraNeural',
     'mr': 'mr-IN-AarohiNeural',
-    'mr-IN': 'mr-IN-AarohiNeural',
     'ta': 'ta-IN-PallaviNeural',
-    'ta-IN': 'ta-IN-PallaviNeural',
     'bn': 'bn-IN-TanishaaNeural',
-    'bn-IN': 'bn-IN-TanishaaNeural',
-    'pa': null,
-    'pa-IN': null,
+    'pa': null, // Punjabi voice not available in Azure - will fallback to browser
     'gu': 'gu-IN-DhwaniNeural',
-    'gu-IN': 'gu-IN-DhwaniNeural',
     'te': 'te-IN-ShrutiNeural',
-    'te-IN': 'te-IN-ShrutiNeural',
     'ml': 'ml-IN-SobhanaNeural',
-    'ml-IN': 'ml-IN-SobhanaNeural',
     'kn': 'kn-IN-SapnaNeural',
-    'kn-IN': 'kn-IN-SapnaNeural',
-    'es': 'es-ES-ElviraNeural',
-    'es-ES': 'es-ES-ElviraNeural'
+    'es': 'es-ES-ElviraNeural'
   };
   
-  return voiceMap[language] || null;
+  return voiceMap[shortLang] || null;
 }
 
 function generateSSML(config) {
   // Convert short language code to full language code for SSML
+  // Handle both short codes ('en') and full codes ('en-IN')
+  const shortLang = config.language?.split('-')[0] || config.language || 'en';
+  
   const languageMap = {
     'en': 'en-IN',
     'hi': 'hi-IN',
@@ -157,7 +155,7 @@ function generateSSML(config) {
     'es': 'es-ES'
   };
   
-  const fullLanguageCode = languageMap[config.language] || config.language;
+  const fullLanguageCode = languageMap[shortLang] || config.language || 'en-IN';
   
   // Simple SSML format that works with Azure
   return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${fullLanguageCode}">
