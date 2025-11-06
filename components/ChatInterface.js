@@ -106,12 +106,15 @@ export default function ChatInterface({ user }) {
 
     try {
       const validation = validateInput('multilingualText', text);
-      if (!validation.isValid) {
+      if (!validation.isValid || !validation.value) {
         return;
       }
 
       // Ensure we use the correct language for speech
-      const speechLanguage = lang || settings.language || 'en';
+      // Extract short language code if full code is provided (e.g., 'mr-IN' -> 'mr')
+      const langCode = lang || settings.language || 'en';
+      const shortLang = langCode.split('-')[0] || langCode;
+      const speechLanguage = shortLang;
       
       await speechService.speak(validation.value, speechLanguage, {
         rate: 0.9,
@@ -121,6 +124,7 @@ export default function ChatInterface({ user }) {
     } catch (error) {
       console.error('Speech error:', error);
       // Don't show error to user for speech - just fail silently
+      // This is for voice responses, errors are less critical
     }
   };
 
@@ -233,19 +237,26 @@ export default function ChatInterface({ user }) {
                 try {
                   const parsed = JSON.parse(data);
                   if (parsed.content) {
-                    fullResponse += parsed.content;
-                    setStreamingMessage(fullResponse);
+                    const content = String(parsed.content || '').trim();
+                    if (content) {
+                      fullResponse += content;
+                      setStreamingMessage(fullResponse);
+                    }
                   } else if (parsed.choices?.[0]?.delta?.content) {
-                    const content = parsed.choices[0].delta.content;
-                    fullResponse += content;
-                    setStreamingMessage(fullResponse);
+                    const content = String(parsed.choices[0].delta.content || '').trim();
+                    if (content) {
+                      fullResponse += content;
+                      setStreamingMessage(fullResponse);
+                    }
                   } else if (parsed.error) {
                     throw new Error(parsed.error.message || parsed.error);
                   }
                 } catch (e) {
+                  // Only throw if it's actually an error message, not a JSON parse error
                   if (line.includes('error') || line.includes('Error')) {
                     throw new Error('Stream parsing error');
                   }
+                  // Silently skip malformed JSON chunks
                 }
               }
             }
@@ -273,10 +284,25 @@ export default function ChatInterface({ user }) {
         }
 
         clearTimeout(timeoutId);
-        await addAIMessage(chatId, fullResponse, messageLanguage);
+        
+        // Validate response before saving
+        const trimmedResponse = fullResponse.trim();
+        if (trimmedResponse.length < 10) {
+          throw new Error('Response too short or empty');
+        }
+        
+        // Check for obviously malformed responses
+        const isMalformed = /^[a-z]\s*[a-z]\s*[a-z]\s*$/i.test(trimmedResponse.substring(0, 20)) && 
+                           trimmedResponse.split(/\s+/).length < 5;
+        
+        if (isMalformed) {
+          throw new Error('Response appears to be malformed. Please try again.');
+        }
+        
+        await addAIMessage(chatId, trimmedResponse, messageLanguage);
         setStreamingMessage('');
 
-        if (isVoiceInput) await speakResponse(fullResponse, speechLanguage);
+        if (isVoiceInput && trimmedResponse) await speakResponse(trimmedResponse, speechLanguage);
 
       } catch (error) {
         clearTimeout(timeoutId);

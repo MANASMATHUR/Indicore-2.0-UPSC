@@ -440,35 +440,55 @@ const TranslationResult = memo(({ text, language, langCode }) => {
   const [dense, setDense] = useState(false);
 
   const handleSpeak = async () => {
-    let cleanText = sanitizeTranslationOutput(text)
+    if (!window.speechSynthesis) {
+      showToast('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.', { type: 'error' });
+      return;
+    }
+    
+    // Get the original translated text - don't over-clean it
+    let cleanText = sanitizeTranslationOutput(text);
+    
+    // Only remove formatting, preserve the actual text content including Indian scripts
+    cleanText = cleanText
       .replace(/<[^>]*>/g, '') // Remove HTML tags
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
-      .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting but keep text
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting but keep text
       .replace(/#{1,6}\s*/g, '') // Remove markdown headers
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links
-      .replace(/\n+/g, ' ') // Replace newlines with spaces
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links but keep link text
+      .replace(/\n{3,}/g, '\n\n') // Collapse excessive newlines but preserve paragraph breaks
+      .replace(/\s{2,}/g, ' ') // Collapse multiple spaces
       .trim();
 
     // Ensure speech service is initialized
     if (!speechService) {
+      showToast('Speech service not available', { type: 'error' });
       return;
     }
+    
     try {
       const validation = validateInput('multilingualText', cleanText);
-      if (!validation.isValid) {
+      if (!validation.isValid || !validation.value) {
+        showToast('No valid text to speak', { type: 'error' });
         return;
       }
 
       speechLoading.setLoading('Preparing speech...', 0);
       setIsSpeaking(true);
       
+      // Use the short language code (langCode is already short like 'mr', 'hi')
+      // Ensure we're using the correct language for speech
+      const speechLang = langCode || 'en';
+      
       speechLoading.updateProgress(50, 'Synthesizing speech...');
-      await speechService.speak(validation.value, langCode);
+      
+      // Try Azure first, then fallback to browser
+      await speechService.speak(validation.value, speechLang);
+      
       speechLoading.setSuccess('Speech completed');
       
     } catch (error) {
       console.error('Speech error:', error);
+      
       const errorResult = errorHandler.handleSpeechError(error, {
         textLength: text.length,
         language: langCode,
@@ -476,14 +496,13 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       });
       
       speechLoading.setError(errorResult.userMessage);
+      showToast(errorResult.userMessage || 'Speech synthesis failed. Please try again.', { type: 'error' });
       
-    
       errorHandler.logError(error, {
         type: 'translation_speech_error',
         textLength: text.length,
         language: langCode
       }, 'warning');
-      
     } finally {
       setIsSpeaking(false);
     }

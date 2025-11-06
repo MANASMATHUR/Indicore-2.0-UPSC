@@ -185,7 +185,20 @@ export default async function handler(req, res) {
       return [];
     })() : Promise.resolve([]);
 
-    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. Provide clear, well-structured answers that are easy to read. Use simple formatting: write in paragraphs with proper spacing, use bullet points sparingly, and avoid markdown headers (###) or excessive bold text. Keep responses natural and readable. Write in complete sentences. Do not include citations or reference numbers.`;
+    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
+
+CRITICAL REQUIREMENTS:
+- Always write in complete, grammatically correct sentences
+- Ensure every word is spelled correctly and sentences are properly formed
+- Use proper spacing between paragraphs and sections
+- Write coherent, well-structured responses with clear flow
+- Avoid fragmented text, missing words, or incomplete thoughts
+- Use simple formatting: write in paragraphs with proper spacing, use bullet points sparingly
+- Avoid markdown headers (###) or excessive bold text
+- Do not include citations or reference numbers
+- Ensure responses are natural, readable, and professional
+
+Your responses must be complete, coherent, and easy to read. Never output fragmented or incomplete text.`;
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -420,18 +433,29 @@ export default async function handler(req, res) {
             try {
               const parsed = JSON.parse(data);
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
-                let content = parsed.choices[0].delta.content;
-                content = content.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
-                content = content.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help\s+[^.]*\./gi, '');
-                content = content.replace(/\bI'm\s+to\s+support\s+[^.]*\./gi, '');
-                content = content.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
-                fullResponse += content;
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                if (typeof res.flush === 'function') {
-                  res.flush();
+                let content = String(parsed.choices[0].delta.content || '').trim();
+                
+                // Only process non-empty content
+                if (content) {
+                  // Remove citation numbers but preserve text structure
+                  content = content.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
+                  // Remove unwanted boilerplate phrases
+                  content = content.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help\s+[^.]*\./gi, '');
+                  content = content.replace(/\bI'm\s+to\s+support\s+[^.]*\./gi, '');
+                  content = content.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
+                  
+                  // Only add if content is still valid after cleaning
+                  if (content.trim()) {
+                    fullResponse += content;
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                    if (typeof res.flush === 'function') {
+                      res.flush();
+                    }
+                  }
                 }
               }
             } catch (e) {
+              // Silently skip malformed JSON - don't break the stream
             }
           }
         }

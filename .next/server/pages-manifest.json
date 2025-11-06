@@ -6,5 +6,6 @@
   "/api/ai/speech": "pages/api/ai/speech.js",
   "/api/chat": "pages/api/chat.js",
   "/api/ai/chat-stream": "pages/api/ai/chat-stream.js",
-  "/api/chat/[id]": "pages/api/chat/[id].js"
+  "/api/chat/[id]": "pages/api/chat/[id].js",
+  "/api/ai/translate": "pages/api/ai/translate.js"
 }
