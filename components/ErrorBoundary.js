@@ -20,7 +20,7 @@ class ErrorBoundary extends Component {
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-900 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
-            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-6xl mb-4"></div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">
               Something went wrong
             </h2>

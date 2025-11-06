@@ -20,180 +20,97 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
   const { showToast } = useToast();
 
   const handleTranslate = async (messageIndex, targetLang) => {
-    console.log('handleTranslate called:', { messageIndex, targetLang, messagesLength: messages.length });
-    
     const message = messages[messageIndex];
     if (!message) {
-      console.error('Translation: Message not found at index', messageIndex);
       showToast('Message not found', { type: 'error' });
       return;
     }
     
     let text = message?.text || message?.content || '';
-    console.log('Translation: Extracted text:', { textLength: text.length, hasText: !!text.trim() });
-    
     if (!text.trim()) {
-      console.warn('Translation: No text found in message', { message });
       showToast('No text found to translate', { type: 'error' });
       return;
     }
 
-    // Strip markdown before translation
     try {
       text = stripMarkdown(text);
-    } catch (stripError) {
-      console.error('Error stripping markdown:', stripError);
-      // Continue with original text if stripMarkdown fails
+    } catch (e) {
+      // keep original
     }
     
-    if (!text || !text.trim()) {
-      console.warn('Translation: No text after stripping markdown');
-      showToast('No text found to translate after processing', { type: 'error' });
+    if (!text?.trim()) {
+      showToast('No text to translate', { type: 'error' });
       return;
     }
 
     try {
-    
-      // Use multilingualText validation for translations (allows up to 10,000 chars)
-      let validation;
-      try {
-        validation = validateInput('multilingualText', text);
-      } catch (validationError) {
-        console.error('Validation function error:', validationError);
-        showToast('Validation error. Please try again.', { type: 'error' });
-        return;
-      }
-
-      if (!validation || !validation.isValid) {
-        const error = validation?.errors?.[0] || { message: 'Invalid input' };
-        console.error('Translation validation failed:', error.message);
-        showToast(`Translation failed: ${error.message}`, { type: 'error' });
+      const validation = validateInput('multilingualText', text);
+      if (!validation?.isValid) {
+        const error = validation?.errors?.[0];
+        showToast(`Translation failed: ${error?.message || 'Invalid input'}`, { type: 'error' });
         return;
       }
 
       if (!validation.value) {
-        console.error('Validation returned empty value');
-        showToast('No text to translate after validation', { type: 'error' });
+        showToast('No text to translate', { type: 'error' });
         return;
       }
-
-      console.log('Starting translation:', { messageIndex, targetLang, textLength: text.length });
       
-      try {
-        if (translationLoading && typeof translationLoading.setLoading === 'function') {
-          translationLoading.setLoading('Translating message...', 0);
-        }
-        setTranslatingMessage(messageIndex);
-        
-        if (translationLoading && typeof translationLoading.updateProgress === 'function') {
-          translationLoading.updateProgress(30, 'Sending translation request...');
-        }
-      } catch (loadingError) {
-        console.error('Error setting loading state:', loadingError);
-      }
+      translationLoading?.setLoading?.('Translating...', 0);
+      setTranslatingMessage(messageIndex);
       
-      let response;
-      try {
-        response = await fetch('/api/ai/translate', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csrfToken') : null) || ''
-          },
-          body: JSON.stringify({
-            text: validation.value,
-            sourceLanguage: 'auto',
-            targetLanguage: targetLang,
-            isStudyMaterial: true
-          }),
-        });
-      } catch (fetchError) {
-        console.error('Network error during translation:', fetchError);
-        throw new Error('Network error: Unable to connect to translation service. Please check your internet connection.');
-      }
+      const response = await fetch('/api/ai/translate', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csrfToken') : null) || ''
+        },
+        body: JSON.stringify({
+          text: validation.value,
+          sourceLanguage: 'auto',
+          targetLanguage: targetLang,
+          isStudyMaterial: true
+        }),
+      });
 
-      if (translationLoading && typeof translationLoading.updateProgress === 'function') {
-        translationLoading.updateProgress(70, 'Processing translation...');
-      }
+      translationLoading?.updateProgress?.(70, 'Processing...');
 
       if (!response.ok) {
-        let errorMessage = `Translation API failed: ${response.status} ${response.statusText}`;
+        let errorMsg = `Translation failed: ${response.status}`;
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
+          const err = await response.json();
+          errorMsg = err.error || err.message || errorMsg;
         } catch (e) {
-          // If response is not JSON, use status text
-          const errorText = await response.text().catch(() => '');
-          if (errorText) errorMessage = errorText.substring(0, 200);
+          const txt = await response.text().catch(() => '');
+          if (txt) errorMsg = txt.substring(0, 200);
         }
-        throw new Error(errorMessage);
+        throw new Error(errorMsg);
       }
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        console.error('Failed to parse translation response:', parseError);
-        throw new Error('Invalid response from translation service');
-      }
-
-      if (!data || !data.translatedText) {
-        console.error('Translation response missing translatedText:', data);
-        throw new Error('Translation service returned invalid response');
+      const data = await response.json();
+      if (!data?.translatedText) {
+        throw new Error('Invalid translation response');
       }
       
-      if (translationLoading && typeof translationLoading.updateProgress === 'function') {
-        translationLoading.updateProgress(90, 'Finalizing translation...');
-      }
+      translationLoading?.updateProgress?.(90);
       
       setTranslatedText(prev => ({
         ...prev,
         [`${messageIndex}-${targetLang}`]: data.translatedText
       }));
       
-      if (translationLoading && typeof translationLoading.setSuccess === 'function') {
-        translationLoading.setSuccess('Translation completed');
-      }
+      translationLoading?.setSuccess?.('Done');
       
     } catch (error) {
-      console.error('Translation error:', error);
+      const errorMsg = errorHandler?.handleChatError?.(error, {
+        type: 'streaming_translation_error',
+        messageIndex,
+        targetLang
+      })?.userMessage || error?.message || 'Translation failed';
       
-      let errorMessage = 'Translation failed';
-      try {
-        if (errorHandler && typeof errorHandler.handleChatError === 'function') {
-          const errorResult = errorHandler.handleChatError(error, {
-            type: 'streaming_translation_error',
-            messageIndex,
-            targetLang,
-            textLength: text.length
-          });
-          errorMessage = errorResult?.userMessage || error?.message || 'Translation failed';
-        } else {
-          errorMessage = error?.message || 'Translation failed';
-        }
-      } catch (handlerError) {
-        console.error('Error handler failed:', handlerError);
-        errorMessage = error?.message || 'Translation failed';
-      }
-      
-      if (translationLoading && typeof translationLoading.setError === 'function') {
-        translationLoading.setError(errorMessage);
-      }
-      showToast(errorMessage, { type: 'error' });
-      
-      try {
-        if (errorHandler && typeof errorHandler.logError === 'function') {
-          errorHandler.logError(error, {
-            type: 'streaming_translation_error',
-            messageIndex,
-            targetLang,
-            textLength: text.length
-          }, 'warning');
-        }
-      } catch (logError) {
-        console.error('Failed to log error:', logError);
-      }
-      
+      translationLoading?.setError?.(errorMsg);
+      showToast(errorMsg, { type: 'error' });
+      errorHandler?.logError?.(error, { type: 'streaming_translation_error' }, 'warning');
     } finally {
       setTranslatingMessage(null);
     }
@@ -233,7 +150,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
             </div>
           </div>
           {/* Suggested Prompts */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto">
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-3xl mx-auto px-4 sm:px-0">
             {[
               "What is the UPSC syllabus for 2025?",
               "Give me notes on Indian History",
@@ -245,9 +162,9 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
               <button
                 key={idx}
                 onClick={() => onPromptClick && onPromptClick(prompt)}
-                className="px-4 py-3 text-left bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-red-200/50 dark:border-slate-700/50 rounded-xl text-sm text-red-900 dark:text-slate-200 hover:border-red-400 dark:hover:border-red-600 hover:shadow-md transition-all duration-200 backdrop-blur-sm"
+                className="px-4 py-3 sm:px-5 sm:py-3.5 text-left bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-red-200/50 dark:border-slate-700/50 rounded-xl text-sm sm:text-base text-red-900 dark:text-slate-200 hover:border-red-400 dark:hover:border-red-600 hover:shadow-md transition-all duration-200 backdrop-blur-sm break-words whitespace-normal leading-relaxed min-h-[3.5rem] flex items-center"
               >
-                {prompt}
+                <span className="w-full">{prompt}</span>
               </button>
             ))}
           </div>
@@ -278,40 +195,31 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
 
         {/* Streaming Message */}
         {streamingMessage && (
-          <div className="message assistant mb-4 flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50 animate-pulse">
+          <div className="message assistant mb-4 flex items-start gap-3 animate-fade-in">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
               🎓
             </div>
             <div className="message-content relative rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-slate-800/70 shadow-sm flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-sky-700 dark:text-sky-300 font-medium">
-                  AI is responding...
-                </span>
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-sky-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
               <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    p: ({ children }) => <p className="mb-0.5 last:mb-0 leading-relaxed">{children}</p>,
-                    strong: ({ children }) => <strong className="font-semibold text-inherit">{children}</strong>,
+                    p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed text-slate-700 dark:text-slate-300 text-sm sm:text-base">{children}</p>,
+                    strong: ({ children }) => <strong className="font-semibold text-slate-900 dark:text-slate-100">{children}</strong>,
                     em: ({ children }) => <em className="italic text-inherit">{children}</em>,
-                    ul: ({ children }) => <ul className="mb-1 mt-1 list-disc list-inside space-y-0 pl-4">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-1 mt-1 list-decimal list-inside space-y-0 pl-4">{children}</ol>,
-                    li: ({ children }) => <li className="my-0 leading-relaxed">{children}</li>,
-                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-0.5 mt-1 first:mt-0 text-slate-900 dark:text-slate-100">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-xl font-bold mb-0.5 mt-1 first:mt-0 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 pb-0.5">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-0.5 mt-1 first:mt-0 text-slate-700 dark:text-slate-300">{children}</h3>,
-                    h4: ({ children }) => <h4 className="text-base font-semibold mb-0.5 mt-1 text-slate-700 dark:text-slate-300">{children}</h4>,
+                    ul: ({ children }) => <ul className="mb-4 mt-3 list-disc list-outside space-y-2 pl-6 text-slate-700 dark:text-slate-300">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-4 mt-3 list-decimal list-outside space-y-2 pl-6 text-slate-700 dark:text-slate-300">{children}</ol>,
+                    li: ({ children }) => <li className="my-2 leading-relaxed text-slate-700 dark:text-slate-300 pl-2">{children}</li>,
+                    h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-slate-900 dark:text-slate-100 leading-tight border-b border-slate-200 dark:border-slate-700 pb-2">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 pb-2 leading-tight">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-lg font-semibold mb-3 mt-4 first:mt-0 text-slate-800 dark:text-slate-200 leading-snug">{children}</h3>,
+                    h4: ({ children }) => <h4 className="text-base font-semibold mb-2 mt-4 text-slate-800 dark:text-slate-200 leading-snug">{children}</h4>,
+                    hr: () => <hr className="my-6 border-slate-200 dark:border-slate-700" />,
                   }}
                 >
                   {streamingMessage}
                 </ReactMarkdown>
-                <span className="animate-pulse ml-1">|</span>
+                <span className="inline-block w-0.5 h-4 bg-red-500 ml-1 animate-pulse align-middle"></span>
               </div>
             </div>
           </div>
@@ -379,16 +287,16 @@ const MessageItem = memo(({
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              p: ({ children }) => <p className="mb-0.5 last:mb-0 leading-relaxed text-gray-900 dark:text-white text-sm sm:text-[15px] font-normal">{children}</p>,
+              p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed text-gray-900 dark:text-white text-sm sm:text-[15px] font-normal">{children}</p>,
               strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>,
               em: ({ children }) => <em className="italic text-gray-800 dark:text-gray-100">{children}</em>,
-              ul: ({ children }) => <ul className="mb-1 mt-1 list-disc list-inside space-y-0 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ul>,
-              ol: ({ children }) => <ol className="mb-1 mt-1 list-decimal list-inside space-y-0 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ol>,
-              li: ({ children }) => <li className="my-0 leading-relaxed text-gray-900 dark:text-white">{children}</li>,
-              h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-0.5 mt-1 first:mt-0 text-gray-900 dark:text-white leading-tight">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-0.5 mt-1 first:mt-0 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-0.5 leading-tight">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-0.5 mt-1 first:mt-0 text-gray-800 dark:text-white leading-snug">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-0.5 mt-1 text-gray-800 dark:text-white leading-snug">{children}</h4>,
+              ul: ({ children }) => <ul className="mb-4 mt-3 list-disc list-outside space-y-2 pl-6 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ul>,
+              ol: ({ children }) => <ol className="mb-4 mt-3 list-decimal list-outside space-y-2 pl-6 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ol>,
+              li: ({ children }) => <li className="my-2 leading-relaxed text-gray-900 dark:text-white pl-2">{children}</li>,
+              h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-4 mt-6 first:mt-0 text-gray-900 dark:text-white leading-tight border-b border-gray-200 dark:border-gray-600 pb-2">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-3 mt-5 first:mt-0 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-2 leading-tight">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-3 mt-4 first:mt-0 text-gray-800 dark:text-white leading-snug">{children}</h3>,
+              h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-2 mt-4 text-gray-800 dark:text-white leading-snug">{children}</h4>,
               code: ({ inline, children, ...props }) => {
                 if (inline) {
                   return (
@@ -398,16 +306,17 @@ const MessageItem = memo(({
                   );
                 }
                 return (
-                  <code className="block bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm p-4 rounded-lg overflow-x-auto font-mono border border-gray-200 dark:border-slate-700 shadow-sm" {...props}>
+                  <code className="block bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm p-4 rounded-lg overflow-x-auto font-mono border border-gray-200 dark:border-slate-700 shadow-sm my-4" {...props}>
                     {children}
                   </code>
                 );
               },
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-1 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-1 rounded-r-lg">
+                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-4 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-2 rounded-r-lg">
                   {children}
                 </blockquote>
               ),
+              hr: () => <hr className="my-6 border-gray-200 dark:border-gray-600" />,
             }}
           >
             {cleanText(text)}
@@ -420,11 +329,8 @@ const MessageItem = memo(({
             <select
               onChange={(e) => {
                 if (e.target.value && onTranslate) {
-                  console.log('Translate button clicked:', { messageIndex: index, targetLang: e.target.value, textLength: text.length });
                   onTranslate(index, e.target.value);
-                  e.target.value = ''; // Reset selection
-                } else {
-                  console.warn('Translate button issue:', { hasValue: !!e.target.value, hasOnTranslate: !!onTranslate });
+                  e.target.value = '';
                 }
               }}
               disabled={isTranslating}
@@ -595,10 +501,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       setIsSpeaking(true);
       
       speechLoading.updateProgress(50, 'Synthesizing speech...');
-      
-      // Use optimal speech parameters for natural tonality
       await speechService.speak(validation.value, langCode);
-      
       speechLoading.setSuccess('Speech completed');
       
     } catch (error) {

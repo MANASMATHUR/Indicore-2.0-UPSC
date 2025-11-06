@@ -104,7 +104,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
     }
   };
 
-  // Enhanced PDF text extraction with multiple fallback methods
+  // PDF text extraction with multiple fallback methods
   const extractTextFromPDF = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
     
@@ -178,7 +178,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
     }
     
     // Method 3: Return helpful error message with suggestions
-    return `[PDF File: ${file.name}]\n\n⚠️ PDF text extraction failed. This PDF might be:\n\n• Image-based (scanned document) - No text layer available\n• Password-protected - Requires password to access\n• Corrupted or damaged file\n• Using special encoding or fonts\n\n📋 File Details:\n• Size: ${(file.size / 1024).toFixed(1)} KB\n• Type: PDF Document\n\n💡 Solutions:\n1. Try converting the PDF to text format (.txt)\n2. Use OCR tools like Google Drive or Adobe Acrobat\n3. Copy text manually and paste as text file\n4. Try a different PDF file\n\n🔄 The system will still attempt translation with the available information.`;
+    return `[PDF File: ${file.name}]\n\n PDF text extraction failed. This PDF might be:\n\n• Image-based (scanned document) - No text layer available\n• Password-protected - Requires password to access\n• Corrupted or damaged file\n• Using special encoding or fonts\n\n File Details:\n• Size: ${(file.size / 1024).toFixed(1)} KB\n• Type: PDF Document\n\n Solutions:\n1. Try converting the PDF to text format (.txt)\n2. Use OCR tools like Google Drive or Adobe Acrobat\n3. Copy text manually and paste as text file\n4. Try a different PDF file\n\n🔄 The system will still attempt translation with the available information.`;
   };
 
   const extractTextFromFile = async (file) => {
@@ -192,16 +192,16 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         // OCR for images using tesseract.js (lazy import)
         try {
           const { createWorker } = await import('tesseract.js');
-          const lang = sourceLanguage === 'en' ? 'eng' : 'eng'; // default to English OCR; multilingual packs can be added later
+          const lang = sourceLanguage === 'en' ? 'eng' : 'eng'; 
           const worker = await createWorker(lang);
           const { data: { text: ocrText } } = await worker.recognize(file);
           await worker.terminate();
           text = (ocrText || '').trim();
           if (!text) {
-            text = `⚠️ No readable text detected in the image ${file.name}. Try a clearer photo with good lighting.`;
+            text = ` No readable text detected in the image ${file.name}. Try a clearer photo with good lighting.`;
           }
         } catch (e) {
-          text = `❌ OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
+          text = ` OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
         }
       } else {
         text = await readFileAsText(file);
@@ -216,7 +216,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         setSourceLanguage(detected);
       }
     } catch (error) {
-      setExtractedText(`❌ Error reading file: ${file.name}\n\nPlease ensure the file is not corrupted and try again.\n\nFile size: ${(file.size / 1024).toFixed(1)} KB`);
+      setExtractedText(` Error reading file: ${file.name}\n\nPlease ensure the file is not corrupted and try again.\n\nFile size: ${(file.size / 1024).toFixed(1)} KB`);
     } finally {
       setIsUploading(false);
     }
@@ -248,7 +248,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
   };
 
   const handleTranslate = async () => {
-    // Use manual text if available, otherwise use extracted text
+
     const textToTranslate = manualText.trim() || extractedText.trim();
     
     if (!textToTranslate) {
@@ -288,7 +288,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
     if (files.length > 0) {
       const file = files[0];
       
-      // Validate file type
+  
       const allowedTypes = [
         'text/plain',
         'text/markdown',

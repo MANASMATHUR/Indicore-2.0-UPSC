@@ -115,7 +115,7 @@ const ChatInput = ({
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask me anything about PCS, UPSC, or SSC exams..."
-            className="w-full text-[15px] sm:text-base px-6 py-5 rounded-3xl border-2 border-gray-200/80 dark:border-slate-700/80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl focus:border-red-500 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/15 dark:focus:ring-red-500/25 transition-all duration-300 placeholder:text-gray-500 dark:placeholder:text-slate-400 focus:outline-none shadow-lg hover:shadow-xl focus:shadow-2xl focus:shadow-red-500/10 dark:focus:shadow-red-500/20 font-normal leading-relaxed"
+            className="w-full text-[15px] sm:text-base px-4 sm:px-6 py-4 sm:py-5 rounded-3xl border-2 border-gray-200/80 dark:border-slate-700/80 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl focus:border-red-500 dark:focus:border-red-500 focus:ring-4 focus:ring-red-500/15 dark:focus:ring-red-500/25 transition-all duration-300 placeholder:text-gray-500 dark:placeholder:text-slate-400 focus:outline-none shadow-lg hover:shadow-xl focus:shadow-2xl focus:shadow-red-500/10 dark:focus:shadow-red-500/20 font-normal leading-relaxed touch-manipulation"
             disabled={disabled}
             aria-label="Chat message input"
             aria-describedby="chat-input-help"
@@ -198,7 +198,7 @@ const ChatInput = ({
         <Button
           type="submit"
           disabled={!message.trim() || disabled || isProcessingImage}
-          className="send-button group bg-gradient-to-r from-red-500 via-red-600 to-orange-600 hover:from-red-600 hover:via-red-700 hover:to-orange-700 text-white p-3 sm:p-4 rounded-2xl shadow-xl hover:shadow-2xl hover:shadow-red-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 transform hover:scale-105 active:scale-95"
+          className="send-button group bg-gradient-to-r from-red-500 via-red-600 to-orange-600 hover:from-red-600 hover:via-red-700 hover:to-orange-700 text-white p-3 sm:p-4 rounded-2xl shadow-xl hover:shadow-2xl hover:shadow-red-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/30 focus-visible:ring-offset-2 transform hover:scale-105 active:scale-95 touch-manipulation"
           title="Send message"
           aria-label="Send message"
         >
