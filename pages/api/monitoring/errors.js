@@ -1,11 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
-/**
- * Enterprise monitoring and analytics API
- * Handles error reporting, performance metrics, and system health monitoring
- */
-
-// In-memory storage for demo (in production, use Redis or database)
 const errorLog = [];
 const performanceMetrics = {
   totalRequests: 0,
@@ -17,7 +11,6 @@ const performanceMetrics = {
 };
 
 export default async function handler(req, res) {
-  // CORS headers for enterprise security
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -55,7 +48,6 @@ async function handleErrorReporting(req, res) {
       sessionId
     } = req.body;
 
-    // Validate error data
     if (!id || !timestamp || !message || !severity) {
       return res.status(400).json({
         error: 'Missing required error fields',
@@ -63,7 +55,6 @@ async function handleErrorReporting(req, res) {
       });
     }
 
-    // Sanitize error data
     const sanitizedError = {
       id: String(id).substring(0, 100),
       timestamp: new Date(timestamp).toISOString(),
@@ -77,17 +68,14 @@ async function handleErrorReporting(req, res) {
       receivedAt: new Date().toISOString()
     };
 
-    // Store error
     errorLog.unshift(sanitizedError);
     if (errorLog.length > 1000) {
-      errorLog.pop(); // Keep only last 1000 errors
+      errorLog.pop();
     }
 
-    // Update metrics
     performanceMetrics.failedRequests++;
     performanceMetrics.errorsByType[severity] = (performanceMetrics.errorsByType[severity] || 0) + 1;
 
-    // Log to console in development
     if (process.env.NODE_ENV === 'development') {
       console.group(`🚨 ${severity.toUpperCase()}: ${sanitizedError.message}`);
       console.error('Error ID:', sanitizedError.id);
@@ -96,9 +84,7 @@ async function handleErrorReporting(req, res) {
       console.groupEnd();
     }
 
-    // In production, you would send to external monitoring service
     if (process.env.NODE_ENV === 'production') {
-      // Example: Send to Sentry, DataDog, or other monitoring service
       // await sendToMonitoringService(sanitizedError);
     }
 
@@ -193,7 +179,6 @@ async function handleMetricsRequest(req, res) {
   }
 }
 
-// Utility function to update performance metrics
 export function updatePerformanceMetrics(endpoint, responseTime, success) {
   performanceMetrics.totalRequests++;
   if (success) {
@@ -202,11 +187,9 @@ export function updatePerformanceMetrics(endpoint, responseTime, success) {
     performanceMetrics.failedRequests++;
   }
 
-  // Update average response time
   const totalTime = performanceMetrics.averageResponseTime * (performanceMetrics.totalRequests - 1) + responseTime;
   performanceMetrics.averageResponseTime = totalTime / performanceMetrics.totalRequests;
 
-  // Update endpoint metrics
   if (!performanceMetrics.requestsByEndpoint[endpoint]) {
     performanceMetrics.requestsByEndpoint[endpoint] = { total: 0, successful: 0, failed: 0 };
   }
