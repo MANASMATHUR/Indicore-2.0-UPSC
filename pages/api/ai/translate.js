@@ -1,15 +1,11 @@
-// Next.js API types (removed direct import to fix warning)
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 
-// Simple in-memory cache for translations
 const translationCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
-// Enterprise validation and security
 function validateTranslateRequest(req) {
   const { text, sourceLanguage, targetLanguage, isStudyMaterial = false } = req.body;
 
-  // Input validation
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     throw new Error('Text is required and must be a non-empty string');
   }
@@ -36,7 +32,6 @@ function validateTranslateRequest(req) {
     throw new Error('Unsupported target language');
   }
 
-  // Security validation
   const dangerousPatterns = [
     /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
     /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
@@ -55,7 +50,6 @@ function validateTranslateRequest(req) {
 }
 
 export default async function handler(req, res) {
-  // CORS headers for enterprise security
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
@@ -73,16 +67,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check if request body exists
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
-        error: 'Request body is required and must be a JSON object',
+        error: 'Request body is required',
         code: 'VALIDATION_ERROR',
         timestamp: new Date().toISOString()
       });
     }
 
-    // Enterprise validation
     let text, sourceLanguage, targetLanguage, isStudyMaterial;
     try {
       const validationResult = validateTranslateRequest(req);
@@ -91,20 +83,16 @@ export default async function handler(req, res) {
       targetLanguage = validationResult.targetLanguage;
       isStudyMaterial = validationResult.isStudyMaterial;
     } catch (validationError) {
-      console.error('Validation error:', validationError);
       return res.status(400).json({
-        error: validationError?.message || 'Invalid request parameters',
+        error: validationError?.message || 'Invalid request',
         code: 'VALIDATION_ERROR',
         timestamp: new Date().toISOString()
       });
     }
 
-    // Normalize source language (auto -> en) for comparison
     const normalizedSourceLang = sourceLanguage === 'auto' ? 'en' : sourceLanguage;
     
-    // Check if source and target are the same before attempting translation
     if (normalizedSourceLang === targetLanguage) {
-      console.log(`[Translation] Source and target languages are the same (${normalizedSourceLang}), returning original text`);
       return res.status(200).json({
         translatedText: text,
         sourceLanguage: normalizedSourceLang,
@@ -116,28 +104,17 @@ export default async function handler(req, res) {
       });
     }
 
-    // Rate limiting (basic implementation)
-    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    const rateLimitKey = `translate_${clientIP}`;
-    
-    // Enhanced translation with AI models for study materials
     const startTime = Date.now();
-    console.log(`[Translation] Starting translation: ${sourceLanguage} -> ${targetLanguage}, Length: ${text.length}, StudyMaterial: ${isStudyMaterial}`);
-    
     const translatedText = await translateText(text, sourceLanguage, targetLanguage, isStudyMaterial);
     const processingTime = Date.now() - startTime;
     
-    // Verify translation actually changed
     if (!translatedText || translatedText.trim() === text.trim()) {
-      console.error(`[Translation] Translation returned same text - translation failed`);
       return res.status(500).json({
-        error: `Translation service returned the original text. Unable to translate from ${sourceLanguage} to ${targetLanguage}.`,
+        error: `Translation failed: Unable to translate from ${sourceLanguage} to ${targetLanguage}.`,
         code: 'TRANSLATION_FAILED',
         timestamp: new Date().toISOString()
       });
     }
-    
-    console.log(`[Translation] Success: ${sourceLanguage} -> ${targetLanguage}, Time: ${processingTime}ms`);
     
     res.status(200).json({ 
       translatedText,
@@ -150,38 +127,30 @@ export default async function handler(req, res) {
     });
     
   } catch (error) {
-    console.error('Translation API Error:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error details:', {
-      message: error.message,
-      name: error.name,
-      type: typeof error
-    });
+    console.error('Translation error:', error);
     
-    // Handle validation errors
-    const errorMessage = error?.message || String(error) || 'Unknown error';
-    if (errorMessage.includes('malicious') || errorMessage.includes('unsupported') || errorMessage.includes('required') || errorMessage.includes('too long')) {
+    const errorMsg = error?.message || String(error) || 'Unknown error';
+    
+    if (errorMsg.includes('malicious') || errorMsg.includes('unsupported') || errorMsg.includes('required') || errorMsg.includes('too long')) {
       return res.status(400).json({ 
-        error: errorMessage,
+        error: errorMsg,
         code: 'VALIDATION_ERROR',
         timestamp: new Date().toISOString()
       });
     }
     
-    // Handle translation failure errors
-    if (errorMessage.includes('Unable to translate') || errorMessage.includes('translation services failed')) {
+    if (errorMsg.includes('Unable to translate') || errorMsg.includes('translation services failed')) {
       return res.status(500).json({ 
-        error: errorMessage,
+        error: errorMsg,
         code: 'TRANSLATION_FAILED',
         timestamp: new Date().toISOString()
       });
     }
     
-    // Generic server error
     res.status(500).json({ 
-      error: 'Translation service temporarily unavailable. Please try again later.',
+      error: 'Translation service unavailable',
       code: 'SERVICE_ERROR',
-      details: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+      details: process.env.NODE_ENV === 'development' ? errorMsg : undefined,
       timestamp: new Date().toISOString()
     });
   }
@@ -220,26 +189,21 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     'kn': 'Kannada'
   };
 
-  // Try Azure Translator first if available (highest quality, reliable)
   if (process.env.AZURE_TRANSLATOR_KEY || process.env.AZURE_TRANSLATOR_SUBSCRIPTION_KEY) {
     try {
       const azureResult = await translateWithAzure(text, sourceLang, targetLang, 15000);
       if (azureResult && azureResult.trim() && azureResult.trim() !== text.trim()) {
-        // Cache successful translation
         translationCache.set(cacheKey, {
           translation: azureResult,
           timestamp: Date.now()
         });
         return azureResult;
       }
-    } catch (azureError) {
-      console.warn('Azure Translator failed, trying other services:', azureError.message);
-      // Fall through to other providers
+    } catch (e) {
+      // fallback
     }
   }
 
-  // For long texts (>2000 chars) or study materials, try AI models first for better quality
-  // AI models handle long texts much better than free APIs
   const shouldUseAI = isStudyMaterial || text.length > 2000;
   
   if (shouldUseAI) {
@@ -256,16 +220,13 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     if (attempts.length) {
       try {
         const best = await Promise.any(attempts);
-        // Cache successful translation
         translationCache.set(cacheKey, {
           translation: best,
           timestamp: Date.now()
         });
         return best;
       } catch (e) {
-        const errorMsg = e?.message || e?.errors?.[0]?.message || String(e);
-        console.warn('AI translation models failed, falling back to free providers:', errorMsg);
-        // fall through to free providers
+        // fallback
       }
     }
   }
@@ -392,7 +353,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           return translated;
         }
       } catch (err) {
-        console.warn('LibreTranslate error:', err.message);
         throw err;
       }
     };
@@ -434,8 +394,7 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
               }
               translatedChunks.push(translated);
             } catch (err) {
-              console.warn(`MyMemory chunk ${i + 1}/${chunks.length} failed:`, err.message);
-              // Continue with next chunk even if one fails
+              // skip failed chunk
             }
           }
           
@@ -465,7 +424,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
           return translated;
         }
       } catch (err) {
-        console.warn('MyMemory error:', err.message);
         throw err;
       }
     };
@@ -476,27 +434,21 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     ];
     
     try {
-      const firstFree = await Promise.any(freeAttempts);
-      if (firstFree && firstFree.trim() && firstFree.trim() !== text.trim()) {
-        // Cache successful translation
-        translationCache.set(cacheKey, {
-          translation: firstFree,
-          timestamp: Date.now()
-        });
-        return firstFree;
+    const firstFree = await Promise.any(freeAttempts);
+    if (firstFree && firstFree.trim() && firstFree.trim() !== text.trim()) {
+      translationCache.set(cacheKey, {
+        translation: firstFree,
+        timestamp: Date.now()
+      });
+      return firstFree;
       }
     } catch (e) {
-      const errorMsg = e?.message || e?.errors?.[0]?.message || String(e);
-      console.warn('All free translation providers failed:', errorMsg);
       freeTranslationError = e;
     }
   } catch (error) {
     freeTranslationError = error;
-    const errorMsg = error?.message || String(error);
-    console.warn('Translation provider error:', errorMsg);
   }
 
-  // Try Google Translate API if available
   if (process.env.GOOGLE_TRANSLATE_API_KEY) {
     try {
       const response = await fetchWithTimeout(`https://translation.googleapis.com/language/translate/v2?key=${process.env.GOOGLE_TRANSLATE_API_KEY}`, {
@@ -524,11 +476,11 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
         }
       }
     } catch (error) {
-      console.warn('Google Translate API error:', error.message);
+      // skip
     }
   }
 
-  // Enhanced fallback with study material context
+  // Fallback with study material context
   const sourceLangName = languageNames[sourceLang] || sourceLang;
   const targetLangName = languageNames[targetLang] || targetLang;
   
@@ -564,40 +516,31 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
       }
       throw new Error('Alt LibreTranslate returned same text');
     }).catch(err => {
-      console.warn('Alternative translation service failed:', err.message);
       return null;
     });
 
     if (altLibre) return altLibre;
   } catch (error) {
-    console.warn('Fallback translation attempt failed:', error.message);
+    // fallback
   }
-
-  // Last resort: Enhanced word mapping for study materials (but log warning)
-  console.warn(`Translation falling back to word mapping - all services failed. Source: ${sourceLang}, Target: ${targetLang}, Text length: ${text.length}`);
   
   let translatedText = text;
   
-  // Enhanced word mapping for study materials
   if (isStudyMaterial && sourceLang === 'en') {
     translatedText = enhanceStudyMaterialTranslation(text, targetLang);
   } else {
-    // Basic word mapping for all supported languages
     translatedText = basicTranslation(text, sourceLang, targetLang);
   }
 
-  // If translation didn't change the text at all, throw an error instead of returning original
   if (translatedText === text || translatedText.trim() === text.trim()) {
-    throw new Error(`Unable to translate from ${sourceLangName} to ${targetLangName}. All translation services failed. Please try again or use a different language.`);
+    throw new Error(`Unable to translate from ${sourceLangName} to ${targetLangName}. All translation services failed.`);
   }
 
-  // Only cache if translation actually changed
   translationCache.set(cacheKey, {
     translation: translatedText,
     timestamp: Date.now()
   });
 
-  // Clean old cache entries periodically
   if (translationCache.size > 1000) {
     const now = Date.now();
     for (const [key, value] of translationCache.entries()) {
@@ -607,7 +550,6 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
     }
   }
 
-  // Return clean translation without metadata for better speech synthesis
   return sanitizeTranslationOutput(translatedText);
 }
 
@@ -637,8 +579,6 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = 1500
 
   const azureSourceLang = azureLanguageMap[sourceLang] || sourceLang;
   const azureTargetLang = azureLanguageMap[targetLang] || targetLang;
-
-  // Azure Translator endpoint
   const endpoint = `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=${azureSourceLang}&to=${azureTargetLang}`;
   
   try {
@@ -658,17 +598,15 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = 1500
     }
 
     const data = await response.json();
-    
-    if (data && Array.isArray(data) && data[0] && data[0].translations && data[0].translations[0]) {
-      const translated = sanitizeTranslationOutput(data[0].translations[0].text || '');
-      if (translated && translated.trim() && translated.trim() !== text.trim()) {
+    if (data?.[0]?.translations?.[0]?.text) {
+      const translated = sanitizeTranslationOutput(data[0].translations[0].text);
+      if (translated?.trim() && translated.trim() !== text.trim()) {
         return translated;
       }
     }
     
-    throw new Error('Azure Translator returned invalid response format');
+    throw new Error('Invalid Azure response');
   } catch (error) {
-    console.error('Azure Translator error:', error.message);
     throw error;
   }
 }
@@ -688,7 +626,7 @@ async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = 800
 
 Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
 
-CRITICAL REQUIREMENTS:
+Requirements:
 1. Preserve the EXACT academic tone, formality level, and professional context
 2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
 3. Keep the natural flow, sentence structure, and readability of the original
@@ -758,7 +696,7 @@ async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = 800
 
 Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
 
-CRITICAL REQUIREMENTS:
+Requirements:
 1. Preserve the EXACT academic tone, formality level, and professional context
 2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
 3. Keep the natural flow, sentence structure, and readability of the original
@@ -806,7 +744,6 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
   return null;
 }
 
-// Mistral API translation for study materials
 async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = 8000) {
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
@@ -821,7 +758,7 @@ async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = 80
 
 Translate the following ${sourceLangName} study material to ${targetLangName}. The translation must:
 
-CRITICAL REQUIREMENTS:
+Requirements:
 1. Preserve the EXACT academic tone, formality level, and professional context
 2. Maintain ALL technical terms, concepts, and exam-relevant vocabulary accurately
 3. Keep the natural flow, sentence structure, and readability of the original
@@ -873,7 +810,7 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
   return null;
 }
 
-// Enhanced study material translation with exam-specific vocabulary
+// Study material translation with exam-specific vocabulary
 function enhanceStudyMaterialTranslation(text, targetLang) {
   const studyTerms = {
     'hi': {
