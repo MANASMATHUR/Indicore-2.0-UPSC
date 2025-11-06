@@ -12,6 +12,13 @@ export const metadata = {
   description: 'AI-powered exam preparation platform with multilingual support, document evaluation, and regional language assistance for PCS, UPSC, and SSC exams',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
