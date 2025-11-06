@@ -104,7 +104,7 @@ const Header = ({
           e.stopPropagation();
           onMenuClick();
         }}
-        className="absolute left-2 sm:left-4 top-1/2 bg-red-500 text-white p-2 sm:p-3 rounded-lg hover:bg-red-600 active:bg-red-700 cursor-pointer z-50 transition-colors duration-200 touch-none select-none"
+        className="absolute left-2 sm:left-4 top-1/2 bg-red-500 text-white p-2 sm:p-3 rounded-lg hover:bg-red-600 active:bg-red-700 cursor-pointer z-50 transition-colors duration-200 select-none touch-manipulation"
         style={{ 
           fontSize: '12px',
           fontWeight: '600',
