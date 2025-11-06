@@ -18,6 +18,8 @@
     "axios": "^1.13.1",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "google-auth-library": "^10.3.0",
@@ -35,7 +37,10 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "socket.io": "^4.8.1",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.3.0",
+    "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^5.0.5"
   },
   "devDependencies": {

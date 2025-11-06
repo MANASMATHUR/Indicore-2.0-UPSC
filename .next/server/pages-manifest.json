@@ -3,8 +3,8 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
-  "/api/ai/chat": "pages/api/ai/chat.js",
-  "/api/chat/[id]": "pages/api/chat/[id].js",
   "/api/ai/speech": "pages/api/ai/speech.js",
-  "/api/ai/translate": "pages/api/ai/translate.js"
+  "/api/chat": "pages/api/chat.js",
+  "/api/ai/chat-stream": "pages/api/ai/chat-stream.js",
+  "/api/chat/[id]": "pages/api/chat/[id].js"
 }
