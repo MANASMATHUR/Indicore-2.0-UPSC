@@ -79,6 +79,3 @@ export default function handler(req, res) {
   return NextAuth(req, res, authOptions);
 }
 
-export const config = {
-  runtime: 'nodejs',
-};
