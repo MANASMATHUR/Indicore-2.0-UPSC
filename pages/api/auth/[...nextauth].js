@@ -1,6 +1,5 @@
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
-import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 export const authOptions = {
@@ -75,7 +74,8 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
-const handler = NextAuth(authOptions);
-
-export default handler;
+export default async function auth(req, res) {
+  const { default: NextAuth } = await import('next-auth/next');
+  return NextAuth(req, res, authOptions);
+}
 
