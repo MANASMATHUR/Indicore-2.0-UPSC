@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
 
 export default async function handler(req, res) {
@@ -19,7 +19,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Prepare category-specific vocabulary focus
     const categoryFocus = {
       general: 'General Studies, administration, governance, and public service',
       history: 'Indian history, world history, ancient, medieval, and modern periods',
@@ -74,13 +73,24 @@ Return a JSON array of flashcards with the exact structure:
 ]
 
 **Quality Guidelines:**
-- Use terms commonly asked in competitive exams
-- Ensure definitions are accurate and exam-relevant
-- Provide clear, practical examples
-- Maintain consistency in difficulty level
-- Focus on terms that help in essay writing and answer writing`;
+- **Exam-Specific Terms**: Prioritize vocabulary that appears frequently in UPSC, PCS, and SSC exam papers
+- **Answer Writing Focus**: Include terms that enhance essay writing, answer writing, and descriptive answers
+- **Precision**: Definitions must be accurate, concise, and exam-relevant (not generic dictionary definitions)
+- **Practical Examples**: Provide examples that demonstrate usage in exam context (e.g., "The concept of federalism is crucial in understanding Indian polity")
+- **Difficulty Alignment**: 
+  - Beginner: Basic administrative and governance terms
+  - Intermediate: Terms from GS papers, polity, economics
+  - Advanced: Specialized terms from optional subjects, complex concepts
+- **Bilingual Accuracy**: Ensure translations are accurate and commonly used in exam contexts
+- **Category Relevance**: Terms must be directly relevant to the selected category (e.g., History terms for history category)
+- **Reproducibility**: Focus on terms that can be reused across multiple questions in the same theme
 
-    // Call Perplexity/Sonar API for vocabulary generation
+**Exam Context Examples:**
+- For Polity: Terms like "judicial review", "constitutional morality", "cooperative federalism"
+- For Economics: Terms like "fiscal deficit", "inclusive growth", "sustainable development"
+- For History: Terms like "renaissance", "nationalism", "decolonization"
+- For Geography: Terms like "biodiversity", "sustainable development", "climate resilience"`;
+
     const response = await axios.post('https://api.perplexity.ai/chat/completions', {
       model: 'sonar-pro',
       messages: [
@@ -107,10 +117,8 @@ Return a JSON array of flashcards with the exact structure:
     if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
       const content = response.data.choices[0].message.content;
       
-      // Try to parse JSON response
       let flashcards;
       try {
-        // Extract JSON from response if it's wrapped in markdown
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           flashcards = JSON.parse(jsonMatch[0]);
@@ -118,7 +126,6 @@ Return a JSON array of flashcards with the exact structure:
           flashcards = JSON.parse(content);
         }
       } catch (parseError) {
-        // Fallback: create sample flashcards
         flashcards = generateFallbackFlashcards(category, sourceLanguage, targetLanguage, count || 10);
       }
       
@@ -140,15 +147,23 @@ Return a JSON array of flashcards with the exact structure:
       const status = error.response.status;
       let errorMessage = 'An error occurred while generating vocabulary.';
 
-      if (status === 401) errorMessage = 'Invalid API key. Please check your Perplexity API key.';
-      else if (status === 429) errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
-      else if (status === 402) errorMessage = 'Insufficient credits. Please add credits to your Perplexity account.';
-      else if (status === 403) errorMessage = 'Access denied. Please verify your API key permissions.';
+      if (status === 401) {
+        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+      } else if (status === 429) {
+        errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
+      } else if (status === 402) {
+        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+      } else if (status === 403) {
+        errorMessage = 'Access denied. Please verify your API key permissions.';
+      }
 
-      return res.status(status).json({ error: errorMessage });
+      return res.status(status).json({ 
+        error: errorMessage,
+        code: status === 401 || status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR',
+        status
+      });
     }
 
-    // Fallback: return sample flashcards
     const fallbackFlashcards = generateFallbackFlashcards(
       req.body.category || 'general',
       req.body.sourceLanguage || 'en',
@@ -167,7 +182,6 @@ Return a JSON array of flashcards with the exact structure:
   }
 }
 
-// Fallback function to generate sample flashcards
 function generateFallbackFlashcards(category, sourceLang, targetLang, count) {
   const sampleTerms = {
     general: [
@@ -209,3 +223,4 @@ function generateFallbackFlashcards(category, sourceLang, targetLang, count) {
 
   return flashcards;
 }
+

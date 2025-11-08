@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Button from '../ui/Button';
+import { Button } from '../ui/Button';
+import Logo from '@/components/Logo';
 import ThemeDropdown from '../ThemeDropdown';
 
 const Header = ({ 
@@ -116,9 +117,9 @@ const Header = ({
         <span className="sm:hidden">☰</span>
       </button>
 
-      <div className="animate-fade-in">
-        <h1 className="text-xl sm:text-2xl font-bold text-red-900 dark:text-slate-100 bg-gradient-to-r from-red-600 to-red-800 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">🎓 Indicore</h1>
-        <p className="text-xs sm:text-sm text-red-700 dark:text-slate-300 font-medium mt-0.5">PCS • UPSC • SSC</p>
+      <div className="animate-fade-in flex flex-col items-center">
+        <Logo variant="light" showText={true} size="sm" />
+        <p className="text-xs sm:text-sm text-red-700 dark:text-slate-300 font-medium mt-1">PCS • UPSC • SSC</p>
       </div>
 
       <div className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 flex gap-1 sm:gap-2">

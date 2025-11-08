@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import User from '@/models/User';
@@ -136,3 +136,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
+

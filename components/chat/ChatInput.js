@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Button from '../ui/Button';
-import Input from '../ui/Input';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import { useToast } from '@/components/ui/ToastProvider';
 
 const ChatInput = ({ 

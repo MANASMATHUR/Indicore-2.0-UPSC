@@ -13,41 +13,28 @@ const Modal = ({
   showCloseButton = true,
   className = ''
 }) => {
-  // Debug logging - log every render
-  useEffect(() => {
-    console.log('[Modal] Render:', { isOpen, title, size, hasOnClose: !!onClose });
-  });
-
   useEffect(() => {
     if (!isOpen) return;
 
-    console.log('[Modal] Setting up event listeners and body scroll lock');
-
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
-        console.log('[Modal] Escape key pressed, closing');
         onClose();
       }
     };
 
-    // Prevent body scroll when modal is open
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', handleEscape);
 
     return () => {
-      console.log('[Modal] Cleaning up event listeners');
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = originalOverflow;
     };
   }, [isOpen, onClose]);
 
   if (!isOpen) {
-    console.log('[Modal] Not rendering - isOpen is false');
     return null;
   }
-
-  console.log('[Modal] Rendering modal content');
 
   const sizes = {
     sm: 'max-w-md',

@@ -1,11 +1,18 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import { withCache } from '@/lib/cache';
 import { contextualLayer } from '@/lib/contextual-layer';
 import examKnowledge from '@/lib/exam-knowledge';
+import { findPresetAnswer } from '@/lib/presetAnswers';
 import axios from 'axios';
 import connectToDatabase from '@/lib/mongodb';
-import PYQ from '@/models/PYQ';
+import Chat from '@/models/Chat';
+import pyqService from '@/lib/pyqService';
+
+const PYQ_PATTERN = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i;
+
+const responseCache = new Map();
+const CACHE_TTL = 10 * 60 * 1000;
 
 function validateChatRequest(req) {
   const { message, model, systemPrompt, language } = req.body;
@@ -56,56 +63,50 @@ function validateChatRequest(req) {
   };
 }
 
-function calculateMaxTokens(message) {
-  const messageLength = message.length;
+function calculateMaxTokens(message, queryType = 'general') {
+  const msgLen = message.length;
+  const wordCount = message.split(/\s+/).length;
   
-  if (messageLength < 100) return 4000;
-  if (messageLength < 500) return 8000;
-  if (messageLength < 2000) return 12000;
-  return 16000;
+  const isComplex = wordCount > 20 || /explain|describe|analyze|compare|discuss|elaborate/i.test(message);
+  const isList = /list|enumerate|name|give.*examples/i.test(message);
+  const isShort = /what is|who is|when|where|define/i.test(message);
+  
+  let base = 1500;
+  
+  if (isShort) {
+    base = 800;
+  } else if (isList) {
+    base = 2000;
+  } else if (isComplex) {
+    base = 4000;
+  } else {
+    base = Math.min(2500, Math.max(1200, msgLen * 3));
+  }
+  
+  if (queryType === 'pyq') {
+    base = Math.max(base, 3000);
+  }
+  
+  return Math.min(base, 8000);
 }
 
 function isResponseComplete(response) {
-  const trimmedResponse = response.trim();
-  if (trimmedResponse.length < 10) return false;
+  const trimmed = response.trim();
+  if (trimmed.length < 10) return false;
   
-  const lastSentence = trimmedResponse.split(/[.!?]/).pop().trim();
-  if (lastSentence.length > 0 && lastSentence.length < 5) return false;
+  const lastSent = trimmed.split(/[.!?]/).pop().trim();
+  if (lastSent.length > 0 && lastSent.length < 5) return false;
   
-  const incompletePatterns = [
-    /-\s*$/,
-    /,\s*$/,
-    /and\s*$/,
-    /or\s*$/,
-    /the\s*$/,
-    /a\s*$/,
-    /an\s*$/,
-    /to\s*$/,
-    /of\s*$/,
-    /in\s*$/,
-    /for\s*$/,
-    /with\s*$/,
-    /by\s*$/,
-    /from\s*$/,
-    /about\s*$/,
-    /through\s*$/,
-    /during\s*$/,
-    /while\s*$/,
-    /because\s*$/,
-    /although\s*$/,
-    /however\s*$/,
-    /therefore\s*$/,
-    /moreover\s*$/,
-    /furthermore\s*$/,
-    /additionally\s*$/,
-    /consequently\s*$/,
-    /meanwhile\s*$/,
-    /otherwise\s*$/,
-    /nevertheless\s*$/,
-    /nonetheless\s*$/
+  const incomplete = [
+    /-\s*$/, /,\s*$/, /and\s*$/, /or\s*$/, /the\s*$/, /a\s*$/, /an\s*$/,
+    /to\s*$/, /of\s*$/, /in\s*$/, /for\s*$/, /with\s*$/, /by\s*$/, /from\s*$/,
+    /about\s*$/, /through\s*$/, /during\s*$/, /while\s*$/, /because\s*$/,
+    /although\s*$/, /however\s*$/, /therefore\s*$/, /moreover\s*$/, /furthermore\s*$/,
+    /additionally\s*$/, /consequently\s*$/, /meanwhile\s*$/, /otherwise\s*$/,
+    /nevertheless\s*$/, /nonetheless\s*$/
   ];
   
-  return !incompletePatterns.some(pattern => pattern.test(trimmedResponse));
+  return !incomplete.some(p => p.test(trimmed));
 }
 
 async function chatHandler(req, res) {
@@ -113,7 +114,6 @@ async function chatHandler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
 
-  // Validate API key
   if (!process.env.PERPLEXITY_API_KEY) {
     console.error('PERPLEXITY_API_KEY is not configured');
     return res.status(500).json({ 
@@ -173,6 +173,25 @@ async function chatHandler(req, res) {
       });
     }
 
+    const cacheKey = `${message.trim()}-${language || 'en'}-${model || 'sonar-pro'}`;
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.status(200).json({
+        response: cached.response,
+        source: 'cache',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const presetAnswer = findPresetAnswer(message);
+    if (presetAnswer) {
+      return res.status(200).json({
+        response: presetAnswer,
+        source: 'preset',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     if (quickResponses) {
       const quickResponse = contextualLayer.getQuickResponse(message);
       if (quickResponse) {
@@ -183,188 +202,21 @@ async function chatHandler(req, res) {
       }
     }
 
-    let finalSystemPrompt = systemPrompt || `You are Indicore, an AI-powered exam preparation assistant specialized in PCS, UPSC, and SSC exams. You help students with multilingual study materials, answer writing practice, document evaluation, and regional language support.
+    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
 
-EXAM EXPERTISE:
-- UPSC Civil Services (Prelims, Mains, Interview)
-- PCS (Provincial Civil Services) 
-- SSC (Staff Selection Commission)
-- State-level competitive exams
-- Multilingual exam preparation
-- Answer writing techniques
-- Current affairs and general knowledge
-- Subject-specific guidance
+CRITICAL REQUIREMENTS:
+1. ALWAYS write complete, comprehensive answers. Never leave sentences incomplete or cut off mid-thought.
+2. Write in full, well-formed sentences. Each sentence must have a subject, verb, and complete meaning.
+3. Provide thorough, detailed responses that fully address the question asked.
+4. Use proper paragraph structure with clear topic sentences and supporting details.
+5. Ensure your response has a logical flow: introduction, main content, and conclusion where appropriate.
+6. Use bullet points only when listing multiple items. Otherwise, write in paragraph form.
+7. Avoid markdown headers (###) or excessive bold text. Keep formatting simple and natural.
+8. Never use placeholders, incomplete phrases, or cut-off words.
+9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
+10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
 
-UPSC EXAM STRUCTURE:
-- Prelims: 2 papers (GS Paper I: 100 questions, 200 marks; GS Paper II/CSAT: 80 questions, 200 marks)
-- Mains: 9 papers (2 language papers, 1 essay, 4 GS papers, 2 optional papers) - Total 1750 marks
-- Interview: 275 marks, 30-45 minutes duration
-
-KEY SUBJECTS & WEIGHTAGE:
-- Polity: High weightage (15-20 questions in Prelims) - Constitution, Fundamental Rights, Parliament, Judiciary
-- History: High weightage (15-20 questions) - Ancient, Medieval, Modern periods, Freedom Struggle
-- Geography: High weightage (15-20 questions) - Physical, Human, World Geography
-- Economics: High weightage (15-20 questions) - Micro/Macro economics, Indian Economy
-- Science & Technology: Medium weightage (10-15 questions) - Recent developments, Space, IT
-- Environment: High weightage (10-15 questions) - Biodiversity, Climate Change, Conservation
-
-ANSWER WRITING FRAMEWORKS:
-- 150 words: Introduction (20-30 words) → Main Body (100-120 words) → Conclusion (20-30 words)
-- 250 words: Introduction (40-50 words) → Main Body (150-180 words) → Conclusion (40-50 words)
-- Essay: Introduction → Body (3-4 paragraphs) → Conclusion
-
-CRITICAL RESPONSE REQUIREMENTS - BUILD TRUST THROUGH REASONING:
-- ALWAYS provide step-by-step reasoning for your answers
-- Explain WHY your answer is correct, not just WHAT the answer is
-- Show your thought process and logical reasoning
-- Break down complex topics into understandable parts
-- Provide context and background information
-- Use "Let me explain this step by step..." or "Here's my reasoning..."
-- Include relevant examples and analogies to clarify concepts
-- Acknowledge when there might be multiple perspectives
-- Show confidence in your knowledge while being humble about limitations
-
-SAFETY AND RELIABILITY REQUIREMENTS:
-- NEVER provide information that could be harmful, misleading, or incorrect
-- ALWAYS prioritize student safety and academic integrity
-- NEVER encourage cheating, plagiarism, or academic dishonesty
-- ALWAYS promote ethical study practices and honest preparation
-- NEVER provide answers to specific exam questions or leaked papers
-- ALWAYS encourage understanding over memorization
-- NEVER provide medical, legal, or financial advice beyond exam preparation
-- ALWAYS maintain professional and respectful tone
-- NEVER share personal information or violate privacy
-- ALWAYS focus on educational value and learning outcomes
-
-CONTENT SAFETY GUIDELINES:
-- Avoid controversial political statements or biased opinions
-- Present balanced views on sensitive topics
-- Focus on factual, exam-relevant information
-- Avoid inflammatory or divisive content
-- Maintain neutrality on political matters
-- Present historical facts objectively
-- Avoid speculation or unverified claims
-- Focus on established academic knowledge
-- Present multiple perspectives when applicable
-- Maintain educational focus at all times
-
-EXAM-SPECIFIC SAFETY MEASURES:
-- NEVER provide specific answers to current exam questions
-- NEVER share leaked papers or confidential exam materials
-- ALWAYS encourage ethical preparation methods
-- NEVER provide shortcuts that compromise learning
-- ALWAYS promote understanding and critical thinking
-- NEVER encourage rote memorization without comprehension
-- ALWAYS provide context and reasoning for answers
-- NEVER provide information that could be considered cheating
-- ALWAYS maintain academic integrity standards
-- NEVER compromise the fairness of competitive exams
-
-QUALITY ASSURANCE REQUIREMENTS:
-- Double-check all facts before presenting them
-- Verify information against multiple reliable sources
-- Clearly distinguish between facts and opinions
-- Acknowledge limitations and uncertainties
-- Provide disclaimers when appropriate
-- Maintain consistency in information presentation
-- Ensure accuracy of constitutional and legal references
-- Verify current affairs information with official sources
-- Cross-reference historical facts with established sources
-- Maintain high standards of academic rigor
-
-EXAM-ORIENTED RELIABILITY REQUIREMENTS:
-- ALWAYS prioritize accuracy over speed - better to be thorough than quick
-- Cross-reference information with official sources and established facts
-- When uncertain about specific details, clearly state your confidence level
-- Provide multiple perspectives when applicable (especially for current affairs)
-- Include recent developments and updates relevant to exam patterns
-- Focus on exam-specific insights, not general knowledge
-- Highlight key points that frequently appear in UPSC/PCS/SSC exams
-- Provide specific examples from previous year questions when relevant
-- Include constitutional articles, acts, and official terminology accurately
-- Mention relevant committees, reports, and government initiatives
-
-ACCURACY AND RELIABILITY STANDARDS:
-- Double-check facts before stating them as definitive
-- Use phrases like "According to the Constitution..." or "As per official data..."
-- When citing specific articles or sections, be precise (e.g., "Article 14 of the Constitution")
-- For current affairs, mention the timeframe (e.g., "As of 2024..." or "Recently announced...")
-- Distinguish between facts, opinions, and interpretations
-- If information might be outdated, acknowledge it and suggest verification
-- For controversial topics, present balanced views with proper context
-- Always prioritize official government sources and constitutional provisions
-
-EXAM-SPECIFIC GUIDELINES:
-- Structure answers according to UPSC answer writing format when applicable
-- Include relevant keywords that examiners look for
-- Provide concise definitions followed by detailed explanations
-- Connect topics to broader themes and interlinkages
-- Mention practical applications and real-world examples
-- Include comparative analysis when relevant (e.g., Indian vs other countries)
-- Highlight implications for governance, policy, and administration
-- Provide historical context for contemporary issues
-- Include statistical data and facts when available
-- Connect static topics to current developments
-
-REASONING PATTERNS TO USE:
-1. "Let me break this down for you..."
-2. "Here's why this is important..."
-3. "The reasoning behind this is..."
-4. "Let me explain this step by step..."
-5. "This connects to the broader concept of..."
-6. "To understand this better, consider..."
-7. "The key insight here is..."
-8. "This is significant because..."
-
-RESPONSE STRUCTURE FOR TRUST-BUILDING:
-- Start with acknowledging the question and showing understanding
-- Provide clear reasoning and step-by-step explanation
-- Include relevant examples and context
-- Explain the significance and implications
-- End with actionable insights or next steps
-- Use confident but humble language
-
-CRITICAL RESPONSE REQUIREMENTS:
-- Write complete, well-formed sentences
-- Give complete answers that cover the question properly
-- Use proper grammar and punctuation
-- Structure your response logically with clear paragraphs
-- NEVER include reference numbers like [1], [2], [3], [7] or any citations
-- NEVER include source references or footnotes
-- NEVER include bracketed numbers or academic citations
-- Always complete your thoughts and sentences fully
-- Write in a helpful, conversational tone
-- Focus on being educational and exam-focused
-- Remove any citation patterns from your responses
-- Provide exam-specific insights and strategies
-- Include relevant examples and case studies
-- Reference important acts, policies, and recent developments
-
-RESPONSE FORMAT:
-- Start with acknowledging the question and showing understanding
-- Provide detailed explanations with step-by-step reasoning
-- Include examples, analogies, and context
-- End with actionable insights or next steps
-- Ensure every sentence is complete and meaningful
-- Keep responses clean without any reference numbers
-- Include practical exam tips when relevant
-- Structure answers according to UPSC requirements when applicable
-
-FORMATTING REQUIREMENTS:
-- Use compact, uniform formatting with minimal spacing
-- Write concise paragraphs without excessive blank lines
-- Keep lists tight with minimal spacing between items
-- Use single line breaks between paragraphs, not multiple blank lines
-- Avoid unnecessary spacing in lists, headings, and content
-- Format responses to be visually uniform and easy to read
-- Maintain consistent spacing throughout the response
-- Do not add extra blank lines or excessive whitespace
-
-EXAMPLE OF GOOD RESPONSE WITH REASONING:
-"Great question! Here's a clear explanation for exam prep. According to Article 1 of the Indian Constitution, India is called a 'Union of States' rather than a 'Federation of States'. Here's why: The Indian federal structure is unique because it combines federal and unitary features. Federal features include: (1) Division of powers between center and states (List I, II, III in Schedule 7), (2) Written constitution with supremacy, (3) Independent judiciary (Articles 124-147), and (4) Bicameral legislature at center. Unitary features include: (1) Single citizenship (Article 5-11), (2) Strong center with residuary powers (Article 248), (3) Emergency provisions (Articles 352-360), and (4) All-India services. This is significant for UPSC because: (1) It's frequently asked in Prelims (2019, 2021), (2) Important for Mains GS Paper 2, and (3) Relevant for understanding center-state relations. The framers adopted this model because they learned from the failures of the Articles of Confederation in the US and adapted federalism to India's diverse needs. This understanding is crucial for questions on cooperative federalism, fiscal federalism, and recent developments like GST implementation."
-
-EXAMPLE OF BAD RESPONSE:
-"Indian federalism is quasi-federal. It has federal and unitary features. This is important for exams."`;
+Write naturally and conversationally, but ensure every response is complete, accurate, and comprehensive. Do not include citations or reference numbers.`;
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -377,8 +229,9 @@ EXAMPLE OF BAD RESPONSE:
       finalSystemPrompt += ` Your response MUST be entirely in ${langName}. Do not use any other language. Ensure perfect grammar and natural flow in ${langName}.`;
     }
 
-    const contextualEnhancement = contextualLayer.generateContextualPrompt(message);
-    const examContext = examKnowledge.generateContextualPrompt(message);
+    const needsContext = !/(pyq|previous year)/i.test(message) && message.length > 30;
+    const contextualEnhancement = needsContext ? contextualLayer.generateContextualPrompt(message) : '';
+    const examContext = needsContext ? examKnowledge.generateContextualPrompt(message) : '';
     
     function buildPyqPrompt(userMsg) {
       const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
@@ -406,7 +259,7 @@ EXAMPLE OF BAD RESPONSE:
       else if (/upsc/i.test(userMsg)) examCodeDetected = 'UPSC';
       else if (/pcs/i.test(userMsg)) examCodeDetected = 'PCS';
 
-      return `\n\nSTRICT PYQ LISTING MODE - ENHANCED FORMATTING:\n- The user is asking for previous year questions (PYQs).\n- Return ONLY a well-formatted list of PYQs without explanations or advice.\n\nFORMATTING REQUIREMENTS:\n1. Start with header: "## 📚 Previous Year Questions (${examCodeDetected})"\n2. If theme provided, add: "**Topic:** ${theme}"\n3. If year range provided, add: "**Year Range:** ${fromYear || 'All'} to ${toYear || 'Present'}"\n4. Group questions by year using: "### 📅 {YEAR} ({count} questions)"\n5. Format each question as: "{number}. [{Paper}] {Question Text}"\n6. Add verification status: Add "✅" for verified, "⚠️" for unverified\n7. End with summary section: "### 📊 Summary" with total count\n\nCONTENT REQUIREMENTS:\n- Group by year (most recent first), NOT by decade\n- Include paper name if known (e.g., "GS Paper 1", "Mains GS-3", "Prelims")\n- Keep question text concise but complete (max 200 characters)\n- Do NOT fabricate questions; if uncertain, mark as "(unverified)" or add ⚠️\n- If theme is provided (${theme || 'none'}), filter strictly to that theme\n- ${yearLine}\n- Exam focus: ${examCodeDetected} by default\n- Prioritize verified/official questions when available\n\nOUTPUT EXAMPLE:\n## 📚 Previous Year Questions (UPSC)\n**Topic:** Indian Constitution\n**Year Range:** 2020 to 2024\n\n### 📅 2024 (3 questions)\n1. [GS Paper 2] What is the significance of Article 356? ✅\n2. [Prelims] Which article deals with fundamental rights? ✅\n\n### 📅 2023 (2 questions)\n1. [Mains GS-2] Explain the federal structure of India. ✅\n\n---\n\n### 📊 Summary\n**Total:** 5 questions\n✅ All verified from official sources`;
+      return `\n\nPYQ LISTING MODE:\nReturn only formatted PYQ list, no explanations. Use simple formatting without markdown headers or excessive bold text.\n\nFormat:\n1. Start with: "Previous Year Questions (${examCodeDetected})"\n2. Topic: "Topic: ${theme}" (if provided)\n3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)\n4. Group by year: "Year {YEAR} ({count} questions)"\n5. Question format: "{number}. [{Paper}] {Question Text}"\n6. Status: ✅ verified, ⚠️ unverified\n7. Summary: "Summary" with total count\n\nRequirements:\n- Group by year (newest first)\n- Include paper name if known\n- Keep questions under 200 chars\n- Mark uncertain as "(unverified)" or ⚠️\n- Filter by theme if provided: ${theme || 'none'}\n- ${yearLine}\n- Exam: ${examCodeDetected}\n- Prioritize verified questions\n- Use plain text formatting, avoid markdown headers (##, ###) and excessive bold (**)`;
     }
     function detectExamCode(userMsg, lang) {
       if (/tnpsc|tamil nadu psc/i.test(userMsg) || lang === 'ta') return 'TNPSC';
@@ -437,204 +290,51 @@ EXAMPLE OF BAD RESPONSE:
       const isPyq = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
       if (!isPyq) return null;
       
-      try {
-        await connectToDatabase();
-        const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
-        const theme = themeMatch ? themeMatch[1].trim() : '';
-        let fromYear = null, toYear = null;
-        const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
-        const decade = userMsg.match(/(\d{4})s/i);
-        if (range1) {
-          fromYear = parseInt(range1[1], 10);
-          toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
-        } else if (decade) {
-          fromYear = parseInt(decade[1], 10);
-          toYear = fromYear + 9;
-        }
-        const examCode = detectExamCode(userMsg, language);
-        const filter = { exam: new RegExp(`^${examCode}$`, 'i') };
-        
-        filter.year = {};
-        filter.year.$gte = fromYear || 1990;
-        filter.year.$lte = toYear || new Date().getFullYear();
-        
-        let limit = 500;
-        if (!theme && !fromYear && !toYear) {
-          limit = 30;
-        } else if (theme && !fromYear && !toYear) {
-          limit = 50;
-        } else if (fromYear || toYear) {
-          limit = 100;
-        }
-        
-        let items = [];
-        try {
-          if (theme) {
-            const query = PYQ.find({
-              ...filter,
-              $or: [
-                { $text: { $search: theme } },
-                { topicTags: { $regex: theme, $options: 'i' } },
-                { question: { $regex: theme, $options: 'i' } }
-              ]
-            }).sort({ year: -1 }).limit(limit);
-            items = await query.lean();
-          } else {
-            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
-            items = await query.lean();
-          }
-        } catch (dbError) {
-          console.warn('PYQ database query error:', dbError.message);
-          if (theme) {
-            const query = PYQ.find({
-              ...filter,
-              $or: [
-                { topicTags: { $regex: theme, $options: 'i' } },
-                { question: { $regex: theme, $options: 'i' } }
-              ]
-            }).sort({ year: -1 }).limit(limit);
-            items = await query.lean();
-          } else {
-            const query = PYQ.find(filter).sort({ year: -1 }).limit(limit);
-            items = await query.lean();
-          }
-        }
-        
-        if (!items.length) return null;
-      
-      // Sort items: verified first, then unverified (both sorted by year descending)
-      const sortedItems = items.sort((a, b) => {
-        const aVerified = a.verified === true || (a.sourceLink && a.sourceLink.includes('.gov.in'));
-        const bVerified = b.verified === true || (b.sourceLink && b.sourceLink.includes('.gov.in'));
-        if (aVerified !== bVerified) return bVerified ? 1 : -1;
-        return (b.year || 0) - (a.year || 0);
-      });
-      
-      const verifiedCount = sortedItems.filter(q => q.verified === true || (q.sourceLink && q.sourceLink.includes('.gov.in'))).length;
-      const unverifiedCount = sortedItems.length - verifiedCount;
-      
-      const byYear = new Map();
-      for (const q of sortedItems) {
-        const year = q.year || 0;
-        if (year < 1990 || year > new Date().getFullYear()) continue;
-        
-        if (!byYear.has(year)) byYear.set(year, []);
-        
-        const isUnverified = q.verified === false && (!q.sourceLink || !q.sourceLink.includes('.gov.in'));
-        const topicTags = q.topicTags && q.topicTags.length > 0 ? q.topicTags.join(', ') : null;
-        
-        let questionText = q.question || '';
-        if (questionText.length > 150) {
-          questionText = questionText.substring(0, 147) + '...';
-        }
-        
-        let label = `[${q.paper || 'General'}] ${questionText}`;
-        
-        if (topicTags && !questionText.toLowerCase().includes(topicTags.toLowerCase().substring(0, 20))) {
-          label += ` (${topicTags})`;
-        }
-        
-        if (isUnverified) {
-          label += ' ⚠️';
-        } else if (q.sourceLink && q.sourceLink.includes('.gov.in')) {
-          label += ' ✅';
-        }
-        
-        byYear.get(year).push(label);
-      }
-      
-      const lines = [];
-      lines.push(`## 📚 Previous Year Questions (${examCode})`);
-      if (theme) {
-        lines.push(`**Topic:** ${theme}`);
-      }
-      if (fromYear || toYear) {
-        lines.push(`**Year Range:** ${fromYear || 'All'} to ${toYear || 'Present'}`);
-      }
-      lines.push('');
-      
-      const sortedYears = Array.from(byYear.keys()).sort((a, b) => b - a);
-      
-      for (const year of sortedYears) {
-        const yearQuestions = byYear.get(year);
-        if (yearQuestions.length === 0) continue;
-        
-        lines.push(`### 📅 ${year} (${yearQuestions.length} question${yearQuestions.length > 1 ? 's' : ''})`);
-        lines.push('');
-        yearQuestions.forEach((q, idx) => {
-          lines.push(`${idx + 1}. ${q}`);
-        });
-        lines.push('');
-      }
-      
-      lines.push('---');
-      lines.push('');
-      if (verifiedCount > 0 && unverifiedCount > 0) {
-        lines.push(`### 📊 Summary`);
-        lines.push(`**Total:** ${sortedItems.length} questions`);
-        lines.push(`- ✅ Verified: ${verifiedCount} (from official sources)`);
-        lines.push(`- ⚠️ Unverified: ${unverifiedCount} (please verify before use)`);
-      } else if (verifiedCount > 0) {
-        lines.push(`### 📊 Summary`);
-        lines.push(`**Total:** ${sortedItems.length} questions`);
-        lines.push(`✅ All verified from official sources`);
-      } else {
-        lines.push(`### 📊 Summary`);
-        lines.push(`**Total:** ${sortedItems.length} questions`);
-        lines.push(`⚠️ All unverified - please verify before use`);
-      }
-      lines.push('');
-      
-      if (sortedItems.length >= limit) {
-        lines.push('💡 **Tips for Better Results:**');
-        lines.push('- Try: `"PYQ on [specific topic]"` for focused questions');
-        lines.push('- Try: `"PYQ from 2020 to 2024"` for year-specific queries');
-        lines.push('- Try: `"PYQ about [subject]"` for subject-wise questions');
-        lines.push('- Combine filters: `"PYQ on Geography from 2020 to 2024"`');
-        lines.push('');
-      }
-      
-      return lines.join('\n');
-      } catch (error) {
-        console.error('PYQ database query error:', error.message);
-        return null;
-      }
+      return await pyqService.search(userMsg, null, language);
     }
     const pyqDb = await tryPyqFromDb(message);
     if (pyqDb) {
       return res.status(200).json({ response: pyqDb, source: 'pyq-db' });
     }
 
+    const contextOptimizer = (await import('@/lib/context-optimizer')).default;
+    
+    if (!contextOptimizer.shouldUseLLM(message)) {
+      const quickResponse = contextualLayer.getQuickResponse(message);
+      if (quickResponse && !quickResponse.requiresAI) {
+        return res.status(200).json({
+          response: quickResponse.response || quickResponse.quickResponse,
+          source: 'quick-response',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
     const pyqPrompt = buildPyqPrompt(message);
-    const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext + (pyqPrompt || '');
+    const hasContext = contextualEnhancement || examContext;
+    const optimizedPrompt = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, !!hasContext, false);
+    
+    let enhancedSystemPrompt = optimizedPrompt;
+    if (pyqPrompt) {
+      enhancedSystemPrompt += pyqPrompt;
+    } else if (contextualEnhancement && needsContext) {
+      enhancedSystemPrompt += contextualEnhancement.substring(0, 300);
+    }
 
-    const primaryReq = axios.post('https://api.perplexity.ai/chat/completions', {
-      model: model || 'sonar-pro',
+    const optimalModel = contextOptimizer.selectOptimalModel(message, !!hasContext);
+    const maxTokens = Math.min(
+      Math.max(calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general'), 1500),
+      pyqPrompt ? 4000 : 3000
+    );
+
+    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
+      model: optimalModel === 'sonar' ? 'sonar' : (model || 'sonar-pro'),
       messages: [
         { role: 'system', content: enhancedSystemPrompt },
         { role: 'user', content: message }
       ],
-      max_tokens: calculateMaxTokens(message),
-      temperature: pyqPrompt ? 0.2 : 0.5,
-      top_p: 0.9,
-      stream: false
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 60000
-    });
-
-    const fastReq = axios.post('https://api.perplexity.ai/chat/completions', {
-      model: 'sonar',
-      messages: [
-        { role: 'system', content: enhancedSystemPrompt },
-        { role: 'user', content: message }
-      ],
-      max_tokens: calculateMaxTokens(message),
-      temperature: pyqPrompt ? 0.2 : 0.5,
+      max_tokens: maxTokens,
+      temperature: pyqPrompt ? 0.2 : 0.7,
       top_p: 0.9,
       stream: false
     }, {
@@ -646,145 +346,33 @@ EXAMPLE OF BAD RESPONSE:
       timeout: 45000
     });
 
-    let response;
-    try {
-      response = await Promise.any([primaryReq, fastReq]);
-    } catch (aggregateError) {
-      const errors = aggregateError.errors || [];
-      const errorMessages = errors.map(e => {
-        const msg = e.message || e.response?.data?.error?.message || String(e);
-        const status = e.response?.status;
-        const code = e.code || e.response?.status;
-        return `${msg} (status: ${status || code || 'N/A'})`;
-      }).join('; ');
-      
-      console.error('Chat API Error: All parallel API calls failed, trying fallback', {
-        primaryError: errors[0]?.message || errors[0]?.response?.status || errors[0]?.code,
-        primaryStatus: errors[0]?.response?.status,
-        primaryResponse: errors[0]?.response?.data,
-        fallbackError: errors[1]?.message || errors[1]?.response?.status || errors[1]?.code,
-        fallbackStatus: errors[1]?.response?.status,
-        fallbackResponse: errors[1]?.response?.data,
-        errorDetails: errorMessages
-      });
-      
-      try {
-        const fallbackResponse = await axios.post('https://api.perplexity.ai/chat/completions', {
-          model: 'sonar',
-          messages: [
-            { role: 'system', content: enhancedSystemPrompt },
-            { role: 'user', content: message }
-          ],
-          max_tokens: Math.min(calculateMaxTokens(message), 4000),
-          temperature: 0.7,
-          top_p: 0.9,
-          stream: false
-        }, {
-          headers: {
-            'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          timeout: 30000
-        });
-        
-        response = fallbackResponse;
-      } catch (fallbackError) {
-        const fallbackMsg = fallbackError.message || fallbackError.response?.data?.error?.message || String(fallbackError);
-        console.error('Chat API Error: Fallback request also failed', {
-          error: fallbackMsg,
-          status: fallbackError.response?.status,
-          statusText: fallbackError.response?.statusText,
-          responseData: fallbackError.response?.data,
-          code: fallbackError.code,
-          message: fallbackError.message
-        });
-        
-        return res.status(500).json({ 
-          error: 'AI service temporarily unavailable. Please try again in a moment.',
-          details: process.env.NODE_ENV === 'development' ? `${errorMessages}; Fallback: ${fallbackMsg}` : undefined
-        });
-      }
-    }
-
     if (response && response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
       let aiResponse = response.data.choices[0].message.content;
       aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
+      aiResponse = aiResponse.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help\s+[^.]*\./gi, '');
+      aiResponse = aiResponse.replace(/\bI'm\s+to\s+support\s+[^.]*\./gi, '');
+      aiResponse = aiResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
+      aiResponse = aiResponse.replace(/\b(requirements?|structure?|response?|answer?|following|as follows):\s*$/gmi, '');
       
-      if (!isResponseComplete(aiResponse)) {
-        const retryPrompt = `${finalSystemPrompt}\n\nIMPORTANT: The previous response was incomplete. Please provide a complete, well-structured answer that fully addresses the user's question. Ensure your response ends with a proper conclusion.`;
-        
-        try {
-          const retryResponse = await axios.post('https://api.perplexity.ai/chat/completions', {
-            model: model || 'sonar-pro',
-            messages: [
-              { role: 'system', content: retryPrompt },
-              { role: 'user', content: message }
-            ],
-            max_tokens: calculateMaxTokens(message),
-            temperature: 0.5,
-            top_p: 0.9,
-            stream: false
-          }, {
-            headers: {
-              'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-              timeout: 60000
-          });
-          
-          if (retryResponse.data.choices && retryResponse.data.choices[0] && retryResponse.data.choices[0].message) {
-            aiResponse = retryResponse.data.choices[0].message.content;
-            aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
-          }
-        } catch (retryError) {
+      const trimmed = aiResponse.trim();
+      if (trimmed.endsWith('-') || trimmed.endsWith(',') || trimmed.match(/^\w+\s+and\s*$/i) || trimmed.match(/^\w+\s+or\s*$/i)) {
+        const sentences = trimmed.split(/[.!?]/).filter(s => s.trim());
+        if (sentences.length > 0) {
+          aiResponse = sentences.slice(0, -1).join('. ') + '.';
         }
       }
       
-      if (pyqPrompt) {
-        try {
-          await connectToDatabase();
-          const examCode = (function detectExam(userMsg) {
-            if (/tnpsc/i.test(userMsg)) return 'TNPSC';
-            if (/bpsc/i.test(userMsg)) return 'BPSC';
-            if (/mpsc/i.test(userMsg)) return 'MPSC';
-            if (/uppsc/i.test(userMsg)) return 'UPPSC';
-            if (/wbpsc/i.test(userMsg)) return 'WBPSC';
-            if (/gpsc/i.test(userMsg)) return 'GPSC';
-            if (/ppsc/i.test(userMsg)) return 'PPSC';
-            if (/rpsc/i.test(userMsg)) return 'RPSC';
-            if (/mppsc/i.test(userMsg)) return 'MPPSC';
-            if (/hpsc/i.test(userMsg)) return 'HPSC';
-            if (/jkpsc/i.test(userMsg)) return 'JKPSC';
-            if (/upsc/i.test(userMsg)) return 'UPSC';
-            if (/pcs/i.test(userMsg)) return 'PCS';
-            return 'UPSC';
-          })(message);
-
-          const themeMatch2 = message.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
-          const theme2 = themeMatch2 ? themeMatch2[1].trim() : '';
-
-          const lines = aiResponse.split(/\r?\n/);
-          const candidates = [];
-          for (const raw of lines) {
-            const line = raw.trim().replace(/^[-•]\s*/, '');
-            if (!line) continue;
-            const yMatch = line.match(/\b(19\d{2}|20\d{2})\b/);
-            const year = yMatch ? parseInt(yMatch[1], 10) : null;
-            let question = line;
-            const split = line.split('–');
-            if (split.length >= 2) {
-              question = split[split.length - 1].trim();
-            }
-            if (question.length < 8) continue;
-            candidates.push({ exam: examCode, level: '', paper: '', year, question, topicTags: theme2 ? [theme2] : [], sourceLink: '', verified: false });
-            if (candidates.length >= 400) break;
+      responseCache.set(cacheKey, {
+        response: aiResponse,
+        timestamp: Date.now()
+          });
+          
+      if (responseCache.size > 500) {
+        const now = Date.now();
+        for (const [key, value] of responseCache.entries()) {
+          if (now - value.timestamp > CACHE_TTL) {
+            responseCache.delete(key);
           }
-          if (candidates.length) {
-            await PYQ.insertMany(candidates, { ordered: false });
-          }
-        } catch (e) {
         }
       }
       
@@ -810,14 +398,14 @@ EXAMPLE OF BAD RESPONSE:
       let errorCode = 'API_ERROR';
 
       if (status === 401) {
-        errorMessage = 'Invalid API key. Please check your Perplexity API key.';
-        errorCode = 'INVALID_API_KEY';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorCode = 'API_CREDITS_EXHAUSTED';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
         errorCode = 'RATE_LIMIT_EXCEEDED';
       } else if (status === 402) {
-        errorMessage = 'Insufficient credits. Please add credits to your Perplexity account.';
-        errorCode = 'INSUFFICIENT_CREDITS';
+        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorCode = 'API_CREDITS_EXHAUSTED';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
         errorCode = 'ACCESS_DENIED';
@@ -840,3 +428,4 @@ EXAMPLE OF BAD RESPONSE:
 
 // Export with caching middleware
 export default withCache(chatHandler);
+

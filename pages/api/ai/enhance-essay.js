@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
 
 export default async function handler(req, res) {
@@ -118,14 +118,24 @@ Please provide the enhanced essay in ${targetLangName} only.`
       const status = error.response.status;
       let errorMessage = 'An error occurred while enhancing your essay.';
 
-      if (status === 401) errorMessage = 'Invalid API key. Please check your Perplexity API key.';
-      else if (status === 429) errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
-      else if (status === 402) errorMessage = 'Insufficient credits. Please add credits to your Perplexity account.';
-      else if (status === 403) errorMessage = 'Access denied. Please verify your API key permissions.';
+      if (status === 401) {
+        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+      } else if (status === 429) {
+        errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
+      } else if (status === 402) {
+        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+      } else if (status === 403) {
+        errorMessage = 'Access denied. Please verify your API key permissions.';
+      }
 
-      return res.status(status).json({ error: errorMessage });
+      return res.status(status).json({ 
+        error: errorMessage,
+        code: status === 401 || status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR',
+        status
+      });
     }
 
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
+

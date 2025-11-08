@@ -1,4 +1,97 @@
-import NextAuth from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import connectToDatabase from '@/lib/mongodb';
+import User from '@/models/User';
+import { createRequire } from 'module';
 
-export default NextAuth(authOptions);
+const require = createRequire(import.meta.url);
+
+const NextAuthModule = require('next-auth');
+const NextAuth = NextAuthModule.default || NextAuthModule;
+
+const GoogleProviderModule = require('next-auth/providers/google');
+const GoogleProvider = GoogleProviderModule.default || GoogleProviderModule;
+
+if (typeof NextAuth !== 'function') {
+  throw new Error('NextAuth is not a function');
+}
+
+if (typeof GoogleProvider !== 'function') {
+  throw new Error('GoogleProvider is not a function');
+}
+
+export const authOptions = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
+  ],
+  pages: {
+    signIn: '/',
+  },
+  callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider === 'google') {
+        try {
+          await connectToDatabase();
+          const existingUser = await User.findOne({ email: user.email });
+          
+          if (!existingUser) {
+            await User.create({
+              googleId: user.id,
+              name: user.name,
+              email: user.email,
+              picture: user.picture,
+            });
+          } else {
+            await User.findOneAndUpdate(
+              { email: user.email },
+              {
+                googleId: user.id,
+                name: user.name,
+                picture: user.picture,
+                lastLogin: new Date(),
+              }
+            );
+          }
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+      return true;
+    },
+    async session({ session }) {
+      if (session?.user?.email) {
+        try {
+          await connectToDatabase();
+          const user = await User.findOne({ email: session.user.email });
+          if (user) {
+            session.user.id = user._id.toString();
+            session.user.googleId = user.googleId;
+            session.user.picture = user.picture;
+          }
+        } catch (error) {
+        }
+      }
+      return session;
+    },
+    async jwt({ token, user, account }) {
+      if (account && user) {
+        token.accessToken = account.access_token;
+        token.id = user.id;
+      }
+      return token;
+    },
+  },
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60,
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+const handler = (req, res) => {
+  return NextAuth(req, res, authOptions);
+};
+
+export default handler;

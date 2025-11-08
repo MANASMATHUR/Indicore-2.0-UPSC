@@ -175,3 +175,4 @@ function escapeXml(text) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 }
+

@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 
@@ -23,7 +23,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Chat ID is required' });
     }
 
-    // Find the chat and verify ownership
     const chat = await Chat.findOne({ 
       _id: id, 
       userEmail: session.user.email 

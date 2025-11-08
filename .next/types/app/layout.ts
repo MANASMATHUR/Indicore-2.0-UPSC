@@ -1,4 +1,4 @@
-// File: C:\Indicore for PCS\app\layout.js
+// File: C:\Users\manas\Desktop\Indicore(UPSC)\app\layout.js
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

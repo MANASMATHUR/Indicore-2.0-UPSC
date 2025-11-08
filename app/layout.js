@@ -8,8 +8,8 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Indicore - PCS/UPSC/SSC',
-  description: 'AI-powered exam preparation platform with multilingual support, document evaluation, and regional language assistance for PCS, UPSC, and SSC exams',
+  title: 'Indicore - AI-Powered Exam Preparation for UPSC, PCS & SSC',
+  description: 'Specialized AI assistant for competitive exams with PYQ database, exam-specific knowledge, multilingual support, and comprehensive study tools. Better than ChatGPT, Gemini, or Perplexity for exam preparation.',
 };
 
 export default function RootLayout({ children }) {

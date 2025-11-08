@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 
@@ -24,7 +24,6 @@ export default async function handler(req, res) {
     await connectToDatabase();
 
     if (req.method === 'GET') {
-      // Get specific chat
       const chat = await Chat.findOne({ 
         _id: id, 
         userEmail: session.user.email 
@@ -38,7 +37,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      // Update chat (rename, settings, add assistant message, etc.)
       const { name, settings, message, language = 'en' } = req.body;
       
       const updateData = {};
@@ -55,7 +53,6 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Chat not found' });
       }
 
-      // If adding a message (AI response)
       if (message) {
         chat.messages.push({
           sender: 'assistant',

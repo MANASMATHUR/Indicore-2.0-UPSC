@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/ToastProvider';
 import { supportedLanguages } from '@/lib/messageUtils';
 
@@ -17,7 +17,14 @@ const essayTypes = [
   { code: 'international', name: 'International Relations', description: 'Global affairs and diplomacy' }
 ];
 
-export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
+export default function EssayEnhancement({ 
+  isOpen, 
+  onClose, 
+  onEnhance, 
+  preloadedEssay = null, 
+  selectedTopic = null,
+  isLoadingEssay = false 
+}) {
   const { showToast } = useToast();
   const [essayText, setEssayText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState('en');
@@ -27,6 +34,27 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [enhancedText, setEnhancedText] = useState('');
   const [showEnhanced, setShowEnhanced] = useState(false);
+
+  // Load preloaded essay when available
+  useEffect(() => {
+    if (preloadedEssay && isOpen) {
+      setEssayText(preloadedEssay);
+      setShowEnhanced(false);
+      setEnhancedText('');
+      if (preloadedEssay.trim()) {
+        showToast('Essay loaded successfully!', { type: 'success' });
+      }
+    }
+  }, [preloadedEssay, isOpen, showToast]);
+
+  // Reset when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setEssayText('');
+      setEnhancedText('');
+      setShowEnhanced(false);
+    }
+  }, [isOpen]);
 
   const handleEnhance = async () => {
     if (!essayText.trim()) {
@@ -88,7 +116,7 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
               <div>
                 <h2 className="text-2xl font-bold text-gradient">✍️ Essay & Answer Enhancement</h2>
                 <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
-                  Refine your writing and get it translated into your exam language
+                  {selectedTopic ? `Topic: ${selectedTopic}` : 'Refine your writing and get it translated into your exam language'}
                 </p>
               </div>
               <button
@@ -101,7 +129,17 @@ export default function EssayEnhancement({ isOpen, onClose, onEnhance }) {
               </button>
             </div>
 
-            {!showEnhanced ? (
+            {isLoadingEssay ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mb-4"></div>
+                <p className="text-gray-600 dark:text-slate-400">
+                  {selectedTopic ? `Generating essay on "${selectedTopic}"...` : 'Generating essay...'}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-slate-500 mt-2">
+                  This may take a few moments
+                </p>
+              </div>
+            ) : !showEnhanced ? (
               <div className="space-y-6">
                 {/* Essay Type Selection */}
                 <div>

@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
 import Chat from '@/models/Chat';
@@ -78,3 +78,4 @@ export default async function handler(req, res) {
     });
   }
 }
+

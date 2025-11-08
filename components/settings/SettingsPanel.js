@@ -4,16 +4,8 @@ import { useState, useEffect, memo, useCallback } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
-// Debug: Log when component is imported
-console.log('[SettingsPanel] Component module loaded');
-
 const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => {
-  // Debug logging
-  useEffect(() => {
-    console.log('[SettingsPanel] Render:', { isOpen, hasSettings: !!settings, hasOnClose: !!onClose, hasOnUpdateSettings: !!onUpdateSettings });
-  }, [isOpen, settings, onClose, onUpdateSettings]);
 
-  // Default settings to prevent errors if settings prop is not loaded yet
   const defaultLocalSettings = {
     language: 'en',
     model: 'sonar-pro',
