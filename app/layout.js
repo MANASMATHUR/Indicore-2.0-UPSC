@@ -12,6 +12,13 @@ export const metadata = {
   description: 'Specialized AI assistant for competitive exams with PYQ database, exam-specific knowledge, multilingual support, and comprehensive study tools. Better than ChatGPT, Gemini, or Perplexity for exam preparation.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
