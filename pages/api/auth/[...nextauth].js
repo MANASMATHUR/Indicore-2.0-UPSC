@@ -1,22 +1,7 @@
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-
-const NextAuthModule = require('next-auth');
-const NextAuth = NextAuthModule.default || NextAuthModule;
-
-const GoogleProviderModule = require('next-auth/providers/google');
-const GoogleProvider = GoogleProviderModule.default || GoogleProviderModule;
-
-if (typeof NextAuth !== 'function') {
-  throw new Error('NextAuth is not a function');
-}
-
-if (typeof GoogleProvider !== 'function') {
-  throw new Error('GoogleProvider is not a function');
-}
+import NextAuth from 'next-auth';
+import GoogleProvider from 'next-auth/providers/google';
 
 export const authOptions = {
   providers: [
@@ -90,8 +75,10 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
-const handler = (req, res) => {
+export default function handler(req, res) {
   return NextAuth(req, res, authOptions);
-};
+}
 
-export default handler;
+export const config = {
+  runtime: 'nodejs',
+};
