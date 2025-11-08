@@ -1,10 +1,15 @@
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
-import GoogleProvider from 'next-auth/providers/google';
+import googleProvider from 'next-auth/providers/google';
 
-export const authOptions = {
+const GoogleProviderFactory = (() => {
+  const mod = googleProvider;
+  return mod?.default?.default ?? mod?.default ?? mod;
+})();
+
+export const baseAuthOptions = {
   providers: [
-    GoogleProvider({
+    GoogleProviderFactory({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
@@ -74,8 +79,15 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
+export const authOptions = baseAuthOptions;
+
 export default async function auth(req, res) {
-  const { default: NextAuth } = await import('next-auth/next');
-  return NextAuth(req, res, authOptions);
+  const nextAuthModule = await import('next-auth/next');
+  const NextAuth =
+    nextAuthModule?.default?.default ??
+    nextAuthModule?.default ??
+    nextAuthModule;
+
+  return NextAuth(req, res, baseAuthOptions);
 }
 
