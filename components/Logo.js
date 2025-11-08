@@ -18,9 +18,10 @@ export default function Logo({
   };
 
   const sizes = sizeClasses[size];
-  const logoSrc = variant === 'dark' ? '/logo-dark.png' : '/logo-white.png';
+  // Use the Indicore Logo.png file
+  const logoSrc = '/logo.png';
 
-  // Try to load image to check if it exists (silently, without triggering Next.js warnings)
+  // Try to load image to check if it exists
   useEffect(() => {
     const img = new window.Image();
     img.onload = () => {
@@ -34,60 +35,37 @@ export default function Logo({
     img.src = logoSrc;
   }, [logoSrc]);
 
-  // Show fallback while checking or if error
-  if (!imgLoaded || imgError) {
-    return (
-      <div className={`flex items-center space-x-3 ${className}`}>
-        <div className={`relative ${sizes.icon}`}>
-          <div className={`absolute inset-0 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center shadow-md`}>
-            <svg className={`${size === 'sm' ? 'w-5 h-5' : size === 'lg' ? 'w-8 h-8' : 'w-6 h-6'} text-white`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              <path d="M8 7h8M8 11h8M8 15h4" />
-            </svg>
-          </div>
-        </div>
-        {showText && (
-          <span className={`${sizes.text} font-bold ${variant === 'dark' ? 'text-white' : 'text-black'}`}>
-            Indicore
-          </span>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className={`flex items-center space-x-3 ${className}`}>
-      {!imgError ? (
+    <div className={`flex items-center space-x-2 sm:space-x-3 ${className}`}>
+      {imgLoaded && !imgError ? (
         <>
-          <div className={`relative ${sizes.container} w-auto`}>
+          <div className={`relative flex items-center justify-center`} style={{ height: sizes.container.replace('h-', '').replace('h', '') + 'px', width: 'auto' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoSrc}
               alt="Indicore Logo"
-              className={`${sizes.container} w-auto object-contain`}
+              className="h-full w-auto object-contain"
+              style={{ maxHeight: '100%', maxWidth: '200px' }}
               onError={() => setImgError(true)}
             />
           </div>
           {showText && (
-            <span className={`${sizes.text} font-bold ${variant === 'dark' ? 'text-white' : 'text-black'}`}>
+            <span className={`${sizes.text} font-semibold tracking-tight ${variant === 'dark' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
               Indicore
             </span>
           )}
         </>
       ) : (
         <>
-          <div className={`relative ${sizes.icon}`}>
-            <div className={`absolute inset-0 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center shadow-md`}>
-              <svg className={`${size === 'sm' ? 'w-5 h-5' : size === 'lg' ? 'w-8 h-8' : 'w-6 h-6'} text-white`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                <path d="M8 7h8M8 11h8M8 15h4" />
-              </svg>
+          <div className={`relative ${sizes.icon} flex-shrink-0`}>
+            <div className={`w-full h-full bg-gradient-to-br from-red-600 to-orange-600 rounded-lg flex items-center justify-center shadow-sm`}>
+              <span className={`${size === 'sm' ? 'text-sm' : size === 'lg' ? 'text-lg' : 'text-base'} text-white font-bold`}>
+                I
+              </span>
             </div>
           </div>
           {showText && (
-            <span className={`${sizes.text} font-bold ${variant === 'dark' ? 'text-white' : 'text-black'}`}>
+            <span className={`${sizes.text} font-semibold tracking-tight ${variant === 'dark' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
               Indicore
             </span>
           )}

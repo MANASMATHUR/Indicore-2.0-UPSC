@@ -430,7 +430,7 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
                     </label>
                   </div>
                   <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                    ✨ Preserves exam terminology
+                    Preserves exam terminology
                   </div>
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">

@@ -21,6 +21,7 @@ import speechService from '@/lib/speechService';
 import errorHandler from '@/lib/errorHandler';
 import { validateInput, validateSecurity, security } from '@/lib/validation';
 import { useLoadingState } from '@/lib/loadingStates';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 export default function ChatInterface({ user }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -39,8 +40,12 @@ export default function ChatInterface({ user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
+  const [useWebSocketConnection, setUseWebSocketConnection] = useState(true);
   const renameTargetIdRef = useRef(null);
   const messagesEndRef = useRef(null);
+  
+  // WebSocket connection for lowest latency
+  const { socket, isConnected, sendMessage: sendWebSocketMessage } = useWebSocket();
 
   const { chats, messages, setMessages, loadChats, createNewChat, loadChat, sendMessage, addAIMessage, deleteChat, setChats, setCurrentChat } = useChat(user.email);
   const { settings, updateSettings, loadSettings } = useSettings();
@@ -167,6 +172,41 @@ export default function ChatInterface({ user }) {
         return;
       }
 
+      // Use WebSocket for lowest latency if available and connected
+      if (useWebSocketConnection && isConnected && socket) {
+        try {
+          let fullResponse = '';
+          const result = await sendWebSocketMessage({
+            message,
+            chatId,
+            model: settings.model,
+            systemPrompt: settings.systemPrompt,
+            language: messageLanguage
+          }, {
+            onChunk: (chunk, accumulated) => {
+              fullResponse = accumulated;
+              setStreamingMessage(fullResponse);
+            }
+          });
+
+          if (result.success && result.response) {
+            let finalResponse = result.response.trim();
+            // Light client-side cleaning
+            finalResponse = finalResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+            finalResponse = finalResponse.trim();
+            
+            await addAIMessage(chatId, finalResponse, messageLanguage);
+            setStreamingMessage('');
+            if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
+            return;
+          }
+        } catch (wsError) {
+          // Fall back to SSE if WebSocket fails
+          console.warn('WebSocket failed, falling back to SSE:', wsError);
+        }
+      }
+
+      // Fallback to SSE (Server-Sent Events) for streaming
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000);
 
@@ -262,10 +302,19 @@ export default function ChatInterface({ user }) {
         }
 
         clearTimeout(timeoutId);
-        await addAIMessage(chatId, fullResponse, messageLanguage);
+        // Clean the final response before saving (server already cleans, but double-check client-side)
+        let finalResponse = fullResponse.trim();
+        // Remove any remaining garbled patterns
+        finalResponse = finalResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+        finalResponse = finalResponse.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help[^.]*\./gi, '');
+        finalResponse = finalResponse.replace(/\bI'?m\s+to\s+support[^.]*\./gi, '');
+        finalResponse = finalResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
+        finalResponse = finalResponse.trim();
+        
+        await addAIMessage(chatId, finalResponse, messageLanguage);
         setStreamingMessage('');
 
-        if (isVoiceInput) await speakResponse(fullResponse, speechLanguage);
+        if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
 
       } catch (error) {
         clearTimeout(timeoutId);

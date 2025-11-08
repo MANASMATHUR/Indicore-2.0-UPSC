@@ -252,37 +252,43 @@ const MessageItem = memo(({
           🎓
         </div>
       )}
-      <div className={`message-content group relative transition-all duration-200 hover:scale-[1.01] flex-1 ${sender === 'user' ? 'ml-auto' : ''} flex flex-col`}>
-        <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-code:text-sm prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-['']">
+      <div
+        className={`message-content relative rounded-xl border flex-1 flex flex-col ${
+          sender === 'user'
+            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
+            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
+        }`}
+      >
+        <div className={`prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base ${sender === 'user' ? 'prose-invert' : ''}`}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-900 dark:text-white text-sm sm:text-[15px] font-normal">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>,
-              em: ({ children }) => <em className="italic text-gray-800 dark:text-slate-200">{children}</em>,
-              ul: ({ children }) => <ul className="mb-3 mt-2 list-disc list-inside space-y-1.5 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ul>,
-              ol: ({ children }) => <ol className="mb-3 mt-2 list-decimal list-inside space-y-1.5 pl-3 sm:pl-4 text-gray-900 dark:text-white text-sm sm:text-base">{children}</ol>,
-              li: ({ children }) => <li className="ml-2 sm:ml-4 text-gray-900 dark:text-white my-1.5 leading-relaxed">{children}</li>,
-              h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-3 mt-4 first:mt-0 text-gray-900 dark:text-white leading-tight">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-2 leading-tight">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-2 mt-3 first:mt-0 text-gray-800 dark:text-white leading-snug">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-2 mt-3 text-gray-800 dark:text-white leading-snug">{children}</h4>,
+              p: ({ children }) => <p className={`mb-3 last:mb-0 leading-7 text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
+              strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
+              em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
+              ul: ({ children }) => <ul className={`mb-3 mt-2 list-disc space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
+              ol: ({ children }) => <ol className={`mb-3 mt-2 list-decimal space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ol>,
+              li: ({ children }) => <li className="leading-7 text-[15px]">{children}</li>,
+              h1: ({ children }) => <h1 className={`text-xl sm:text-2xl font-bold mb-3 mt-4 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</h1>,
+              h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 border-b pb-2 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
+              h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-2 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
+              h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-2 mt-3 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
               code: ({ inline, children, ...props }) => {
                 if (inline) {
                   return (
-                    <code className="bg-gray-100 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm px-2 py-1 rounded-md font-mono font-medium border border-gray-200 dark:border-slate-700" {...props}>
+                    <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <code className="block bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm p-4 rounded-lg overflow-x-auto font-mono border border-gray-200 dark:border-slate-700 shadow-sm" {...props}>
+                  <code className={`block text-sm p-3 rounded-lg overflow-x-auto font-mono border my-2 ${sender === 'user' ? 'bg-blue-400/20 text-white border-blue-400/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`} {...props}>
                     {children}
                   </code>
                 );
               },
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-red-400 dark:border-red-400 pl-4 my-1 italic text-gray-700 dark:text-gray-100 bg-red-50/50 dark:bg-red-900/30 py-1 rounded-r-lg">
+                <blockquote className={`border-l-4 pl-4 my-2 italic py-2 rounded-r-lg ${sender === 'user' ? 'border-blue-300 bg-blue-400/20 text-blue-50' : 'border-red-400 dark:border-red-400 bg-red-50/50 dark:bg-red-900/30 text-slate-700 dark:text-slate-100'}`}>
                   {children}
                 </blockquote>
               ),
@@ -303,7 +309,7 @@ const MessageItem = memo(({
                 }
               }}
               disabled={isTranslating}
-              className="text-xs px-4 py-2 bg-white/95 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-red-300 dark:hover:border-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer backdrop-blur focus:outline-none focus:ring-2 focus:ring-red-500/20"
+              className="text-xs px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-red-300 dark:hover:border-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500/20"
             >
               <option value="">🌐 Translate to...</option>
               {supportedLanguages.map((lang) => (

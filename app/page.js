@@ -14,7 +14,6 @@ import {
   Brain, 
   CheckCircle2, 
   XCircle, 
-  Sparkles,
   Database,
   MessageSquare,
   Target,
@@ -70,8 +69,7 @@ export default function Home() {
       <section className="relative overflow-hidden pt-20 pb-32 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center">
-            <Badge variant="primary" className="mb-6 px-4 py-2 text-sm animate-exam-badge-pulse hover-scale">
-              <Sparkles className="h-4 w-4 mr-2 animate-pulse-slow" />
+            <Badge variant="primary" className="mb-6 px-4 py-2 text-sm">
               AI-Powered Exam Preparation
             </Badge>
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight animate-fade-in-scale">
@@ -121,7 +119,7 @@ export default function Home() {
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
                     <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Database className="h-6 w-6 text-red-600 animate-pulse-slow" />
+                      <Database className="h-6 w-6 text-red-600" />
                     </div>
                   </div>
                   <div>
@@ -140,7 +138,7 @@ export default function Home() {
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
                     <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Target className="h-6 w-6 text-red-600 animate-pulse-slow" />
+                      <Target className="h-6 w-6 text-red-600" />
                     </div>
                   </div>
                   <div>
@@ -197,7 +195,7 @@ export default function Home() {
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
                     <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <MapPin className="h-6 w-6 text-red-600 animate-pulse-slow" />
+                      <MapPin className="h-6 w-6 text-red-600" />
                     </div>
                   </div>
                   <div>
@@ -216,7 +214,7 @@ export default function Home() {
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
                     <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Brain className="h-6 w-6 text-red-600 animate-pulse-slow" />
+                      <Brain className="h-6 w-6 text-red-600" />
                     </div>
                   </div>
                   <div>

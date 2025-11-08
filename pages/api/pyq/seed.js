@@ -123,12 +123,14 @@ export default async function handler(req, res) {
 
     // Use bulkWrite with upsert to handle duplicates
     // Use collection.bulkWrite directly to avoid MongoDB text index language override issue
+    // Include lang in filter to properly handle multi-language questions
     const operations = normalized.map(item => ({
       updateOne: {
         filter: {
           exam: item.exam,
           year: item.year,
-          question: item.question
+          question: item.question,
+          lang: item.lang || 'en'
         },
         update: {
           $set: {

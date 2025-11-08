@@ -8,8 +8,11 @@ import axios from 'axios';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import pyqService from '@/lib/pyqService';
+import { cleanAIResponse, validateAndCleanResponse } from '@/lib/responseCleaner';
 
-const PYQ_PATTERN = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i;
+// PYQ Pattern: More specific to avoid false positives with general questions
+// Only matches when there's clear PYQ intent (explicit PYQ keywords or subject + pyq keywords)
+const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -237,29 +240,43 @@ Write naturally and conversationally, but ensure every response is complete, acc
       const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
       if (!pyqMatch) return '';
 
-      const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
-      const theme = themeMatch ? themeMatch[1].trim() : '';
-
-      let fromYear = null, toYear = null;
-      const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
-      const decade = userMsg.match(/(\d{4})s/i);
-      if (range1) {
-        fromYear = parseInt(range1[1], 10);
-        toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
-      } else if (decade) {
-        fromYear = parseInt(decade[1], 10);
-        toYear = fromYear + 9;
-      }
+      // Use pyqService to parse the query for consistent theme extraction
+      const parsed = pyqService.parseQuery(userMsg, language);
+      const theme = parsed.theme || '';
+      const fromYear = parsed.fromYear;
+      const toYear = parsed.toYear;
+      const examCodeDetected = parsed.examCode || 'UPSC';
 
       const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
-      
-      let examCodeDetected = 'UPSC';
-      if (/tnpsc|tamil nadu psc/i.test(userMsg) || language === 'ta') examCodeDetected = 'TNPSC';
-      else if (/mpsc|maharashtra psc/i.test(userMsg) || language === 'mr') examCodeDetected = 'MPSC';
-      else if (/upsc/i.test(userMsg)) examCodeDetected = 'UPSC';
-      else if (/pcs/i.test(userMsg)) examCodeDetected = 'PCS';
 
-      return `\n\nPYQ LISTING MODE:\nReturn only formatted PYQ list, no explanations. Use simple formatting without markdown headers or excessive bold text.\n\nFormat:\n1. Start with: "Previous Year Questions (${examCodeDetected})"\n2. Topic: "Topic: ${theme}" (if provided)\n3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)\n4. Group by year: "Year {YEAR} ({count} questions)"\n5. Question format: "{number}. [{Paper}] {Question Text}"\n6. Status: ✅ verified, ⚠️ unverified\n7. Summary: "Summary" with total count\n\nRequirements:\n- Group by year (newest first)\n- Include paper name if known\n- Keep questions under 200 chars\n- Mark uncertain as "(unverified)" or ⚠️\n- Filter by theme if provided: ${theme || 'none'}\n- ${yearLine}\n- Exam: ${examCodeDetected}\n- Prioritize verified questions\n- Use plain text formatting, avoid markdown headers (##, ###) and excessive bold (**)`;
+      return `\n\nPYQ LISTING MODE:\nYou are providing Previous Year Questions (PYQ) from the database. Return only a well-formatted, complete list with no explanations or extra commentary.
+
+CRITICAL REQUIREMENTS:
+1. Write complete, well-formed sentences and lists. Never leave responses incomplete.
+2. Use simple, clean formatting without markdown headers (##, ###) or excessive bold text.
+3. Ensure all questions are properly formatted and complete.
+4. Group questions logically by year.
+
+Format:
+1. Start with: "Previous Year Questions (${examCodeDetected})"
+2. Topic: "Topic: ${theme}" (if provided)
+3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)
+4. Group by year: "Year {YEAR} ({count} questions)"
+5. Question format: "{number}. [{Paper}] {Question Text}"
+6. Status: ✅ for verified, ⚠️ for unverified
+7. Summary: "Summary" with total count
+
+Requirements:
+- Group by year (newest first)
+- Include paper name if known
+- Keep questions under 200 chars
+- Mark uncertain as "(unverified)" or ⚠️
+- Filter by theme if provided: ${theme || 'none'}
+- ${yearLine}
+- Exam: ${examCodeDetected}
+- Prioritize verified questions
+- Use plain text formatting only
+- Ensure response is complete and properly formatted`;
     }
     function detectExamCode(userMsg, lang) {
       if (/tnpsc|tamil nadu psc/i.test(userMsg) || lang === 'ta') return 'TNPSC';
@@ -287,14 +304,28 @@ Write naturally and conversationally, but ensure every response is complete, acc
     }
 
     async function tryPyqFromDb(userMsg) {
-      const isPyq = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
-      if (!isPyq) return null;
+      // More strict check: must have PYQ keywords or clear PYQ intent
+      const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
+      const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
+      const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
+      
+      // Only try PYQ search if there's clear PYQ intent
+      if (!hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+        return null;
+      }
       
       return await pyqService.search(userMsg, null, language);
     }
     const pyqDb = await tryPyqFromDb(message);
     if (pyqDb) {
-      return res.status(200).json({ response: pyqDb, source: 'pyq-db' });
+      // Clean PYQ response before sending
+      const cleanedPyq = cleanAIResponse(pyqDb);
+      const validPyq = validateAndCleanResponse(cleanedPyq, 20);
+      
+      if (validPyq) {
+        return res.status(200).json({ response: validPyq, source: 'pyq-db' });
+      }
+      // If PYQ response is invalid, fall through to LLM
     }
 
     const contextOptimizer = (await import('@/lib/context-optimizer')).default;
@@ -347,25 +378,26 @@ Write naturally and conversationally, but ensure every response is complete, acc
     });
 
     if (response && response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
-      let aiResponse = response.data.choices[0].message.content;
-      aiResponse = aiResponse.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
-      aiResponse = aiResponse.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help\s+[^.]*\./gi, '');
-      aiResponse = aiResponse.replace(/\bI'm\s+to\s+support\s+[^.]*\./gi, '');
-      aiResponse = aiResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
-      aiResponse = aiResponse.replace(/\b(requirements?|structure?|response?|answer?|following|as follows):\s*$/gmi, '');
+      const rawResponse = response.data.choices[0].message.content;
       
-      const trimmed = aiResponse.trim();
-      if (trimmed.endsWith('-') || trimmed.endsWith(',') || trimmed.match(/^\w+\s+and\s*$/i) || trimmed.match(/^\w+\s+or\s*$/i)) {
-        const sentences = trimmed.split(/[.!?]/).filter(s => s.trim());
-        if (sentences.length > 0) {
-          aiResponse = sentences.slice(0, -1).join('. ') + '.';
-        }
+      // Clean and validate the response
+      const cleanedResponse = cleanAIResponse(rawResponse);
+      const validResponse = validateAndCleanResponse(cleanedResponse, 30);
+      
+      if (!validResponse) {
+        // If response is invalid, return a helpful error
+        return res.status(500).json({
+          error: 'Unable to generate a valid response. Please try rephrasing your question.',
+          code: 'INVALID_RESPONSE',
+          timestamp: new Date().toISOString()
+        });
       }
       
+      // Cache the cleaned response
       responseCache.set(cacheKey, {
-        response: aiResponse,
+        response: validResponse,
         timestamp: Date.now()
-          });
+      });
           
       if (responseCache.size > 500) {
         const now = Date.now();
@@ -376,7 +408,7 @@ Write naturally and conversationally, but ensure every response is complete, acc
         }
       }
       
-      return res.status(200).json({ response: aiResponse });
+      return res.status(200).json({ response: validResponse });
     } else {
       throw new Error('Invalid response format from Perplexity API');
     }

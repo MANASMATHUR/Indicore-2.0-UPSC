@@ -11,13 +11,16 @@ export default function handler(req, res) {
 
     io = new Server(httpServer, {
       path: '/api/socket',
-      transports: ['websocket', 'polling'],
+      transports: ['websocket', 'polling'], // Prefer websocket for lower latency
       cors: {
         origin: process.env.NEXT_PUBLIC_URL || '*',
         methods: ['GET', 'POST']
       },
       pingTimeout: 60000,
-      pingInterval: 25000
+      pingInterval: 25000,
+      upgrade: true, // Auto-upgrade from polling to websocket
+      rememberUpgrade: true,
+      allowEIO3: true // Backward compatibility
     });
 
     io.on('connection', (socket) => {

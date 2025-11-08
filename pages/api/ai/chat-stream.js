@@ -7,6 +7,7 @@ import axios from 'axios';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import pyqService from '@/lib/pyqService';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -21,7 +22,9 @@ const UNSAFE_PATTERNS = [
   /answer.*key.*leak/i
 ];
 
-const PYQ_PATTERN = /(pyq|pyqs|previous year (?:question|questions|paper|papers)|past year (?:question|questions)|search.*pyq|find.*pyq)/i;
+// PYQ Pattern: More specific to avoid false positives with general questions
+// Only matches when there's clear PYQ intent (explicit PYQ keywords or subject + pyq keywords)
+const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
 function calculateMaxTokens(message, queryType = 'general') {
   const msgLen = message.length;
@@ -207,7 +210,21 @@ export default async function handler(req, res) {
       return [];
     })() : Promise.resolve([]);
 
-    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. Provide clear, well-structured answers that are easy to read. Use simple formatting: write in paragraphs with proper spacing, use bullet points sparingly, and avoid markdown headers (###) or excessive bold text. Keep responses natural and readable. Write in complete sentences. Do not include citations or reference numbers.`;
+    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
+
+CRITICAL REQUIREMENTS:
+1. ALWAYS write complete, comprehensive answers. Never leave sentences incomplete or cut off mid-thought.
+2. Write in full, well-formed sentences. Each sentence must have a subject, verb, and complete meaning.
+3. Provide thorough, detailed responses that fully address the question asked.
+4. Use proper paragraph structure with clear topic sentences and supporting details.
+5. Ensure your response has a logical flow: introduction, main content, and conclusion where appropriate.
+6. Use bullet points only when listing multiple items. Otherwise, write in paragraph form.
+7. Avoid markdown headers (###) or excessive bold text. Keep formatting simple and natural.
+8. Never use placeholders, incomplete phrases, or cut-off words.
+9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
+10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
+
+Write naturally and conversationally, but ensure every response is complete, accurate, and comprehensive. Do not include citations or reference numbers.`;
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -222,7 +239,16 @@ export default async function handler(req, res) {
 
     async function tryPyqFromDb(userMsg, context = null) {
       const effectiveMsg = context ? `PYQ on ${context.theme || 'history'} from ${context.fromYear || 2021} for ${context.examCode}` : userMsg;
-      if (!PYQ_PATTERN.test(effectiveMsg)) return null;
+      
+      // More strict check: must have PYQ keywords or clear PYQ intent
+      const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(effectiveMsg);
+      const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(effectiveMsg);
+      const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(effectiveMsg);
+      
+      // Only try PYQ search if there's clear PYQ intent
+      if (!hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+        return null;
+      }
       
       return await pyqService.search(userMsg, context, language);
     }
@@ -242,7 +268,13 @@ export default async function handler(req, res) {
       }
     }
 
-    const isPyqQuery = PYQ_PATTERN.test(message);
+    // Check if this is a PYQ query - use more strict checking
+    const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
+    const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(message);
+    const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
+    const isPyqQuery = hasPyqKeyword || hasPyqIntent || hasSubjectPyq;
+    
+    // For general questions, always use context unless it's clearly a PYQ query
     const needsContext = !isPyqQuery && message.length > 30 && contextOptimizer.shouldUseLLM(message);
 
     const [rawHistory, contextualData, pyqDb] = await Promise.all([
@@ -257,19 +289,26 @@ export default async function handler(req, res) {
     const conversationHistory = contextOptimizer.compressContext(rawHistory);
 
     if (pyqDb) {
-      const chunks = pyqDb.match(/.{1,100}/g) || [pyqDb];
-      for (const chunk of chunks) {
-        res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+      // Clean PYQ response before sending
+      const cleanedPyq = cleanAIResponse(pyqDb);
+      const validPyq = validateAndCleanResponse(cleanedPyq, 20);
+      
+      if (validPyq) {
+        const chunks = validPyq.match(/.{1,100}/g) || [validPyq];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        }
+        res.write('data: [DONE]\n\n');
         if (typeof res.flush === 'function') {
           res.flush();
         }
+        res.end();
+        return;
       }
-      res.write('data: [DONE]\n\n');
-      if (typeof res.flush === 'function') {
-        res.flush();
-      }
-      res.end();
-      return;
+      // If PYQ response is invalid, fall through to LLM
     }
 
     const contextualEnhancement = contextualData.contextualEnhancement;
@@ -281,27 +320,19 @@ export default async function handler(req, res) {
       for (let i = history.length - 1; i >= 0; i--) {
         const msg = history[i];
         if (msg.role === 'user' && msg.content) {
-          const userMsg = msg.content.toLowerCase();
-          if (PYQ_PATTERN.test(userMsg)) {
-        const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
-        const theme = themeMatch ? themeMatch[1].trim() : '';
-            
-        let fromYear = null, toYear = null;
-        const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
-        const decade = userMsg.match(/(\d{4})s/i);
-        if (range1) {
-          fromYear = parseInt(range1[1], 10);
-          toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
-        } else if (decade) {
-          fromYear = parseInt(decade[1], 10);
-          toYear = fromYear + 9;
-        }
-        
-            let examCode = 'UPSC';
-            if (/tnpsc|tamil nadu psc/i.test(userMsg) || language === 'ta') examCode = 'TNPSC';
-            else if (/mpsc|maharashtra psc/i.test(userMsg) || language === 'mr') examCode = 'MPSC';
-            else if (/upsc/i.test(userMsg)) examCode = 'UPSC';
-            else if (/pcs/i.test(userMsg)) examCode = 'PCS';
+          const userMsg = msg.content;
+          // Use same strict PYQ detection as above
+          const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
+          const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
+          const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
+          
+          if (hasPyqKeyword || hasPyqIntent || hasSubjectPyq) {
+            // Use pyqService to parse the query for consistent theme extraction
+            const parsed = pyqService.parseQuery(userMsg, language);
+            const theme = parsed.theme || '';
+            const fromYear = parsed.fromYear;
+            const toYear = parsed.toYear;
+            const examCode = parsed.examCode || 'UPSC';
             
             return { theme, fromYear, toYear, examCode, originalQuery: msg.content };
           }
@@ -311,7 +342,15 @@ export default async function handler(req, res) {
     }
 
     function buildPyqPrompt(userMsg, previousContext = null) {
-      if (!PYQ_PATTERN.test(userMsg) && !previousContext) return '';
+      // Use same strict PYQ detection
+      if (!previousContext) {
+        const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
+        const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
+        const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
+        if (!hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+          return '';
+        }
+      }
       
       let theme = '';
       let fromYear = null;
@@ -323,28 +362,45 @@ export default async function handler(req, res) {
         fromYear = previousContext.fromYear;
         toYear = previousContext.toYear;
         examCodeDetected = previousContext.examCode || 'UPSC';
-        } else {
-      const themeMatch = userMsg.replace(/\b(upsc|pcs|ssc|exam|exams)\b/ig, '').match(/(?:on|about|of|for)\s+([^.,;\n]+)/i);
-        theme = themeMatch ? themeMatch[1].trim() : '';
-      const range1 = userMsg.match(/from\s+(\d{4})(?:s)?\s*(?:to|\-|–|—)\s*(present|\d{4})/i);
-      const decade = userMsg.match(/(\d{4})s/i);
-      if (range1) {
-        fromYear = parseInt(range1[1], 10);
-        toYear = range1[2].toLowerCase() === 'present' ? new Date().getFullYear() : parseInt(range1[2], 10);
-      } else if (decade) {
-        fromYear = parseInt(decade[1], 10);
-        toYear = fromYear + 9;
-      }
-      
-      if (/tnpsc|tamil nadu psc/i.test(userMsg) || language === 'ta') examCodeDetected = 'TNPSC';
-      else if (/mpsc|maharashtra psc/i.test(userMsg) || language === 'mr') examCodeDetected = 'MPSC';
-      else if (/upsc/i.test(userMsg)) examCodeDetected = 'UPSC';
-      else if (/pcs/i.test(userMsg)) examCodeDetected = 'PCS';
+      } else {
+        // Use pyqService to parse the query for consistent theme extraction
+        const parsed = pyqService.parseQuery(userMsg, language);
+        theme = parsed.theme || '';
+        fromYear = parsed.fromYear;
+        toYear = parsed.toYear;
+        examCodeDetected = parsed.examCode || 'UPSC';
       }
       
       const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
       
-      return `\n\nPYQ LISTING MODE:\nReturn only formatted PYQ list, no explanations. Use simple formatting without markdown headers or excessive bold text.\n\nFormat:\n1. Start with: "Previous Year Questions (${examCodeDetected})"\n2. Topic: "Topic: ${theme}" (if provided)\n3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)\n4. Group by year: "Year {YEAR} ({count} questions)"\n5. Question format: "{number}. [{Paper}] {Question Text}"\n6. Status: ✅ verified, ⚠️ unverified\n7. Summary: "Summary" with total count\n\nRequirements:\n- Group by year (newest first)\n- Include paper name if known\n- Keep questions under 200 chars\n- Mark uncertain as "(unverified)" or ⚠️\n- Filter by theme if provided: ${theme || 'none'}\n- ${yearLine}\n- Exam: ${examCodeDetected}\n- Prioritize verified questions\n- Use plain text formatting, avoid markdown headers (##, ###) and excessive bold (**)`;
+      return `\n\nPYQ LISTING MODE:\nYou are providing Previous Year Questions (PYQ) from the database. Return only a well-formatted, complete list with no explanations or extra commentary.
+
+CRITICAL REQUIREMENTS:
+1. Write complete, well-formed sentences and lists. Never leave responses incomplete.
+2. Use simple, clean formatting without markdown headers (##, ###) or excessive bold text.
+3. Ensure all questions are properly formatted and complete.
+4. Group questions logically by year.
+
+Format:
+1. Start with: "Previous Year Questions (${examCodeDetected})"
+2. Topic: "Topic: ${theme}" (if provided)
+3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)
+4. Group by year: "Year {YEAR} ({count} questions)"
+5. Question format: "{number}. [{Paper}] {Question Text}"
+6. Status: ✅ for verified, ⚠️ for unverified
+7. Summary: "Summary" with total count
+
+Requirements:
+- Group by year (newest first)
+- Include paper name if known
+- Keep questions under 200 chars
+- Mark uncertain as "(unverified)" or ⚠️
+- Filter by theme if provided: ${theme || 'none'}
+- ${yearLine}
+- Exam: ${examCodeDetected}
+- Prioritize verified questions
+- Use plain text formatting only
+- Ensure response is complete and properly formatted`;
     }
 
     const previousPyqContext = extractPyqContextFromHistory(conversationHistory);
@@ -358,19 +414,26 @@ export default async function handler(req, res) {
       const contextWithOffset = { ...previousPyqContext, offset: estimatedOffset };
       const pyqDb = await tryPyqFromDb(`PYQ on ${previousPyqContext.theme || 'history'} from ${previousPyqContext.fromYear || 2021} for ${previousPyqContext.examCode}`, contextWithOffset);
       if (pyqDb) {
-        const chunks = pyqDb.match(/.{1,100}/g) || [pyqDb];
-        for (const chunk of chunks) {
-          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+        // Clean PYQ response before sending
+        const cleanedPyq = cleanAIResponse(pyqDb);
+        const validPyq = validateAndCleanResponse(cleanedPyq, 20);
+        
+        if (validPyq) {
+          const chunks = validPyq.match(/.{1,100}/g) || [validPyq];
+          for (const chunk of chunks) {
+            res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+            if (typeof res.flush === 'function') {
+              res.flush();
+            }
+          }
+          res.write('data: [DONE]\n\n');
           if (typeof res.flush === 'function') {
             res.flush();
           }
+          res.end();
+          return;
         }
-        res.write('data: [DONE]\n\n');
-        if (typeof res.flush === 'function') {
-          res.flush();
-        }
-        res.end();
-        return;
+        // If PYQ response is invalid, fall through to LLM
       }
     }
     
@@ -436,25 +499,14 @@ export default async function handler(req, res) {
             if (data === '[DONE]') {
               clearInterval(keepAlive);
               
-              const isGarbled = /(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help|I'm\s+to\s+support|Let\s+me\s+know\s+I\s+can\s+you/i.test(fullResponse);
+              // Comprehensive cleaning of full response
+              const cleanedResponse = cleanAIResponse(fullResponse);
+              const isValid = validateAndCleanResponse(cleanedResponse, 30);
               
-              const finalTrimmed = fullResponse.trim();
-              let cleanedResponse = finalTrimmed;
-              
-              if (finalTrimmed && (finalTrimmed.endsWith('-') || finalTrimmed.endsWith(',') || finalTrimmed.match(/\s+(and|or)\s*$/i))) {
-                const sentences = finalTrimmed.split(/[.!?]/).filter(s => s.trim() && s.length > 10);
-                if (sentences.length > 0) {
-                  cleanedResponse = sentences.join('. ') + '.';
-                } else if (finalTrimmed.length > 50) {
-                  cleanedResponse = finalTrimmed.slice(0, -1).trim() + '.';
-                }
-              }
-              
-              const isCutOff = !isResponseComplete(cleanedResponse) && cleanedResponse.length > 100;
-              
-              if (cleanedResponse.trim().length > 50 && !isGarbled && !isCutOff) {
+              if (isValid) {
+                // Cache the cleaned response if valid
                 responseCache.set(cacheKey, {
-                  response: cleanedResponse,
+                  response: isValid,
                   timestamp: Date.now()
                 });
                 
@@ -466,10 +518,11 @@ export default async function handler(req, res) {
                     }
                   }
                 }
-              }
-              
-              if (cleanedResponse !== finalTrimmed && cleanedResponse.length > 50) {
-                fullResponse = cleanedResponse;
+                
+                // Send final cleaned response if it differs significantly
+                if (cleanedResponse !== fullResponse && cleanedResponse.length > 30) {
+                  res.write(`data: ${JSON.stringify({ content: cleanedResponse.substring(fullResponse.length), final: true })}\n\n`);
+                }
               }
               
               res.write('data: [DONE]\n\n');
@@ -484,11 +537,8 @@ export default async function handler(req, res) {
               const parsed = JSON.parse(data);
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 let content = parsed.choices[0].delta.content;
-                content = content.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
-                content = content.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help\s+[^.]*\./gi, '');
-                content = content.replace(/\bI'm\s+to\s+support\s+[^.]*\./gi, '');
-                content = content.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
-                content = content.replace(/\b(requirements?|structure?|response?|answer?|following|as follows):\s*$/gmi, '');
+                // Clean content in real-time (light cleaning for streaming)
+                content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                 fullResponse += content;
                 res.write(`data: ${JSON.stringify({ content })}\n\n`);
                 if (typeof res.flush === 'function') {
@@ -503,12 +553,18 @@ export default async function handler(req, res) {
 
       response.data.on('end', () => {
         clearInterval(keepAlive);
-        if (fullResponse.trim().length > 50) {
+        
+        // Clean and validate response before caching
+        const cleanedResponse = cleanAIResponse(fullResponse);
+        const isValid = validateAndCleanResponse(cleanedResponse, 30);
+        
+        if (isValid) {
           responseCache.set(cacheKey, {
-            response: fullResponse,
+            response: isValid,
             timestamp: Date.now()
           });
         }
+        
         if (!res.writableEnded) {
           res.write('data: [DONE]\n\n');
           if (typeof res.flush === 'function') {

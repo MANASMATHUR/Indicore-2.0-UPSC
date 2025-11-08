@@ -11,21 +11,24 @@ export function useWebSocket() {
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || '';
+    // Use current origin if NEXT_PUBLIC_SOCKET_URL is not set (for same-origin connections)
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
     
-    if (!socketUrl) {
+    if (!socketUrl || typeof window === 'undefined') {
       return;
     }
 
     const newSocket = io(socketUrl, {
       path: '/api/socket',
-      transports: ['websocket', 'polling'],
+      transports: ['websocket', 'polling'], // Prefer websocket for lower latency
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 500, // Faster reconnection
+      reconnectionDelayMax: 2000,
       reconnectionAttempts: maxReconnectAttempts,
-      timeout: 20000,
-      forceNew: true
+      timeout: 10000, // Reduced timeout for faster failure detection
+      forceNew: false, // Reuse connection when possible
+      upgrade: true, // Auto-upgrade from polling to websocket
+      rememberUpgrade: true
     });
 
     newSocket.on('connect', () => {
@@ -68,7 +71,7 @@ export function useWebSocket() {
           isComplete = true;
           socket.off('chat:chunk', onChunk);
           socket.off('chat:error', onError);
-          resolve({ response: fullResponse, complete: true });
+          resolve({ success: true, response: fullResponse, complete: true });
         } else {
           fullResponse += data.chunk;
           options.onChunk?.(data.chunk, fullResponse);
@@ -98,7 +101,7 @@ export function useWebSocket() {
           socket.off('chat:chunk', onChunk);
           socket.off('chat:error', onError);
           if (fullResponse) {
-            resolve({ response: fullResponse, complete: false });
+            resolve({ success: true, response: fullResponse, complete: false });
           } else {
             reject(new Error('Timeout'));
           }

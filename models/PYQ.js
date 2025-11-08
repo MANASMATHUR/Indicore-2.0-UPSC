@@ -147,8 +147,9 @@ try {
 }
 
 // Compound index for duplicate detection (not unique to avoid issues with existing duplicates)
+// Include lang to properly handle multi-language questions
 PyqSchema.index(
-  { exam: 1, year: 1, question: 1 },
+  { exam: 1, year: 1, question: 1, lang: 1 },
   { 
     name: 'pyq_question_lookup'
   }

@@ -7,6 +7,7 @@ import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
 import Chat from '@/models/Chat';
 import { Server } from 'socket.io';
+import { cleanAIResponse, validateAndCleanResponse } from '@/lib/responseCleaner';
 
 let io = null;
 const responseCache = new Map();
@@ -70,25 +71,31 @@ export default function handler(req, res) {
             return;
           }
 
+          // Optimize: Load conversation history efficiently with lean() and field selection
           let conversationHistory = [];
           if (chatId) {
             try {
               await connectToDatabase();
+              // Use lean() for faster queries, limit fields, and use indexes
               const chat = await Chat.findOne({ 
                 _id: chatId, 
                 userEmail: session.user.email 
-              }).lean();
+              })
+              .select('messages.sender messages.text messages.timestamp')
+              .lean();
               
               if (chat && chat.messages && Array.isArray(chat.messages)) {
-                conversationHistory = chat.messages
+                // Filter and map more efficiently - only get last 5 messages
+                const recentMessages = chat.messages.slice(-5);
+                conversationHistory = recentMessages
                   .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
-                  .slice(-5)
                   .map(msg => ({
                     role: msg.sender === 'user' ? 'user' : 'assistant',
                     content: msg.text
                   }));
               }
             } catch (err) {
+              // Continue without history if DB query fails - don't block the request
               console.warn('Failed to load conversation history:', err.message);
             }
           }
@@ -157,21 +164,31 @@ Write naturally and conversationally, but ensure every response is complete, acc
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
                 if (data === '[DONE]') {
-                  if (fullResponse.trim().length > 50) {
-                    responseCache.set(cacheKey, {
-                      response: fullResponse,
-                      timestamp: Date.now()
-                    });
+                  // Clean and validate response asynchronously (don't block stream completion)
+                  setImmediate(() => {
+                    const cleanedResponse = cleanAIResponse(fullResponse);
+                    const isValid = validateAndCleanResponse(cleanedResponse, 30);
                     
-                    if (responseCache.size > 500) {
-                      const now = Date.now();
-                      for (const [key, value] of responseCache.entries()) {
-                        if (now - value.timestamp > CACHE_TTL) {
-                          responseCache.delete(key);
-                        }
+                    if (isValid) {
+                      responseCache.set(cacheKey, {
+                        response: isValid,
+                        timestamp: Date.now()
+                      });
+                      
+                      // Cleanup old cache entries asynchronously
+                      if (responseCache.size > 500) {
+                        setImmediate(() => {
+                          const now = Date.now();
+                          for (const [key, value] of responseCache.entries()) {
+                            if (now - value.timestamp > CACHE_TTL) {
+                              responseCache.delete(key);
+                            }
+                          }
+                        });
                       }
                     }
-                  }
+                  });
+                  
                   socket.emit('chat:chunk', { chunk: '', done: true });
                   return;
                 }
@@ -179,7 +196,8 @@ Write naturally and conversationally, but ensure every response is complete, acc
                   const parsed = JSON.parse(data);
                   if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                     let content = parsed.choices[0].delta.content;
-                    content = content.replace(/\[\d+\]/g, '').replace(/\[\d+,\s*\d+\]/g, '');
+                    // Light cleaning for streaming (citations only)
+                    content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                     fullResponse += content;
                     socket.emit('chat:chunk', { chunk: content, done: false });
                   }
