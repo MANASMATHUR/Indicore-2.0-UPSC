@@ -124,29 +124,26 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-32 h-32 bg-gradient-to-br from-red-400 to-orange-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
             </div>
-            <div className="relative text-7xl mb-6 animate-float">🎓</div>
+            <div className="relative text-7xl mb-6">🎓</div>
           </div>
-          <h3 className="text-3xl font-bold text-red-900 dark:text-gray-100 mb-4 bg-gradient-to-r from-red-600 to-red-800 dark:from-red-400 dark:to-red-200 bg-clip-text text-transparent">
-            Welcome to Indicore!
+          <h3 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+            Welcome to Indicore
           </h3>
-          <p className="text-red-700 dark:text-gray-300 text-lg leading-relaxed mb-6">
+          <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed mb-6">
             Your intelligent assistant for PCS, UPSC, and SSC exams
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
-              <div className="text-2xl mb-2">🌐</div>
-              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">Multilingual</div>
-              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Support for 10+ languages</div>
+            <div className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-md transition-shadow">
+              <div className="text-sm font-semibold text-gray-900 dark:text-slate-200 mb-1">Multilingual Support</div>
+              <div className="text-xs text-gray-600 dark:text-slate-400">Support for 10+ languages</div>
             </div>
-            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
-              <div className="text-2xl mb-2">📚</div>
-              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">PYQ Database</div>
-              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Previous year questions</div>
+            <div className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-md transition-shadow">
+              <div className="text-sm font-semibold text-gray-900 dark:text-slate-200 mb-1">PYQ Database</div>
+              <div className="text-xs text-gray-600 dark:text-slate-400">Previous year questions</div>
             </div>
-            <div className="p-4 bg-white/60 dark:bg-slate-800/60 rounded-xl border border-red-200/50 dark:border-slate-700/50 backdrop-blur-sm hover:shadow-md transition-all">
-              <div className="text-2xl mb-2">🔍</div>
-              <div className="text-sm font-semibold text-red-800 dark:text-slate-200">Web Search</div>
-              <div className="text-xs text-red-600 dark:text-slate-400 mt-1">Up-to-date information</div>
+            <div className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-md transition-shadow">
+              <div className="text-sm font-semibold text-gray-900 dark:text-slate-200 mb-1">Web Search</div>
+              <div className="text-xs text-gray-600 dark:text-slate-400">Up-to-date information</div>
             </div>
           </div>
           {/* Suggested Prompts */}
@@ -168,8 +165,8 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
               </button>
             ))}
           </div>
-          <p className="text-red-600 dark:text-slate-500 text-sm mt-6">
-            Start by typing a message below or click a suggestion above!
+          <p className="text-gray-600 dark:text-slate-400 text-sm mt-6">
+            Start by typing a message below or click a suggestion above
           </p>
         </div>
       </div>
@@ -194,12 +191,12 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
         ))}
 
         {/* Streaming Message */}
-        {streamingMessage && (
-          <div className="message assistant mb-4 flex items-start gap-3 animate-fade-in">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
+        {streamingMessage && streamingMessage.trim().length > 0 && (
+          <div className="message assistant mb-4 flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
               🎓
             </div>
-            <div className="message-content relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md flex-1 px-4 py-3 sm:px-5 sm:py-4">
+            <div className="message-content relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md flex-1 px-4 py-3 sm:px-5 sm:py-4 min-w-0">
               <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -279,7 +276,7 @@ const MessageItem = memo(({
 
   return (
     <div 
-      className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-2 sm:mb-3 flex items-start gap-2 sm:gap-3 animate-fade-in`}
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-2 sm:mb-3 flex items-start gap-2 sm:gap-3`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

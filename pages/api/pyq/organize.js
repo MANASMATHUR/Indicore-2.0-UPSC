@@ -188,7 +188,6 @@ export default async function handler(req, res) {
     }
 
     // Separate multi-language questions
-    console.log('\n🔍 Separating multi-language questions...');
     let multiLangSeparated = 0;
     let multiLangCreated = 0;
     
@@ -223,16 +222,12 @@ export default async function handler(req, res) {
             } catch (e) {
               // Ignore duplicates
               if (e.code !== 11000) {
-                console.warn(`   ⚠️  Could not create PYQ: ${e.message}`);
+                console.warn(`Could not create PYQ: ${e.message}`);
               }
             }
           }
         }
       }
-    }
-
-    if (multiLangSeparated > 0) {
-      console.log(`   Separated ${multiLangSeparated} multi-language questions into ${multiLangCreated} entries`);
     }
 
     // Remove duplicates (keep the oldest one, considering language)

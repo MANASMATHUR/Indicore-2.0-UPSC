@@ -25,12 +25,14 @@ const badgeVariants = cva(
   }
 )
 
-const Badge = React.forwardRef(({ className, variant, ...props }, ref) => {
+const Badge = React.forwardRef(({ className, variant, asChild = false, ...props }, ref) => {
+  const Component = asChild ? "span" : "span"
+
   return (
-    <div 
+    <Component
       ref={ref}
-      className={cn(badgeVariants({ variant }), className)} 
-      {...props} 
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
     />
   )
 })

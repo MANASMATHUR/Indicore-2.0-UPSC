@@ -97,7 +97,8 @@ function isResponseComplete(response) {
   const trimmed = response.trim();
   if (trimmed.length < 10) return false;
   
-  const lastSent = trimmed.split(/[.!?]/).pop().trim();
+  const sentences = trimmed.split(/[.!?]/).filter(s => s.trim().length > 0);
+  const lastSent = sentences.length > 0 ? sentences[sentences.length - 1].trim() : trimmed.trim();
   if (lastSent.length > 0 && lastSent.length < 5) return false;
   
   const incomplete = [
@@ -207,7 +208,7 @@ async function chatHandler(req, res) {
 
     let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
 
-CRITICAL REQUIREMENTS:
+CRITICAL REQUIREMENTS - RESPONSE COMPLETENESS:
 1. ALWAYS write complete, comprehensive answers. Never leave sentences incomplete or cut off mid-thought.
 2. Write in full, well-formed sentences. Each sentence must have a subject, verb, and complete meaning.
 3. Provide thorough, detailed responses that fully address the question asked.
@@ -218,8 +219,66 @@ CRITICAL REQUIREMENTS:
 8. Never use placeholders, incomplete phrases, or cut-off words.
 9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
 10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
+11. NEVER end responses with incomplete phrases like "and", "or", "but", "the", "a", "to", "from", "with", "for", "I can", "Let me", "Please note", etc.
+12. Every sentence must be grammatically complete and meaningful. Do not leave any sentence hanging or incomplete.
+13. If you need to stop, ensure you complete the current thought before ending. Never cut off mid-sentence.
 
-Write naturally and conversationally, but ensure every response is complete, accurate, and comprehensive. Do not include citations or reference numbers.`;
+ANSWER FRAMEWORK INTEGRATION:
+- ALWAYS follow the provided answer framework structure (Introduction → Main Body → Conclusion)
+- When an answer framework is provided, strictly adhere to its structure and components
+- When discussing topics that have appeared in previous year questions, reference PYQ patterns to show exam relevance
+- Use PYQ context to show how similar questions have been framed in actual exams
+- Balance theoretical knowledge with practical exam-oriented insights
+
+ACCURACY AND FACTUAL REQUIREMENTS:
+- ONLY provide information you are certain about. If you are unsure about a fact, date, or detail, clearly state that you are uncertain.
+- Do NOT make up facts, dates, names, or statistics. If you don't know something, say so rather than guessing.
+- When discussing exam-related topics, be precise and accurate. Do not provide incorrect information.
+- If asked about specific exam questions, papers, or dates, only provide information if you are confident it is correct.
+- Never fabricate or hallucinate information. It is better to admit uncertainty than to provide incorrect information.
+- When discussing current affairs, clearly distinguish between confirmed facts and general knowledge.
+- For PYQ (Previous Year Questions), only reference actual questions from the database. Do not create or invent questions.
+
+Write naturally and conversationally, but ensure every response is complete, accurate, and follows the structured framework. Integrate PYQ context seamlessly to enhance the answer's value for exam preparation. Do not include citations or reference numbers.`;
+
+    // Detect translation requests
+    const translationMatch = message.match(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+(hindi|marathi|tamil|bengali|punjabi|gujarati|telugu|malayalam|kannada|spanish|english)/i);
+    if (translationMatch) {
+      const targetLang = translationMatch[1].toLowerCase();
+      const languageMap = {
+        'hindi': 'hi', 'marathi': 'mr', 'tamil': 'ta', 'bengali': 'bn',
+        'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+        'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+      };
+      const targetLangCode = languageMap[targetLang] || 'hi';
+      
+      // Extract text to translate
+      let textToTranslate = message;
+      const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
+      if (colonMatch) {
+        textToTranslate = colonMatch[1].trim();
+      } else {
+        textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
+      }
+      
+      if (textToTranslate && textToTranslate.length > 0) {
+        try {
+          const translateModule = await import('@/pages/api/ai/translate');
+          const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
+          
+          if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
+            return res.status(200).json({
+              response: translated,
+              source: 'translation',
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (translationError) {
+          console.warn('Translation failed, falling back to regular response:', translationError.message);
+          // Fall through to regular chat handling
+        }
+      }
+    }
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -235,6 +294,19 @@ Write naturally and conversationally, but ensure every response is complete, acc
     const needsContext = !/(pyq|previous year)/i.test(message) && message.length > 30;
     const contextualEnhancement = needsContext ? contextualLayer.generateContextualPrompt(message) : '';
     const examContext = needsContext ? examKnowledge.generateContextualPrompt(message) : '';
+    
+    // Generate answer framework prompt
+    const answerFrameworkPrompt = examKnowledge.generateAnswerFrameworkPrompt(message);
+    
+    // Try to get relevant PYQ context (not full PYQ list, but context about similar questions)
+    let pyqContextPrompt = '';
+    if (!/(pyq|previous year|past year)/i.test(message)) {
+      // For non-PYQ queries, provide context about similar PYQ patterns
+      const subject = examKnowledge.detectSubjectFromQuery(message);
+      if (subject) {
+        pyqContextPrompt = `\n\nPYQ CONTEXT:\nWhen relevant, mention that similar questions have been asked in previous UPSC exams. Reference PYQ patterns to show exam relevance.`;
+      }
+    }
     
     function buildPyqPrompt(userMsg) {
       const pyqMatch = /(pyq|previous year (?:question|questions|paper|papers)|past year (?:question|questions))/i.test(userMsg);
@@ -342,10 +414,22 @@ Requirements:
     }
 
     const pyqPrompt = buildPyqPrompt(message);
-    const hasContext = contextualEnhancement || examContext;
+    const hasContext = contextualEnhancement || examContext || answerFrameworkPrompt;
     const optimizedPrompt = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, !!hasContext, false);
     
     let enhancedSystemPrompt = optimizedPrompt;
+    
+    // Add answer framework (always add for better structured answers)
+    if (answerFrameworkPrompt) {
+      enhancedSystemPrompt += answerFrameworkPrompt;
+    }
+    
+    // Add PYQ context (for non-PYQ queries)
+    if (pyqContextPrompt && !pyqPrompt) {
+      enhancedSystemPrompt += pyqContextPrompt;
+    }
+    
+    // Add PYQ listing prompt (for explicit PYQ queries)
     if (pyqPrompt) {
       enhancedSystemPrompt += pyqPrompt;
     } else if (contextualEnhancement && needsContext) {

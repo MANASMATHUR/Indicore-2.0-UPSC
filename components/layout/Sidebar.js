@@ -66,6 +66,8 @@ lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
                 size="icon"
                 onClick={() => setShowSearch(!showSearch)}
                 title="Search chats"
+                aria-label="Search chats"
+                aria-expanded={showSearch}
                 className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-200 dark:hover:bg-red-800 p-1 sm:p-2"
               >
                 <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -77,6 +79,8 @@ lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
                 size="icon"
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+                aria-pressed={isCollapsed}
                 className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-200 dark:hover:bg-red-800 p-1 sm:p-2"
               >
                 <svg 
@@ -93,6 +97,7 @@ lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
                 size="icon"
                 onClick={onClose}
                 title="Close sidebar"
+                aria-label="Close sidebar"
                 className="text-white bg-red-600 hover:bg-red-700 rounded-lg p-1 sm:p-2"
               >
                 <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,6 +218,7 @@ const ChatItem = ({
             size="icon"
             onClick={(e) => { e.stopPropagation(); onEdit(); }}
             title="Edit chat"
+            aria-label="Edit chat"
             className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-300"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,6 +230,8 @@ const ChatItem = ({
             size="icon"
             onClick={(e) => { e.stopPropagation(); onPin(); }}
             title={chat.pinned ? "Unpin chat" : "Pin chat"}
+            aria-label={chat.pinned ? "Unpin chat" : "Pin chat"}
+            aria-pressed={chat.pinned}
             className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-300"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -235,6 +243,7 @@ const ChatItem = ({
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             title="Delete chat"
+            aria-label="Delete chat"
             className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-300"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -4,6 +4,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 import { Providers } from './providers';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import VisitorTracker from '@/components/VisitorTracker';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
         <ErrorBoundary>
           <Providers>
             {children}
+            <VisitorTracker />
           </Providers>
         </ErrorBoundary>
         <Analytics />

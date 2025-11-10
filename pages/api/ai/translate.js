@@ -156,7 +156,7 @@ export default async function handler(req, res) {
   }
 }
 
-async function translateText(text, sourceLang, targetLang, isStudyMaterial = false) {
+export async function translateText(text, sourceLang, targetLang, isStudyMaterial = false) {
   // Handle auto-detection
   if (sourceLang === 'auto') {
     sourceLang = 'en';
@@ -164,7 +164,7 @@ async function translateText(text, sourceLang, targetLang, isStudyMaterial = fal
 
   // If source and target are the same after auto-detection, return original
   if (sourceLang === targetLang) {
-    console.log(`[Translation] Source and target languages are the same (${sourceLang}), returning original text`);
+    // Source and target languages are the same, returning original text
     return text;
   }
 

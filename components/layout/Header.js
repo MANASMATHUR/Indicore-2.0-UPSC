@@ -105,12 +105,7 @@ const Header = ({
           e.stopPropagation();
           onMenuClick();
         }}
-        className="absolute left-2 sm:left-4 top-1/2 bg-red-500 text-white p-2 sm:p-3 rounded-lg hover:bg-red-600 active:bg-red-700 cursor-pointer z-50 transition-colors duration-200 select-none touch-manipulation"
-        style={{ 
-          fontSize: '12px',
-          fontWeight: '600',
-          transform: 'translateY(-50%)',
-        }}
+        className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 transform bg-red-500 text-white px-3 py-2 sm:px-4 sm:py-3 rounded-lg hover:bg-red-600 active:bg-red-700 cursor-pointer z-50 transition-colors duration-200 select-none touch-manipulation text-[12px] font-semibold"
         aria-label="Toggle sidebar"
       >
         <span className="hidden sm:inline">Menu</span>
@@ -119,7 +114,7 @@ const Header = ({
         </svg>
       </button>
 
-      <div className="animate-fade-in flex flex-col items-center">
+      <div className="flex flex-col items-center">
         <Logo variant="light" showText={true} size="sm" />
         <p className="text-xs sm:text-sm text-red-700 dark:text-slate-300 font-medium mt-1">PCS • UPSC • SSC</p>
       </div>
@@ -132,6 +127,8 @@ const Header = ({
               size="icon"
             onClick={() => setShowToolsMenu(!showToolsMenu)}
             title="Tools & Features"
+            aria-haspopup="true"
+            aria-expanded={showToolsMenu}
               className="text-red-600 hover:text-red-800 hover:bg-red-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
             >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,6 +161,16 @@ const Header = ({
                           }
                         }}
                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-3 group"
+                        aria-haspopup={item.hasSubmenu ? "true" : undefined}
+                        aria-expanded={
+                          item.hasSubmenu
+                            ? item.id === 'exam-tools'
+                              ? showExamSubmenu
+                              : item.id === 'writing-tools'
+                                ? showWritingSubmenu
+                                : undefined
+                            : undefined
+                        }
                       >
                         <div className="text-red-600 dark:text-red-400 group-hover:text-red-800 dark:group-hover:text-red-200">
                           {item.icon}
@@ -261,6 +268,8 @@ const Header = ({
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="text-red-600 hover:text-red-800 hover:bg-red-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
             aria-label="User menu"
+            aria-haspopup="true"
+            aria-expanded={showUserMenu}
           >
             <img 
               src={user.avatar || '/static/default-avatar.jpg'} 

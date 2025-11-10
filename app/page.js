@@ -235,10 +235,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              How We Compare
+              Our Unique Features
             </h2>
             <p className="text-xl text-gray-600">
-              What sets Indicore apart
+              Specialized tools designed specifically for competitive exam preparation
             </p>
           </div>
 
@@ -250,81 +250,59 @@ export default function Home() {
                   <tr>
                     <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Feature</th>
                     <th className="px-6 py-4 text-center text-sm font-bold text-gray-900">Indicore</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-gray-600">ChatGPT</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-gray-600">Gemini</th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-gray-600">Perplexity</th>
+                    <th className="px-6 py-4 text-center text-sm font-medium text-gray-500">Other AI Services</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Previous Year Questions Database</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Exam-Specific Answer Frameworks</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">UPSC/PCS/SSC Evaluation System</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">State-Specific PCS Knowledge</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">11 Languages with Native Speech</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Essay Enhancement Tool</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Vocabulary Builder (Bilingual)</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">Constitutional Articles & Landmark Cases</td>
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">Constitutional Articles</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Government Schemes Database</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                   <tr className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">Exam Paper Upload & Analysis</td>
                     <td className="px-6 py-4 text-center"><CheckCircle2 className="h-5 w-5 text-red-600 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
-                    <td className="px-6 py-4 text-center"><XCircle className="h-5 w-5 text-gray-400 mx-auto" /></td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-500">—</td>
                   </tr>
                 </tbody>
               </table>

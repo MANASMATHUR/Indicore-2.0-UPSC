@@ -57,7 +57,8 @@ function isResponseComplete(response) {
   const trimmed = response.trim();
   if (trimmed.length < 10) return false;
   
-  const lastSent = trimmed.split(/[.!?]/).pop().trim();
+  const sentences = trimmed.split(/[.!?]/).filter(s => s.trim().length > 0);
+  const lastSent = sentences.length > 0 ? sentences[sentences.length - 1].trim() : trimmed.trim();
   if (lastSent.length > 0 && lastSent.length < 5) return false;
   
   const incomplete = [
@@ -148,6 +149,54 @@ export default async function handler(req, res) {
       res.flush();
     }
 
+    // Detect translation requests
+    const translationMatch = message.match(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+(hindi|marathi|tamil|bengali|punjabi|gujarati|telugu|malayalam|kannada|spanish|english)/i);
+    if (translationMatch) {
+      const targetLang = translationMatch[1].toLowerCase();
+      const languageMap = {
+        'hindi': 'hi', 'marathi': 'mr', 'tamil': 'ta', 'bengali': 'bn',
+        'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+        'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+      };
+      const targetLangCode = languageMap[targetLang] || 'hi';
+      
+      // Extract text to translate (everything after "Translate" or the text after colon)
+      let textToTranslate = message;
+      const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
+      if (colonMatch) {
+        textToTranslate = colonMatch[1].trim();
+      } else {
+        // Remove translation instruction to get the text
+        textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
+      }
+      
+      if (textToTranslate && textToTranslate.length > 0) {
+        try {
+          const translateModule = await import('@/pages/api/ai/translate');
+          const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
+          
+          if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
+            const chunks = translated.match(/.{1,100}/g) || [translated];
+            for (const chunk of chunks) {
+              res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+              if (typeof res.flush === 'function') {
+                res.flush();
+              }
+            }
+            res.write('data: [DONE]\n\n');
+            if (typeof res.flush === 'function') {
+              res.flush();
+            }
+            res.end();
+            return;
+          }
+        } catch (translationError) {
+          console.warn('Translation failed, falling back to regular response:', translationError.message);
+          // Fall through to regular chat handling
+        }
+      }
+    }
+
     const presetAnswer = findPresetAnswer(message);
     if (presetAnswer) {
       const chunks = presetAnswer.match(/.{1,100}/g) || [presetAnswer];
@@ -210,12 +259,12 @@ export default async function handler(req, res) {
       return [];
     })() : Promise.resolve([]);
 
-    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
+    let finalSystemPrompt = systemPrompt || `You are Indicore, a helpful AI assistant. While you specialize in exam preparation for UPSC, PCS, and SSC exams, you can also answer general questions on any topic. Your role is to provide comprehensive, accurate, and well-structured responses.
 
-CRITICAL REQUIREMENTS:
+CRITICAL REQUIREMENTS - RESPONSE QUALITY AND COMPLETENESS:
 1. ALWAYS write complete, comprehensive answers. Never leave sentences incomplete or cut off mid-thought.
 2. Write in full, well-formed sentences. Each sentence must have a subject, verb, and complete meaning.
-3. Provide thorough, detailed responses that fully address the question asked.
+3. Provide thorough, detailed responses that fully address the question asked with depth and clarity.
 4. Use proper paragraph structure with clear topic sentences and supporting details.
 5. Ensure your response has a logical flow: introduction, main content, and conclusion where appropriate.
 6. Use bullet points only when listing multiple items. Otherwise, write in paragraph form.
@@ -223,8 +272,36 @@ CRITICAL REQUIREMENTS:
 8. Never use placeholders, incomplete phrases, or cut-off words.
 9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
 10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
+11. NEVER end responses with incomplete phrases like "and", "or", "but", "the", "a", "to", "from", "with", "for", "I can", "Let me", "Please note", etc.
+12. Every sentence must be grammatically complete and meaningful. Do not leave any sentence hanging or incomplete.
+13. If you need to stop, ensure you complete the current thought before ending. Never cut off mid-sentence.
+14. Provide context and background information when relevant to help students understand the topic better.
+15. Include examples, case studies, and real-world applications when appropriate to enhance understanding.
 
-Write naturally and conversationally, but ensure every response is complete, accurate, and comprehensive. Do not include citations or reference numbers.`;
+CONTENT REQUIREMENTS:
+- For exam-related questions (UPSC/PCS/SSC): Focus on GS papers, Prelims, and Essay requirements. Include constitutional provisions, government schemes, and policies when relevant. Link topics to exam syllabus and previous year question patterns.
+- For general questions: Provide comprehensive, accurate information on any topic asked. You can answer questions about weather, business, history, science, technology, or any other subject.
+- Always provide context and background information when relevant
+- Include examples, case studies, and real-world applications when appropriate
+
+ACCURACY AND FACTUAL REQUIREMENTS:
+- ONLY provide information you are certain about. If you are unsure about a fact, date, or detail, clearly state that you are uncertain.
+- Do NOT make up facts, dates, names, or statistics. If you don't know something, say so rather than guessing.
+- When discussing exam-related topics, be precise and accurate. Do not provide incorrect information.
+- If asked about specific exam questions, papers, or dates, only provide information if you are confident it is correct.
+- Never fabricate or hallucinate information. It is better to admit uncertainty than to provide incorrect information.
+- When discussing current affairs, clearly distinguish between confirmed facts and general knowledge.
+- For PYQ (Previous Year Questions), only reference actual questions from the database. Do not create or invent questions.
+
+RESPONSE FORMATTING:
+- Write in clear, natural language that is easy to understand
+- Use proper grammar, punctuation, and sentence structure
+- Organize information logically with clear transitions between ideas
+- Break down complex topics into digestible sections
+- Use examples to illustrate key points
+- Ensure every paragraph has a clear purpose and contributes to answering the question
+
+Write naturally and conversationally, but ensure every response is complete, accurate, and truthful. For exam-related questions, make them exam-focused. For general questions, provide comprehensive information on the topic. Do not include citations or reference numbers.`;
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -253,19 +330,20 @@ Write naturally and conversationally, but ensure every response is complete, acc
       return await pyqService.search(userMsg, context, language);
     }
 
-    if (!contextOptimizer.shouldUseLLM(message)) {
-      const quickResponse = contextualLayer.getQuickResponse(message);
-      if (quickResponse && !quickResponse.requiresAI) {
-        const responseText = quickResponse.response || quickResponse.quickResponse || '';
-        const chunks = responseText.match(/.{1,100}/g) || [responseText];
-        for (const chunk of chunks) {
-          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
-          if (typeof res.flush === 'function') res.flush();
-        }
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
+    // Check for quick responses only for very specific exam-related queries
+    // Don't block general questions - let them go through to LLM
+    const quickResponse = contextualLayer.getQuickResponse(message);
+    if (quickResponse && !quickResponse.requiresAI && contextOptimizer.shouldUseLLM(message) === false) {
+      // Only use quick response if it's a simple query that doesn't need LLM
+      const responseText = quickResponse.response || quickResponse.quickResponse || '';
+      const chunks = responseText.match(/.{1,100}/g) || [responseText];
+      for (const chunk of chunks) {
+        res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+        if (typeof res.flush === 'function') res.flush();
       }
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
     }
 
     // Check if this is a PYQ query - use more strict checking
@@ -274,8 +352,9 @@ Write naturally and conversationally, but ensure every response is complete, acc
     const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
     const isPyqQuery = hasPyqKeyword || hasPyqIntent || hasSubjectPyq;
     
-    // For general questions, always use context unless it's clearly a PYQ query
-    const needsContext = !isPyqQuery && message.length > 30 && contextOptimizer.shouldUseLLM(message);
+    // For general questions, always use LLM - don't restrict based on shouldUseLLM
+    // Only skip context for very short messages or simple greetings
+    const needsContext = !isPyqQuery && message.length > 10;
 
     const [rawHistory, contextualData, pyqDb] = await Promise.all([
       historyPromise,
@@ -373,34 +452,60 @@ Write naturally and conversationally, but ensure every response is complete, acc
       
       const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
       
-      return `\n\nPYQ LISTING MODE:\nYou are providing Previous Year Questions (PYQ) from the database. Return only a well-formatted, complete list with no explanations or extra commentary.
+      return `\n\nPYQ LISTING MODE:\nYou are providing Previous Year Questions (PYQ) from the database. Your task is to format and present questions in a clear, organized, and complete manner.
 
-CRITICAL REQUIREMENTS:
-1. Write complete, well-formed sentences and lists. Never leave responses incomplete.
+CRITICAL REQUIREMENTS - RESPONSE QUALITY:
+1. ALWAYS write complete, well-formed responses. Never leave responses incomplete or cut off mid-thought.
 2. Use simple, clean formatting without markdown headers (##, ###) or excessive bold text.
-3. Ensure all questions are properly formatted and complete.
-4. Group questions logically by year.
+3. Ensure all questions are properly formatted and complete with proper punctuation.
+4. Group questions logically by year (newest first).
+5. ONLY include questions that are actually in the database. Do NOT invent or create questions.
+6. If the database returns no questions, clearly state: "No questions were found for the given criteria. Please try adjusting your search parameters."
+7. Every sentence must be grammatically complete. Never end with incomplete phrases.
+8. Ensure the response has a clear structure: header, topic info, questions grouped by year, and summary.
+9. Write in full, complete sentences. Do not use placeholders or incomplete phrases.
 
-Format:
-1. Start with: "Previous Year Questions (${examCodeDetected})"
-2. Topic: "Topic: ${theme}" (if provided)
+ACCURACY REQUIREMENTS:
+- ONLY list questions that are actually provided in the database response.
+- Do NOT make up, invent, or create questions that are not in the database.
+- Do NOT fabricate question numbers, papers, or years.
+- If unsure about any question details, mark it as "(unverified)" or use ⚠️ symbol.
+- Be honest if no questions match the criteria rather than creating fake questions.
+- Verify question text matches what's in the database - do not paraphrase or modify.
+
+RESPONSE FORMAT STRUCTURE:
+1. Header: Start with "Previous Year Questions (${examCodeDetected})"
+2. Topic Information: "Topic: ${theme}" (if provided, otherwise skip this line)
 3. Year Range: "Year Range: ${fromYear || 'All'} to ${toYear || 'Present'}" (if provided)
-4. Group by year: "Year {YEAR} ({count} questions)"
-5. Question format: "{number}. [{Paper}] {Question Text}"
-6. Status: ✅ for verified, ⚠️ for unverified
-7. Summary: "Summary" with total count
+4. Questions Section: Group by year with clear headers
+   - Format: "Year {YEAR} ({count} questions)"
+   - Each question: "{number}. [{Paper}] {Question Text}"
+   - Use proper numbering (1, 2, 3...)
+   - Include paper name in brackets if available
+   - Keep question text complete and accurate
+5. Summary: End with "Summary: Total {count} questions found" or similar
 
-Requirements:
+FORMATTING REQUIREMENTS:
 - Group by year (newest first)
-- Include paper name if known
-- Keep questions under 200 chars
-- Mark uncertain as "(unverified)" or ⚠️
+- Include paper name if known (e.g., [GS Paper 1], [Prelims])
+- Keep questions under 200 characters when possible, but prioritize completeness
+- Mark uncertain questions as "(unverified)" or use ⚠️ symbol
 - Filter by theme if provided: ${theme || 'none'}
 - ${yearLine}
 - Exam: ${examCodeDetected}
 - Prioritize verified questions
-- Use plain text formatting only
-- Ensure response is complete and properly formatted`;
+- Use plain text formatting only (no markdown)
+- Ensure proper spacing between sections
+- Use consistent numbering and formatting throughout
+
+COMPLETENESS REQUIREMENTS:
+- Always end with a complete sentence or summary
+- Never cut off mid-question or mid-sentence
+- Ensure all questions are fully displayed
+- Include all relevant information (year, paper, question text)
+- Provide a clear summary at the end
+
+Remember: Your goal is to present questions clearly and completely. If no questions are found, state that clearly. If questions are found, format them properly and ensure the response is complete and well-structured.`;
     }
 
     const previousPyqContext = extractPyqContextFromHistory(conversationHistory);
@@ -451,8 +556,8 @@ Requirements:
     }
 
     let contextNote = '';
-    if (previousPyqContext && isFollowUpQuestion) {
-      contextNote = `\nContext: ${previousPyqContext.theme || 'general'} (${previousPyqContext.fromYear || 'all'}-${previousPyqContext.toYear || 'present'}), ${previousPyqContext.examCode}`;
+    if (previousPyqContext && isFollowUpQuestion && typeof previousPyqContext === 'object') {
+      contextNote = `\nContext: ${previousPyqContext.theme || 'general'} (${previousPyqContext.fromYear || 'all'}-${previousPyqContext.toYear || 'present'}), ${previousPyqContext.examCode || ''}`;
     }
 
     const optimalModel = contextOptimizer.selectOptimalModel(message, hasContext && optimizedHistory.length > 2);
@@ -467,22 +572,40 @@ Requirements:
       pyqPrompt ? 4000 : 3000
     );
 
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
-      messages: messagesForAPI,
-      max_tokens: maxTokens,
-      temperature: pyqPrompt ? 0.2 : 0.7,
-      top_p: 0.9,
-      stream: true
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
-      },
-      responseType: 'stream',
-      timeout: 90000
-    });
+    let response;
+    try {
+      response = await axios.post('https://api.perplexity.ai/chat/completions', {
+        model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
+        messages: messagesForAPI,
+        max_tokens: maxTokens,
+        temperature: pyqPrompt ? 0.2 : 0.7,
+        top_p: 0.9,
+        stream: true
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        responseType: 'stream',
+        timeout: 90000
+      });
+    } catch (apiError) {
+      console.error('Perplexity API error:', apiError.response?.status, apiError.response?.data || apiError.message);
+      if (apiError.response?.status === 400) {
+        console.error('API 400 Error Details:', {
+          model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
+          maxTokens,
+          messageLength: message.length,
+          systemContentLength: systemContent.length,
+          hasPyqPrompt: !!pyqPrompt
+        });
+      }
+      res.write(`data: ${JSON.stringify({ error: 'API request failed. Please try again.', final: true })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
 
     let fullResponse = '';
     
@@ -499,11 +622,40 @@ Requirements:
             if (data === '[DONE]') {
               clearInterval(keepAlive);
               
+              // Validate that we have a meaningful response
+              if (!fullResponse || fullResponse.trim().length < 10) {
+                res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                resolve();
+                return;
+              }
+
               // Comprehensive cleaning of full response
-              const cleanedResponse = cleanAIResponse(fullResponse);
-              const isValid = validateAndCleanResponse(cleanedResponse, 30);
+              let cleanedResponse = cleanAIResponse(fullResponse);
+              let isValid = validateAndCleanResponse(cleanedResponse, 30);
               
-              if (isValid) {
+              // If cleaning made response invalid, check original
+              if (!isValid && fullResponse.trim().length > 50) {
+                // Check if original is garbled
+                if (!isGarbledResponse(fullResponse)) {
+                  // Try cleaning again with less strict rules
+                  cleanedResponse = fullResponse.trim();
+                  // Remove only obvious issues
+                  cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                  cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                  
+                  // Ensure it ends properly
+                  if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                    cleanedResponse += '.';
+                  }
+                  
+                  isValid = cleanedResponse;
+                }
+              }
+              
+              // Ensure we have a valid response before caching
+              if (isValid && isValid.length > 30) {
                 // Cache the cleaned response if valid
                 responseCache.set(cacheKey, {
                   response: isValid,
@@ -518,11 +670,26 @@ Requirements:
                     }
                   }
                 }
-                
-                // Send final cleaned response if it differs significantly
-                if (cleanedResponse !== fullResponse && cleanedResponse.length > 30) {
-                  res.write(`data: ${JSON.stringify({ content: cleanedResponse.substring(fullResponse.length), final: true })}\n\n`);
+              } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+                // Fallback: use original if it's not garbled and substantial
+                cleanedResponse = fullResponse.trim();
+                // Minimal cleaning
+                cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                if (!/[.!?]$/.test(cleanedResponse)) {
+                  cleanedResponse += '.';
                 }
+                responseCache.set(cacheKey, {
+                  response: cleanedResponse,
+                  timestamp: Date.now()
+                });
+              } else {
+                // Response is too short or garbled - send error
+                res.write(`data: ${JSON.stringify({ error: 'Response validation failed. Please try rephrasing your question.', final: true })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                resolve();
+                return;
               }
               
               res.write('data: [DONE]\n\n');
@@ -537,15 +704,39 @@ Requirements:
               const parsed = JSON.parse(data);
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 let content = parsed.choices[0].delta.content;
-                // Clean content in real-time (light cleaning for streaming)
+                // Comprehensive cleaning for streaming - remove citations and Perplexity patterns
                 content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                fullResponse += content;
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                if (typeof res.flush === 'function') {
-                  res.flush();
+                // Remove Perplexity citation patterns during streaming (more comprehensive)
+                content = content.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?![A-Z])/g, '');
+                content = content.replace(/From\s+result\s*\([^)]*\)\s*[:.]?\s*/gi, '');
+                content = content.replace(/From\s+result\s*[:.]?\s*/gi, '');
+                content = content.replace(/From\s+result[^.!?]*/gi, '');
+                // Remove broken citation patterns
+                content = content.replace(/\s*\([A-Z][a-zA-Z\s]{2,}\)\s*:\s*(?=\s*[a-z])/g, ' ');
+                // Remove UI elements
+                content = content.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
+                content = content.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
+                content = content.replace(/👤|🎓|🌐/g, '');
+                
+                // Skip empty or whitespace-only content
+                if (content.trim().length > 0) {
+                  fullResponse += content;
+                  // Send content immediately for real-time streaming
+                  res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                  if (typeof res.flush === 'function') {
+                    res.flush();
+                  }
                 }
               }
+              // Handle error in response
+              if (parsed.error) {
+                throw new Error(parsed.error.message || 'API error');
+              }
             } catch (e) {
+              // Silently skip malformed JSON chunks
+              if (e.message && !e.message.includes('JSON')) {
+                console.error('Stream parsing error:', e.message);
+              }
             }
           }
         }
@@ -554,13 +745,57 @@ Requirements:
       response.data.on('end', () => {
         clearInterval(keepAlive);
         
+        // Validate that we have a meaningful response
+        if (!fullResponse || fullResponse.trim().length < 10) {
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+          resolve();
+          return;
+        }
+
         // Clean and validate response before caching
-        const cleanedResponse = cleanAIResponse(fullResponse);
-        const isValid = validateAndCleanResponse(cleanedResponse, 30);
+        let cleanedResponse = cleanAIResponse(fullResponse);
+        let isValid = validateAndCleanResponse(cleanedResponse, 30);
         
-        if (isValid) {
+        // If cleaning made response invalid, check original
+        if (!isValid && fullResponse.trim().length > 50) {
+          // Check if original is garbled
+          if (!isGarbledResponse(fullResponse)) {
+            // Try cleaning again with less strict rules
+            cleanedResponse = fullResponse.trim();
+            // Remove only obvious issues
+            cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+            cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+            
+            // Ensure it ends properly
+            if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+              cleanedResponse += '.';
+            }
+            
+            isValid = cleanedResponse;
+          }
+        }
+        
+        // Ensure we have a valid response
+        if (isValid && isValid.length > 30) {
           responseCache.set(cacheKey, {
             response: isValid,
+            timestamp: Date.now()
+          });
+        } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+          // Fallback: use original if it's not garbled and substantial
+          cleanedResponse = fullResponse.trim();
+          // Minimal cleaning
+          cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+          cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+          if (!/[.!?]$/.test(cleanedResponse)) {
+            cleanedResponse += '.';
+          }
+          responseCache.set(cacheKey, {
+            response: cleanedResponse,
             timestamp: Date.now()
           });
         }

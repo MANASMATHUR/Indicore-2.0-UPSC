@@ -302,6 +302,12 @@ export default function ChatInterface({ user }) {
         }
 
         clearTimeout(timeoutId);
+        
+        // Validate response before saving
+        if (!fullResponse || fullResponse.trim().length < 10) {
+          throw new Error('Empty or invalid response received. Please try again.');
+        }
+        
         // Clean the final response before saving (server already cleans, but double-check client-side)
         let finalResponse = fullResponse.trim();
         // Remove any remaining garbled patterns
@@ -310,6 +316,11 @@ export default function ChatInterface({ user }) {
         finalResponse = finalResponse.replace(/\bI'?m\s+to\s+support[^.]*\./gi, '');
         finalResponse = finalResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
         finalResponse = finalResponse.trim();
+        
+        // Final validation
+        if (finalResponse.length < 10) {
+          throw new Error('Response too short after cleaning. Please try rephrasing your question.');
+        }
         
         await addAIMessage(chatId, finalResponse, messageLanguage);
         setStreamingMessage('');

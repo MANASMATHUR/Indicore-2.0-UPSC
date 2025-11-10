@@ -7,7 +7,7 @@ import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
 import Chat from '@/models/Chat';
 import { Server } from 'socket.io';
-import { cleanAIResponse, validateAndCleanResponse } from '@/lib/responseCleaner';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
 
 let io = null;
 const responseCache = new Map();
@@ -114,7 +114,56 @@ CRITICAL REQUIREMENTS:
 9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
 10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
 
-Write naturally and conversationally, but ensure every response is complete, accurate, and comprehensive. Do not include citations or reference numbers.`;
+ACCURACY AND FACTUAL REQUIREMENTS:
+- ONLY provide information you are certain about. If you are unsure about a fact, date, or detail, clearly state that you are uncertain.
+- Do NOT make up facts, dates, names, or statistics. If you don't know something, say so rather than guessing.
+- When discussing exam-related topics, be precise and accurate. Do not provide incorrect information.
+- If asked about specific exam questions, papers, or dates, only provide information if you are confident it is correct.
+- Never fabricate or hallucinate information. It is better to admit uncertainty than to provide incorrect information.
+- When discussing current affairs, clearly distinguish between confirmed facts and general knowledge.
+- For PYQ (Previous Year Questions), only reference actual questions from the database. Do not create or invent questions.
+
+Write naturally and conversationally, but ensure every response is complete, accurate, and truthful. Do not include citations or reference numbers.`;
+
+          // Detect translation requests
+          const translationMatch = message.match(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+(hindi|marathi|tamil|bengali|punjabi|gujarati|telugu|malayalam|kannada|spanish|english)/i);
+          if (translationMatch) {
+            const targetLang = translationMatch[1].toLowerCase();
+            const languageMap = {
+              'hindi': 'hi', 'marathi': 'mr', 'tamil': 'ta', 'bengali': 'bn',
+              'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+              'kannada': 'kn', 'spanish': 'es', 'english': 'en'
+            };
+            const targetLangCode = languageMap[targetLang] || 'hi';
+            
+            // Extract text to translate
+            let textToTranslate = message;
+            const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
+            if (colonMatch) {
+              textToTranslate = colonMatch[1].trim();
+            } else {
+              textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
+            }
+            
+            if (textToTranslate && textToTranslate.length > 0) {
+              try {
+                const translateModule = await import('@/pages/api/ai/translate');
+                const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
+                
+                if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
+                  socket.emit('chat:response', {
+                    success: true,
+                    response: translated,
+                    complete: true
+                  });
+                  return;
+                }
+              } catch (translationError) {
+                console.warn('Translation failed, falling back to regular response:', translationError.message);
+                // Fall through to regular chat handling
+              }
+            }
+          }
 
           if (language && language !== 'en') {
             const languageNames = {
@@ -166,10 +215,29 @@ Write naturally and conversationally, but ensure every response is complete, acc
                 if (data === '[DONE]') {
                   // Clean and validate response asynchronously (don't block stream completion)
                   setImmediate(() => {
-                    const cleanedResponse = cleanAIResponse(fullResponse);
-                    const isValid = validateAndCleanResponse(cleanedResponse, 30);
+                    let cleanedResponse = cleanAIResponse(fullResponse);
+                    let isValid = validateAndCleanResponse(cleanedResponse, 30);
                     
-                    if (isValid) {
+                    // If cleaning made response invalid, check original
+                    if (!isValid && fullResponse.trim().length > 50) {
+                      // Check if original is garbled
+                      if (!isGarbledResponse(fullResponse)) {
+                        // Try cleaning again with less strict rules
+                        cleanedResponse = fullResponse.trim();
+                        // Remove only obvious issues
+                        cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                        cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                        
+                        // Ensure it ends properly
+                        if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                          cleanedResponse += '.';
+                        }
+                        
+                        isValid = cleanedResponse;
+                      }
+                    }
+                    
+                    if (isValid && isValid.length > 30) {
                       responseCache.set(cacheKey, {
                         response: isValid,
                         timestamp: Date.now()
@@ -186,6 +254,19 @@ Write naturally and conversationally, but ensure every response is complete, acc
                           }
                         });
                       }
+                    } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+                      // Fallback: use original if it's not garbled and substantial
+                      cleanedResponse = fullResponse.trim();
+                      // Minimal cleaning
+                      cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                      cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                      if (!/[.!?]$/.test(cleanedResponse)) {
+                        cleanedResponse += '.';
+                      }
+                      responseCache.set(cacheKey, {
+                        response: cleanedResponse,
+                        timestamp: Date.now()
+                      });
                     }
                   });
                   

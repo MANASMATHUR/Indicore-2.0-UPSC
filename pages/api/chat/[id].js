@@ -54,10 +54,13 @@ export default async function handler(req, res) {
       }
 
       if (message) {
+        if (!chat.messages) {
+          chat.messages = [];
+        }
         chat.messages.push({
           sender: 'assistant',
           text: message,
-          language,
+          language: language || 'en',
           timestamp: new Date()
         });
         chat.lastMessageAt = new Date();
