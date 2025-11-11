@@ -1,19 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, SessionProvider } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 
-export default function VisitorAnalytics() {
-  const { data: session } = useSession({ required: false });
+function VisitorAnalyticsContent() {
+  // Safely handle useSession - it may return undefined during SSR/build
+  // useSession always returns an object with { data, status }, but we handle it safely anyway
+  const sessionResult = useSession({ required: false });
+  // Safely extract session data with fallbacks
+  const session = sessionResult?.data ?? null;
+  const sessionStatus = sessionResult?.status ?? 'loading';
+
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('7d');
   const [includeBots, setIncludeBots] = useState('true');
 
   useEffect(() => {
-    fetchStats();
-  }, [period, includeBots]);
+    // Only fetch if session status is determined (not loading)
+    if (sessionStatus !== 'loading') {
+      fetchStats();
+    }
+  }, [period, includeBots, sessionStatus]);
 
   const fetchStats = async () => {
     try {
@@ -30,6 +39,16 @@ export default function VisitorAnalytics() {
     }
   };
 
+  // Show loading state while session is being determined
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show access denied if no session
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -336,3 +355,11 @@ export default function VisitorAnalytics() {
   );
 }
 
+// Export wrapped component with SessionProvider to prevent build errors
+export default function VisitorAnalytics() {
+  return (
+    <SessionProvider>
+      <VisitorAnalyticsContent />
+    </SessionProvider>
+  );
+}
