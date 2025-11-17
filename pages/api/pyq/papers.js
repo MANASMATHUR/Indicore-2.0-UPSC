@@ -12,12 +12,14 @@ export default async function handler(req, res) {
       level = '' // Prelims, Mains, or empty for all
     } = req.query;
 
+    // Normalize filters
     const filter = {
-      exam: new RegExp(`^${exam}$`, 'i')
+      exam: exam.toUpperCase().trim(),
+      question: { $exists: true, $ne: '', $regex: /.{10,}/ } // Only valid questions
     };
 
-    if (level) {
-      filter.level = new RegExp(level, 'i');
+    if (level && level.trim()) {
+      filter.level = new RegExp(`^${level.trim()}$`, 'i');
     }
 
     // Get distinct papers for the exam and level
@@ -25,13 +27,15 @@ export default async function handler(req, res) {
 
     // Get question counts for each paper
     const papersWithCounts = await Promise.all(
-      papers.map(async (paper) => {
-        const count = await PYQ.countDocuments({ ...filter, paper });
-        return {
-          paper: paper || 'General',
-          count
-        };
-      })
+      papers
+        .filter(paper => paper && paper.trim()) // Filter out empty papers
+        .map(async (paper) => {
+          const count = await PYQ.countDocuments({ ...filter, paper });
+          return {
+            paper: paper.trim(),
+            count
+          };
+        })
     );
 
     // Sort by count (descending) and then by paper name
