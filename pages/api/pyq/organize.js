@@ -7,7 +7,6 @@ function normalizeExam(exam) {
   const examUpper = String(exam).toUpperCase().trim();
   const validExams = ['UPSC', 'PCS', 'SSC', 'TNPSC', 'MPSC', 'BPSC', 'UPPSC', 'MPPSC', 'RAS', 'RPSC', 'GPSC', 'KPSC', 'WBPSC', 'PPSC', 'OPSC', 'APSC', 'APPSC', 'TSPSC', 'HPSC', 'JKPSC', 'KERALA PSC', 'GOA PSC'];
   
-  // Try to match common variations
   if (examUpper.includes('TAMIL') || examUpper.includes('TN')) return 'TNPSC';
   if (examUpper.includes('MAHARASHTRA') || examUpper.includes('MAH')) return 'MPSC';
   if (examUpper.includes('BIHAR') || examUpper.includes('BP')) return 'BPSC';
@@ -92,7 +91,6 @@ export default async function handler(req, res) {
     let deleted = 0;
     let processed = 0;
 
-    // Process in batches
     const batchSize = 500;
     const totalBatches = Math.ceil(total / batchSize);
 
@@ -105,14 +103,12 @@ export default async function handler(req, res) {
         const updates = {};
         let needsUpdate = false;
 
-        // Normalize exam
         const normalizedExam = normalizeExam(pyq.exam);
         if (normalizedExam !== pyq.exam) {
           updates.exam = normalizedExam;
           needsUpdate = true;
         }
 
-        // Normalize level
         const normalizedLevel = normalizeLevel(pyq.level);
         if (normalizedLevel !== (pyq.level || '')) {
           updates.level = normalizedLevel;
