@@ -10,8 +10,9 @@ function validateTranslateRequest(req) {
     throw new Error('Text is required and must be a non-empty string');
   }
 
-  if (text.length > 5000) {
-    throw new Error('Text too long: maximum 5,000 characters allowed');
+  // Increased limit to 10000 characters to handle longer translations
+  if (text.length > 10000) {
+    throw new Error('Text too long: maximum 10,000 characters allowed');
   }
 
   if (!sourceLanguage || typeof sourceLanguage !== 'string') {
@@ -213,9 +214,11 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
       throw new Error('empty_translation');
     });
 
-    if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, 15000)));
-    if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, 15000)));
-    if (process.env.MISTRAL_API_KEY) attempts.push(tryModel(translateWithMistral(text, sourceLang, targetLang, 15000)));
+    // Use dynamic timeout calculation based on text length
+    const dynamicTimeout = calculateTranslationTimeout(text.length);
+    if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, dynamicTimeout)));
+    if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, dynamicTimeout)));
+    if (process.env.MISTRAL_API_KEY) attempts.push(tryModel(translateWithMistral(text, sourceLang, targetLang, dynamicTimeout)));
 
     if (attempts.length) {
       try {
@@ -554,7 +557,15 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
 }
 
 // Azure Translator API - Professional translation service
-async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = 15000) {
+// Calculate timeout based on text length to prevent cutoffs
+function calculateTranslationTimeout(textLength) {
+  // Base timeout: 20 seconds
+  // Add 1 second per 500 characters
+  return Math.min(60000, 20000 + Math.ceil(textLength / 500) * 1000);
+}
+
+async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = null) {
+  if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const azureKey = process.env.AZURE_TRANSLATOR_KEY || process.env.AZURE_TRANSLATOR_SUBSCRIPTION_KEY;
   const azureRegion = process.env.AZURE_TRANSLATOR_REGION || process.env.AZURE_TRANSLATOR_LOCATION || 'global';
   
@@ -612,7 +623,8 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = 1500
 }
 
 // Gemini API translation for study materials (FREE TIER)
-async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = 8000) {
+async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = null) {
+  if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -663,7 +675,7 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: Math.min(8000, Math.ceil(text.length * 2.5)), // Scale with input length
+          maxOutputTokens: Math.min(20000, Math.ceil(text.length * 3)), // Increased to prevent cutoffs, scale better
           topP: 0.8,
           topK: 40
         }
@@ -682,7 +694,8 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
 }
 
 // Cohere API translation for study materials
-async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = 8000) {
+async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = null) {
+  if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -729,7 +742,7 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
         body: JSON.stringify({
         model: 'command',
         prompt: prompt,
-        max_tokens: Math.min(4000, Math.ceil(text.length * 2.5)), // Scale with input length
+        max_tokens: Math.min(8000, Math.ceil(text.length * 3)), // Increased to prevent cutoffs, scale better
         temperature: 0.3,
         stop_sequences: ['---']
       })
@@ -744,7 +757,8 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
   return null;
 }
 
-async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = 8000) {
+async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = null) {
+  if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
     'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
     'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
@@ -796,7 +810,7 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
             content: prompt
           }
         ],
-        max_tokens: Math.min(4000, Math.ceil(text.length * 2.5)), // Scale with input length
+        max_tokens: Math.min(8000, Math.ceil(text.length * 3)), // Increased to prevent cutoffs, scale better
         temperature: 0.3
       })
     }, timeoutMs);

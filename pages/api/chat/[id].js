@@ -71,7 +71,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      // Soft delete chat
       const chat = await Chat.findOneAndUpdate(
         { _id: id, userEmail: session.user.email },
         { isActive: false },
