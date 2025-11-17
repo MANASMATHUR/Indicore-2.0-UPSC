@@ -66,16 +66,26 @@ export default function CurrentAffairsDigestPage() {
     if (!digest) return;
 
     try {
-      // Convert _id to string if it exists, otherwise send the full digest data as fallback
-      const digestId = digest._id ? String(digest._id) : (digest.id ? String(digest.id) : null);
+      const resolveDigestId = () => {
+        if (!digest) return null;
+        if (typeof digest._id === 'string') return digest._id;
+        if (digest._id && typeof digest._id === 'object') {
+          if (typeof digest._id.toString === 'function' && !digest._id.toString().startsWith('[object')) {
+            return digest._id.toString();
+          }
+          if (typeof digest._id.$oid === 'string') return digest._id.$oid;
+        }
+        if (digest.id) return String(digest.id);
+        return null;
+      };
+
+      const digestId = resolveDigestId();
+      const payload = digestId ? { digestId } : { digest };
       
       const response = await fetch('/api/current-affairs/export-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          digestId,
-          digest: digestId ? null : digest // Send full digest if no ID available
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
