@@ -1,6 +1,6 @@
 # 🎓 Indicore - AI-Powered Exam Preparation Platform
 
-A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparation with multilingual support and advanced features.
+A comprehensive AI-driven platform designed for PCS, UPSC, and SSC exam preparation with multilingual support and advanced features
 
 ## ✨ Features
 
