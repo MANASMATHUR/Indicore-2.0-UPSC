@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import Essay from '@/models/Essay';
 import axios from 'axios';
+import { translateText } from '@/pages/api/ai/translate';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,7 +16,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { topic, letter } = req.body;
+    const { topic, letter, language = 'en' } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: 'Topic is required' });
@@ -23,8 +24,16 @@ export default async function handler(req, res) {
 
     await connectToDatabase();
 
+    // Get language name for prompt
+    const languageNames = {
+      'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 'bn': 'Bengali',
+      'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 'ml': 'Malayalam',
+      'kn': 'Kannada', 'es': 'Spanish'
+    };
+    const langName = languageNames[language] || 'English';
+
     // Check if essay already exists
-    let essay = await Essay.findOne({ topic: topic.trim() });
+    let essay = await Essay.findOne({ topic: topic.trim(), language: language });
 
     if (essay) {
       // Update access tracking
@@ -60,9 +69,11 @@ export default async function handler(req, res) {
 - Include relevant examples, case studies, and current affairs
 - Use formal academic language
 - Ensure logical flow and coherence
-- Make it suitable for UPSC/PCS/SSC Mains examination`;
+- Make it suitable for UPSC/PCS/SSC Mains examination
 
-    const userPrompt = `Write a comprehensive essay on the topic: "${topic}"
+**IMPORTANT**: Generate the essay in English. The system will handle translation to other languages using professional translation services.`;
+
+    const userPrompt = `Write a comprehensive essay on the topic: "${topic}" in English.
 
 **Requirements:**
 - Write a complete, well-structured essay suitable for competitive exams (UPSC/PCS/SSC Mains)
@@ -103,7 +114,20 @@ Please provide the complete essay text only, without any additional explanations
       throw new Error('Invalid response format from Perplexity API');
     }
 
-    const essayContent = response.data.choices[0].message.content.trim();
+    let essayContent = response.data.choices[0].message.content.trim();
+    
+    // Translate to target language if not English (using Azure Translator)
+    if (language && language !== 'en') {
+      try {
+        console.log(`Translating essay to ${language} using Azure Translator...`);
+        essayContent = await translateText(essayContent, 'en', language, true);
+        console.log('Essay translation completed successfully');
+      } catch (translationError) {
+        console.warn('Translation failed, using English content:', translationError.message);
+        // Continue with English content if translation fails
+      }
+    }
+    
     const wordCount = essayContent.split(/\s+/).filter(word => word.length > 0).length;
 
     // Determine letter if not provided
@@ -115,7 +139,7 @@ Please provide the complete essay text only, without any additional explanations
       content: essayContent,
       letter: essayLetter,
       wordCount: wordCount,
-      language: 'en',
+      language: language,
       essayType: 'general',
       generatedBy: 'perplexity',
       generatedAt: new Date(),

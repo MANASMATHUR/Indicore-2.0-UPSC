@@ -1,0 +1,160 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/getAuthOptions';
+import connectToDatabase from '@/lib/mongodb';
+import MockTest from '@/models/MockTest';
+import MockTestResult from '@/models/MockTestResult';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const session = await getServerSession(req, res, authOptions);
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { testId, answers, timeSpent, startedAt } = req.body;
+
+    if (!testId || !answers) {
+      return res.status(400).json({ error: 'Test ID and answers are required' });
+    }
+
+    await connectToDatabase();
+
+    const test = await MockTest.findById(testId);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    let correctAnswers = 0;
+    let wrongAnswers = 0;
+    let unattempted = 0;
+    let totalMarks = 0;
+    const answerDetails = [];
+    const subjectWise = {};
+    const topicWise = {};
+
+    test.questions.forEach((question, index) => {
+      const userAnswer = Array.isArray(answers) ? answers[index] : null;
+      const isSubjective = question.questionType === 'subjective';
+      const isUnattempted = !userAnswer || (!userAnswer.selectedAnswer && !userAnswer.textAnswer);
+      const isCorrect = !isSubjective && userAnswer && userAnswer.selectedAnswer === question.correctAnswer;
+
+      if (isSubjective) {
+        // For subjective questions, we can't auto-grade, so mark as attempted
+        if (!isUnattempted) {
+          // Subjective answers are saved but not auto-graded
+          // They would need manual evaluation or AI-based evaluation
+          correctAnswers++; // Count as attempted
+          totalMarks += question.marks || 10; // Award full marks (or could be evaluated later)
+        } else {
+          unattempted++;
+        }
+      } else {
+        // MCQ questions - auto-grade
+        if (isUnattempted) {
+          unattempted++;
+        } else if (isCorrect) {
+          correctAnswers++;
+          totalMarks += question.marks || 1;
+        } else {
+          wrongAnswers++;
+          totalMarks -= question.negativeMarks || 0.33;
+        }
+      }
+
+      // Subject-wise tracking
+      const subject = question.subject || 'General';
+      if (!subjectWise[subject]) {
+        subjectWise[subject] = { total: 0, correct: 0, wrong: 0, marks: 0 };
+      }
+      subjectWise[subject].total++;
+      if (isSubjective) {
+        if (!isUnattempted) {
+          subjectWise[subject].correct++;
+          subjectWise[subject].marks += question.marks || 10;
+        }
+      } else {
+        if (isCorrect) {
+          subjectWise[subject].correct++;
+          subjectWise[subject].marks += question.marks || 1;
+        } else if (!isUnattempted) {
+          subjectWise[subject].wrong++;
+          subjectWise[subject].marks -= question.negativeMarks || 0.33;
+        }
+      }
+
+      // Topic-wise tracking
+      const topic = question.topic || 'General';
+      if (!topicWise[topic]) {
+        topicWise[topic] = { total: 0, correct: 0, wrong: 0, marks: 0 };
+      }
+      topicWise[topic].total++;
+      if (isSubjective) {
+        if (!isUnattempted) {
+          topicWise[topic].correct++;
+          topicWise[topic].marks += question.marks || 10;
+        }
+      } else {
+        if (isCorrect) {
+          topicWise[topic].correct++;
+          topicWise[topic].marks += question.marks || 1;
+        } else if (!isUnattempted) {
+          topicWise[topic].wrong++;
+          topicWise[topic].marks -= question.negativeMarks || 0.33;
+        }
+      }
+      
+      answerDetails.push({
+        questionId: question._id || question.id || index,
+        questionType: question.questionType || 'mcq',
+        selectedAnswer: userAnswer?.selectedAnswer || null,
+        textAnswer: userAnswer?.textAnswer || null,
+        isCorrect: isSubjective ? null : isCorrect, // null for subjective (needs evaluation)
+        timeSpent: userAnswer?.timeSpent || 0,
+        marksObtained: isSubjective 
+          ? (isUnattempted ? 0 : (question.marks || 10)) // Full marks for subjective (or evaluate later)
+          : (isCorrect ? (question.marks || 1) : (!isUnattempted ? -(question.negativeMarks || 0.33) : 0))
+      });
+    });
+
+    const percentage = (totalMarks / test.totalMarks) * 100;
+
+    const resultData = {
+      userId: session.user.id,
+      testId,
+      testTitle: test.title,
+      examType: test.examType,
+      paperType: test.paperType,
+      answers: answerDetails,
+      totalQuestions: test.totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      unattempted,
+      marksObtained: totalMarks,
+      totalMarks: test.totalMarks,
+      percentage: Math.max(0, percentage),
+      timeSpent: timeSpent || 0,
+      subjectWisePerformance: Object.entries(subjectWise).map(([subject, data]) => ({
+        subject,
+        ...data
+      })),
+      topicWisePerformance: Object.entries(topicWise).map(([topic, data]) => ({
+        topic,
+        ...data
+      })),
+      startedAt: startedAt ? new Date(startedAt) : new Date(),
+      finishedAt: new Date()
+    };
+
+    const result = await MockTestResult.create(resultData);
+
+    return res.status(200).json({ result });
+  } catch (error) {
+    console.error('Error submitting test:', error);
+    return res.status(500).json({ error: 'Failed to submit test', details: error.message });
+  }
+}
+
