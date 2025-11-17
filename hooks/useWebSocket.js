@@ -11,7 +11,6 @@ export function useWebSocket() {
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
-    // Use current origin if NEXT_PUBLIC_SOCKET_URL is not set (for same-origin connections)
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
     
     if (!socketUrl || typeof window === 'undefined') {

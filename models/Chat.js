@@ -63,12 +63,10 @@ const chatSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Create indexes for better performance
 chatSchema.index({ userId: 1, createdAt: -1 });
 chatSchema.index({ userEmail: 1, createdAt: -1 });
 chatSchema.index({ lastMessageAt: -1 });
 
-// Update lastMessageAt when messages are added
 chatSchema.pre('save', function(next) {
   if (this.messages && this.messages.length > 0) {
     this.lastMessageAt = this.messages[this.messages.length - 1].timestamp;

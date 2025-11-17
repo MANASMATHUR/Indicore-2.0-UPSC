@@ -13,8 +13,11 @@ import {
   FileText, 
   Sparkles,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Languages
 } from 'lucide-react';
+import LanguageSelector from '@/components/LanguageSelector';
+import { getLanguagePreference, saveLanguagePreference } from '@/lib/translationUtils';
 
 const essayTopics = [
   { letter: 'A', topics: ['Agriculture & Rural Development', 'Administrative Reforms', 'Arts & Culture', 'Awards & Honours', 'Accountability in Governance'] },
@@ -48,6 +51,7 @@ const essayTopics = [
 export default function EssayBuilderPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
   const [isEnhancementOpen, setIsEnhancementOpen] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [selectedLetter, setSelectedLetter] = useState(null);
@@ -64,7 +68,11 @@ export default function EssayBuilderPage() {
       const response = await fetch('/api/essay/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, letter })
+        body: JSON.stringify({ 
+          topic, 
+          letter,
+          language: selectedLanguage 
+        })
       });
 
       if (!response.ok) {
@@ -126,6 +134,18 @@ export default function EssayBuilderPage() {
       {/* Hero Section */}
       <section className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center mb-12">
+          <div className="flex justify-center mb-4">
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={(lang) => {
+                setSelectedLanguage(lang);
+                saveLanguagePreference(lang);
+              }}
+              showLabel={false}
+              size="md"
+              variant="primary"
+            />
+          </div>
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
             Essay Builder
           </h1>
@@ -192,7 +212,7 @@ export default function EssayBuilderPage() {
         }}
         onEnhance={(enhancedText) => {
           // Handle enhanced essay
-          console.log('Enhanced essay:', enhancedText);
+          // Enhanced essay ready for display
         }}
         preloadedEssay={preloadedEssay}
         selectedTopic={selectedTopic}

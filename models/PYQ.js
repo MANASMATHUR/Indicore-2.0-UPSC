@@ -55,6 +55,25 @@ const PyqSchema = new mongoose.Schema({
       message: 'Topic tags must be an array of non-empty strings'
     }
   },
+  keywords: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(v) {
+        return Array.isArray(v) && v.every(keyword => typeof keyword === 'string' && keyword.trim().length > 0);
+      },
+      message: 'Keywords must be an array of non-empty strings'
+    }
+  },
+  analysis: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  similarQuestions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PYQ'
+  }],
   theme: { 
     type: String, 
     trim: true,
@@ -106,8 +125,13 @@ PyqSchema.pre('save', function(next) {
   if (this.topicTags && Array.isArray(this.topicTags)) {
     this.topicTags = this.topicTags.map(tag => tag.trim()).filter(tag => tag.length > 0);
   }
+  if (this.keywords && Array.isArray(this.keywords)) {
+    this.keywords = this.keywords.map(keyword => keyword.trim()).filter(keyword => keyword.length > 0);
+  }
+  if (this.analysis) {
+    this.analysis = this.analysis.trim();
+  }
   
-  // Set default lang if not set (language detection should be done before saving)
   if (!this.lang) {
     this.lang = 'en';
   }
@@ -116,38 +140,35 @@ PyqSchema.pre('save', function(next) {
   next();
 });
 
-// Create compound indexes for efficient queries
-PyqSchema.index({ exam: 1, year: -1 }); // Most common query pattern
+PyqSchema.index({ exam: 1, year: -1 });
 PyqSchema.index({ exam: 1, level: 1, year: -1 }); // Exam + level + year
 PyqSchema.index({ exam: 1, paper: 1, year: -1 }); // Exam + paper + year
 PyqSchema.index({ exam: 1, theme: 1, year: -1 }); // Exam + theme + year
 PyqSchema.index({ exam: 1, verified: 1, year: -1 }); // Exam + verified + year
 PyqSchema.index({ paper: 1, theme: 1, year: -1 }); // Paper + theme + year
-PyqSchema.index({ exam: 1, lang: 1, year: -1 }); // Exam + lang + year
-PyqSchema.index({ lang: 1, year: -1 }); // Lang + year
+PyqSchema.index({ exam: 1, lang: 1, year: -1 });
+PyqSchema.index({ lang: 1, year: -1 });
 
-// Text index for full-text search (only if text index is supported)
 try {
   PyqSchema.index({ 
     question: 'text', 
     answer: 'text',
     topicTags: 'text', 
-    theme: 'text' 
+    theme: 'text',
+    keywords: 'text'
   }, {
     name: 'pyq_text_index',
     weights: {
       question: 10,
       answer: 8,
       theme: 5,
-      topicTags: 3
+      topicTags: 3,
+      keywords: 4
     }
   });
 } catch (e) {
-  // Text index may already exist or not be supported
 }
 
-// Compound index for duplicate detection (not unique to avoid issues with existing duplicates)
-// Include lang to properly handle multi-language questions
 PyqSchema.index(
   { exam: 1, year: 1, question: 1, lang: 1 },
   { 
@@ -155,7 +176,6 @@ PyqSchema.index(
   }
 );
 
-// Virtual for normalized question hash (for duplicate detection)
 PyqSchema.virtual('questionHash').get(function() {
   return this.question
     .toLowerCase()

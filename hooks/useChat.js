@@ -7,7 +7,6 @@ export function useChat(userEmail) {
   const [currentChat, setCurrentChat] = useState(null);
   const [messages, setMessages] = useState([]);
 
-  // Load all chats for the user (with last message info)
   const loadChats = useCallback(async () => {
     try {
       const response = await fetch(`/api/chat?email=${encodeURIComponent(userEmail)}`);
@@ -15,7 +14,6 @@ export function useChat(userEmail) {
         const payload = await response.json();
         const list = Array.isArray(payload?.chats) ? payload.chats : Array.isArray(payload) ? payload : [];
 
-        // Map dates and ensure last message fields exist (messages use `text`)
         const enriched = list.map(chat => {
           const lastMsg = chat.messages?.[chat.messages.length - 1];
           return {
@@ -31,7 +29,6 @@ export function useChat(userEmail) {
     }
   }, [userEmail]);
 
-  // Create a new chat
   const createNewChat = useCallback(async () => {
     try {
       const response = await fetch('/api/chat', {
@@ -42,9 +39,8 @@ export function useChat(userEmail) {
 
       if (response.ok) {
         const payload = await response.json();
-        const newChat = payload?.chat || payload; // support { chat } or direct
+        const newChat = payload?.chat || payload;
 
-        // Update chats and current chat
         setChats(prev => [newChat, ...prev]);
         setCurrentChat(newChat);
         setMessages([]);
@@ -55,7 +51,6 @@ export function useChat(userEmail) {
     }
   }, [userEmail]);
 
-  // Load a specific chat by ID
   const loadChat = useCallback(async (chatId) => {
     try {
       const response = await fetch(`/api/chat/${chatId}`);

@@ -32,7 +32,6 @@ const Header = ({
         </svg>
       ),
       onClick: () => {
-        // Show submenu for exam-related tools
         setShowExamSubmenu(!showExamSubmenu);
       },
       title: 'Exam Tools',
@@ -47,7 +46,6 @@ const Header = ({
         </svg>
       ),
       onClick: () => {
-        // Show submenu for writing tools
         setShowWritingSubmenu(!showWritingSubmenu);
       },
       title: 'Writing Tools',

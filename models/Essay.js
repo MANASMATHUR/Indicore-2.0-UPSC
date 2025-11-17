@@ -49,12 +49,10 @@ const essaySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create indexes for better performance
 essaySchema.index({ topic: 1 });
 essaySchema.index({ letter: 1 });
 essaySchema.index({ createdAt: -1 });
 
-// Update lastAccessedAt when essay is accessed
 essaySchema.methods.updateAccess = function() {
   this.lastAccessedAt = new Date();
   this.accessCount += 1;

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Logo from '@/components/Logo';
+// Import icons individually for better tree-shaking
 import { 
   BookOpen, 
   Languages, 
@@ -322,18 +323,19 @@ export default function Home() {
               Everything you need in one place
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-12">
             <Link href="/chat">
-              <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
-                <CardContent className="p-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
                     <MessageSquare className="h-8 w-8 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">AI Chatbot</h3>
-                  <p className="text-gray-600 text-sm mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">AI Chatbot</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
                     Exam-focused conversations with context-aware responses
                   </p>
-                  <Button variant="primary" size="sm" className="w-full">
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
                     Start Chatting
                   </Button>
                 </CardContent>
@@ -341,16 +343,17 @@ export default function Home() {
             </Link>
 
             <Link href="/essay-builder">
-              <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
-                <CardContent className="p-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
                     <FileText className="h-8 w-8 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Essay Builder</h3>
-                  <p className="text-gray-600 text-sm mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">Essay Builder</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
                     Comprehensive essay topics with AI enhancement
                   </p>
-                  <Button variant="primary" size="sm" className="w-full">
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
                     Build Essays
                   </Button>
                 </CardContent>
@@ -358,51 +361,110 @@ export default function Home() {
             </Link>
 
             <Link href="/pyq-archive">
-              <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
-                <CardContent className="p-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
                     <Database className="h-8 w-8 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">PYQ Archive</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Search and browse previous year questions by year
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">PYQ Archive & Subject-wise PYQs</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
+                    Comprehensive database with archive view and theme-organized questions with AI analysis
                   </p>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Browse Archive
-                  </Button>
-                </CardContent>
-              </Card>
-            </Link>
-
-            <Link href="/gs-papers">
-              <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
-                <CardContent className="p-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <BookOpen className="h-8 w-8 text-red-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Subject-wise PYQs</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Theme-organized questions with AI analysis and examples
-                  </p>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Explore Subjects
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
+                    Explore PYQs
                   </Button>
                 </CardContent>
               </Card>
             </Link>
 
             <Link href="/vocabulary-builder">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
+                    <Brain className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">Vocabulary Builder</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
+                    Bilingual flashcards for exam vocabulary
+                  </p>
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
+                    Build Vocabulary
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {/* Formula Sheets Feature - Temporarily Disabled */}
+            {/* 
+            <Link href="/formula-sheets">
               <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
                 <CardContent className="p-6">
                   <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Brain className="h-8 w-8 text-red-600" />
+                    <FileText className="h-8 w-8 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Vocabulary Builder</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Formula Sheets</h3>
                   <p className="text-gray-600 text-sm mb-4">
-                    Bilingual flashcards for exam vocabulary
+                    Auto-generated formula sheets and concept maps
                   </p>
                   <Button variant="primary" size="sm" className="w-full">
-                    Build Vocabulary
+                    Generate Sheets
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+            */}
+
+            <Link href="/current-affairs-digest">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
+                    <Newspaper className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">Current Affairs Digest</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
+                    Daily/weekly summaries with PDF export
+                  </p>
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
+                    View Digest
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/interview-prep">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
+                    <MessageSquare className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">Interview Prep</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
+                    Voice-based mock interviews and practice
+                  </p>
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
+                    Start Practice
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/mock-tests">
+              <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
+                <CardContent className="p-6 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-sm">
+                    <BarChart3 className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-red-600 transition-colors duration-300">Mock Tests</h3>
+                  <p className="text-gray-600 text-sm mb-4 leading-relaxed min-h-[3rem]">
+                    Full-length tests with performance tracking
+                  </p>
+                  <Button variant="primary" size="sm" className="w-full group-hover:shadow-md transition-shadow duration-300">
+                    Take Test
                   </Button>
                 </CardContent>
               </Card>

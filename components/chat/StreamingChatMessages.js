@@ -35,7 +35,6 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
     try {
       text = stripMarkdown(text);
     } catch (e) {
-      // keep original
     }
     
     if (!text?.trim()) {
@@ -430,7 +429,6 @@ const QuickReplySuggestions = memo(({ messageText, onSelect, isLastMessage }) =>
   const [suggestions, setSuggestions] = useState([]);
 
   useEffect(() => {
-    // Generate contextual suggestions based on message content
     const lowerText = messageText.toLowerCase();
     const newSuggestions = [];
 
@@ -454,7 +452,6 @@ const QuickReplySuggestions = memo(({ messageText, onSelect, isLastMessage }) =>
     setSuggestions(newSuggestions.slice(0, 2));
   }, [messageText]);
 
-  // Only show for the last assistant message
   if (!isLastMessage || !suggestions.length || !onSelect) return null;
 
   return (
@@ -495,7 +492,6 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .trim();
 
-    // Ensure speech service is initialized
     if (!speechService) {
       return;
     }

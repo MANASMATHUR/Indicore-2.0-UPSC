@@ -13,13 +13,17 @@ import {
   BookMarked,
   Sparkles,
   Brain,
-  TrendingUp
+  TrendingUp,
+  Languages
 } from 'lucide-react';
+import LanguageSelector from '@/components/LanguageSelector';
+import { getLanguagePreference, saveLanguagePreference } from '@/lib/translationUtils';
 
 export default function VocabularyBuilderPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
 
   if (!session) {
     return (
@@ -50,11 +54,23 @@ export default function VocabularyBuilderPage() {
               <BookMarked className="h-6 w-6 text-red-600" />
               <span className="text-xl font-bold text-gray-900">Vocabulary Builder</span>
             </div>
-            <Link href="/chat">
-              <Button variant="secondary" size="sm">
-                Go to Chat
-              </Button>
-            </Link>
+            <div className="flex items-center gap-3">
+              <LanguageSelector
+                selectedLanguage={selectedLanguage}
+                onLanguageChange={(lang) => {
+                  setSelectedLanguage(lang);
+                  saveLanguagePreference(lang);
+                }}
+                showLabel={false}
+                size="sm"
+                variant="primary"
+              />
+              <Link href="/chat">
+                <Button variant="secondary" size="sm">
+                  Go to Chat
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </nav>

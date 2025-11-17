@@ -11,7 +11,9 @@
     "ingest:pyq:help": "node scripts/pyq-ingest-all-pscs.js --help",
     "ingest:pyq:all": "node scripts/pyq-ingest-all-pscs.js --all",
     "scrape:upsc": "node scripts/upsc-pyq-scraper.js",
-    "organize:pyqs": "node scripts/organize-existing-pyqs.js"
+    "organize:pyqs": "node scripts/organize-existing-pyqs.js",
+    "essay:check": "node scripts/check-essay-coverage.js",
+    "essay:generate": "node scripts/generate-all-essays.js"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -37,6 +39,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.149",
     "postcss": "^8.4.31",
+    "puppeteer": "^24.30.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",

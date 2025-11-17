@@ -6,8 +6,11 @@ import { findPresetAnswer } from '@/lib/presetAnswers';
 import axios from 'axios';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
+import User from '@/models/User';
 import pyqService from '@/lib/pyqService';
 import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
+import { extractUserInfo, updateUserProfile, formatProfileContext, extractConversationFacts } from '@/lib/userProfileExtractor';
+import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -22,8 +25,6 @@ const UNSAFE_PATTERNS = [
   /answer.*key.*leak/i
 ];
 
-// PYQ Pattern: More specific to avoid false positives with general questions
-// Only matches when there's clear PYQ intent (explicit PYQ keywords or subject + pyq keywords)
 const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
 function calculateMaxTokens(message, queryType = 'general') {
@@ -50,7 +51,8 @@ function calculateMaxTokens(message, queryType = 'general') {
     base = Math.max(base, 3000);
   }
   
-  return Math.min(base, 8000);
+  // Increased max tokens to 20000 to prevent cutoffs for complex/long responses
+  return Math.min(base, 20000);
 }
 
 function isResponseComplete(response) {
@@ -85,6 +87,7 @@ export default async function handler(req, res) {
 
   try {
     const { message, chatId, model, systemPrompt, language } = req.body;
+    const pyqContextKey = `${session.user.email}:${chatId || 'stream'}`;
 
     if (!message || typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -149,7 +152,6 @@ export default async function handler(req, res) {
       res.flush();
     }
 
-    // Detect translation requests
     const translationMatch = message.match(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+(hindi|marathi|tamil|bengali|punjabi|gujarati|telugu|malayalam|kannada|spanish|english)/i);
     if (translationMatch) {
       const targetLang = translationMatch[1].toLowerCase();
@@ -160,13 +162,11 @@ export default async function handler(req, res) {
       };
       const targetLangCode = languageMap[targetLang] || 'hi';
       
-      // Extract text to translate (everything after "Translate" or the text after colon)
       let textToTranslate = message;
       const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
       if (colonMatch) {
         textToTranslate = colonMatch[1].trim();
       } else {
-        // Remove translation instruction to get the text
         textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
       }
       
@@ -192,7 +192,6 @@ export default async function handler(req, res) {
           }
         } catch (translationError) {
           console.warn('Translation failed, falling back to regular response:', translationError.message);
-          // Fall through to regular chat handling
         }
       }
     }
@@ -215,6 +214,35 @@ export default async function handler(req, res) {
     }
 
     const contextOptimizer = (await import('@/lib/context-optimizer')).default;
+
+    const userProfilePromise = (async () => {
+      try {
+        await connectToDatabase();
+        const user = await User.findOne({ email: session.user.email }).lean();
+        return user?.profile || null;
+      } catch (err) {
+        console.warn('Failed to load user profile:', err.message);
+        return null;
+      }
+    })();
+
+    const extractedInfo = extractUserInfo(message);
+    
+    let userProfile = await userProfilePromise;
+    if (Object.keys(extractedInfo).length > 0) {
+      try {
+        await connectToDatabase();
+        const user = await User.findOne({ email: session.user.email });
+        if (user) {
+          const updatedProfile = updateUserProfile(user, extractedInfo);
+          user.profile = updatedProfile;
+          await user.save();
+          userProfile = updatedProfile;
+        }
+      } catch (err) {
+        console.warn('Failed to update user profile:', err.message);
+      }
+    }
 
     const historyPromise = chatId ? (async () => {
       try {
@@ -301,7 +329,20 @@ RESPONSE FORMATTING:
 - Use examples to illustrate key points
 - Ensure every paragraph has a clear purpose and contributes to answering the question
 
+PRESENTATION & FORMATTING GUIDELINES:
+- Use Markdown deliberately: short paragraphs separated by blank lines, clear headers (bold or "## Heading"), and bullet/numbered lists where helpful.
+- Do NOT merge everything into a single blob. Each idea, subheading, or step should have its own paragraph or list entry.
+- Prefer numbered lists for procedures or ordered steps; use bullet lists for unordered collections.
+- Highlight key terms with bold (e.g., **Keyword:** insight) to aid scanning, but avoid overusing bold/italics.
+- Keep tables/structured data tidy using Markdown tables or simple columns.
+- End with a brief recap or actionable takeaway when appropriate.
+
 Write naturally and conversationally, but ensure every response is complete, accurate, and truthful. For exam-related questions, make them exam-focused. For general questions, provide comprehensive information on the topic. Do not include citations or reference numbers.`;
+
+    const profileContext = userProfile ? formatProfileContext(userProfile) : '';
+    if (profileContext) {
+      finalSystemPrompt += profileContext;
+    }
 
     if (language && language !== 'en') {
       const languageNames = {
@@ -315,26 +356,47 @@ Write naturally and conversationally, but ensure every response is complete, acc
     }
 
     async function tryPyqFromDb(userMsg, context = null) {
-      const effectiveMsg = context ? `PYQ on ${context.theme || 'history'} from ${context.fromYear || 2021} for ${context.examCode}` : userMsg;
-      
-      // More strict check: must have PYQ keywords or clear PYQ intent
+      const fallbackMsg = context ? `PYQ on ${context.theme || 'history'} from ${context.fromYear || 2021} for ${context.examCode || 'UPSC'}` : userMsg;
+      const effectiveMsg = context?.originalQuery || fallbackMsg;
+      const contextPayload = context ? { ...context } : null;
+      if (contextPayload && typeof contextPayload.offset !== 'number') {
+        contextPayload.offset = contextPayload.offset || 0;
+      }
+
       const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(effectiveMsg);
       const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(effectiveMsg);
       const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(effectiveMsg);
-      
-      // Only try PYQ search if there's clear PYQ intent
-      if (!hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+
+      if (!context && !hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
         return null;
       }
-      
-      return await pyqService.search(userMsg, context, language);
+
+      try {
+        const result = await pyqService.search(effectiveMsg, contextPayload, language);
+        if (!result) {
+          console.log('PYQ search returned null for query:', userMsg.substring(0, 50));
+        } else {
+          console.log('PYQ search found results, length:', result.count);
+          if (chatId) {
+            setPyqContext(pyqContextKey, {
+              ...result.context,
+              originalQuery: result.context.originalQuery || effectiveMsg
+            });
+          }
+          return result.content;
+        }
+      } catch (error) {
+        console.error('PYQ search error:', error.message);
+      }
+
+      if (context && chatId) {
+        clearPyqContext(pyqContextKey);
+      }
+      return null;
     }
 
-    // Check for quick responses only for very specific exam-related queries
-    // Don't block general questions - let them go through to LLM
     const quickResponse = contextualLayer.getQuickResponse(message);
     if (quickResponse && !quickResponse.requiresAI && contextOptimizer.shouldUseLLM(message) === false) {
-      // Only use quick response if it's a simple query that doesn't need LLM
       const responseText = quickResponse.response || quickResponse.quickResponse || '';
       const chunks = responseText.match(/.{1,100}/g) || [responseText];
       for (const chunk of chunks) {
@@ -346,14 +408,11 @@ Write naturally and conversationally, but ensure every response is complete, acc
       return;
     }
 
-    // Check if this is a PYQ query - use more strict checking
     const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
     const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(message);
     const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
     const isPyqQuery = hasPyqKeyword || hasPyqIntent || hasSubjectPyq;
     
-    // For general questions, always use LLM - don't restrict based on shouldUseLLM
-    // Only skip context for very short messages or simple greetings
     const needsContext = !isPyqQuery && message.length > 10;
 
     const [rawHistory, contextualData, pyqDb] = await Promise.all([
@@ -366,14 +425,34 @@ Write naturally and conversationally, but ensure every response is complete, acc
     ]);
 
     const conversationHistory = contextOptimizer.compressContext(rawHistory);
+    const cachedPyqContext = chatId ? getPyqContext(pyqContextKey) : null;
 
-    if (pyqDb) {
-      // Clean PYQ response before sending
-      const cleanedPyq = cleanAIResponse(pyqDb);
-      const validPyq = validateAndCleanResponse(cleanedPyq, 20);
-      
-      if (validPyq) {
-        const chunks = validPyq.match(/.{1,100}/g) || [validPyq];
+    if (isPyqQuery) {
+      if (pyqDb && pyqDb.trim().length > 50) {
+        let cleanedPyq = pyqDb.trim();
+        
+        cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+        cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
+        cleanedPyq = cleanedPyq.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?=\s*[a-z])/g, '');
+        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n\n');
+        cleanedPyq = cleanedPyq.trim();
+        const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        }
+        res.write('data: [DONE]\n\n');
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+        res.end();
+        return;
+      } else {
+        const parsed = pyqService.parseQuery(message, language);
+        const noResultsMessage = `## Previous Year Questions (${parsed.examCode || 'UPSC'})\n\n**Topic:** ${parsed.theme || 'General'}\n\nNo questions were found in the database for the given criteria.\n\n### Suggestions:\n\n- Try a different topic or subject\n- Check if the spelling is correct\n- Try a broader search term\n- Use formats like "PYQ on economics" or "history pyqs"`;
+        const chunks = noResultsMessage.match(/.{1,100}/g) || [noResultsMessage];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -387,7 +466,6 @@ Write naturally and conversationally, but ensure every response is complete, acc
         res.end();
         return;
       }
-      // If PYQ response is invalid, fall through to LLM
     }
 
     const contextualEnhancement = contextualData.contextualEnhancement;
@@ -400,13 +478,11 @@ Write naturally and conversationally, but ensure every response is complete, acc
         const msg = history[i];
         if (msg.role === 'user' && msg.content) {
           const userMsg = msg.content;
-          // Use same strict PYQ detection as above
           const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
           const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
           const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
           
           if (hasPyqKeyword || hasPyqIntent || hasSubjectPyq) {
-            // Use pyqService to parse the query for consistent theme extraction
             const parsed = pyqService.parseQuery(userMsg, language);
             const theme = parsed.theme || '';
             const fromYear = parsed.fromYear;
@@ -421,7 +497,6 @@ Write naturally and conversationally, but ensure every response is complete, acc
     }
 
     function buildPyqPrompt(userMsg, previousContext = null) {
-      // Use same strict PYQ detection
       if (!previousContext) {
         const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
         const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
@@ -442,7 +517,6 @@ Write naturally and conversationally, but ensure every response is complete, acc
         toYear = previousContext.toYear;
         examCodeDetected = previousContext.examCode || 'UPSC';
       } else {
-        // Use pyqService to parse the query for consistent theme extraction
         const parsed = pyqService.parseQuery(userMsg, language);
         theme = parsed.theme || '';
         fromYear = parsed.fromYear;
@@ -498,6 +572,11 @@ FORMATTING REQUIREMENTS:
 - Ensure proper spacing between sections
 - Use consistent numbering and formatting throughout
 
+PRESENTATION & CLEAN STRUCTURE:
+- Insert a blank line between sections (header, topic info, each year group, summary) so the response never appears as one dense block.
+- Use consistent numbering within each year and restart numbering for each new year section.
+- Keep summaries concise (2-3 bullet points) and visually separated from the question list.
+
 COMPLETENESS REQUIREMENTS:
 - Always end with a complete sentence or summary
 - Never cut off mid-question or mid-sentence
@@ -508,7 +587,8 @@ COMPLETENESS REQUIREMENTS:
 Remember: Your goal is to present questions clearly and completely. If no questions are found, state that clearly. If questions are found, format them properly and ensure the response is complete and well-structured.`;
     }
 
-    const previousPyqContext = extractPyqContextFromHistory(conversationHistory);
+    const historyPyqContext = extractPyqContextFromHistory(conversationHistory);
+    const previousPyqContext = cachedPyqContext || historyPyqContext;
     const isFollowUpQuestion = /^(give|show|get|fetch|find|search|more|another|additional|next|other|different)\s+(more|questions|pyqs|previous year|questions|pyq)/i.test(message) || 
                                /^(more|another|additional|next|other|different|continue|keep going|show more|give more)/i.test(message.trim()) ||
                                /^(more|another|additional|next|other|different)\s+(of|from|those|them|these|questions|pyqs?)/i.test(message.trim());
@@ -516,29 +596,52 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     if (isFollowUpQuestion && previousPyqContext) {
       const messageCount = conversationHistory.length;
       const estimatedOffset = Math.max(0, Math.floor((messageCount - 1) / 2) * 50);
-      const contextWithOffset = { ...previousPyqContext, offset: estimatedOffset };
-      const pyqDb = await tryPyqFromDb(`PYQ on ${previousPyqContext.theme || 'history'} from ${previousPyqContext.fromYear || 2021} for ${previousPyqContext.examCode}`, contextWithOffset);
-      if (pyqDb) {
-        // Clean PYQ response before sending
-        const cleanedPyq = cleanAIResponse(pyqDb);
-        const validPyq = validateAndCleanResponse(cleanedPyq, 20);
+      const contextWithOffset = { ...previousPyqContext };
+      contextWithOffset.offset = typeof previousPyqContext.offset === 'number'
+        ? previousPyqContext.offset
+        : (cachedPyqContext?.offset ?? estimatedOffset);
+      const followUpQuery = previousPyqContext.originalQuery || message;
+      const pyqDb = await tryPyqFromDb(followUpQuery, contextWithOffset);
+      if (pyqDb && pyqDb.trim().length > 50) {
+        let cleanedPyq = pyqDb.trim();
         
-        if (validPyq) {
-          const chunks = validPyq.match(/.{1,100}/g) || [validPyq];
-          for (const chunk of chunks) {
-            res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
-            if (typeof res.flush === 'function') {
-              res.flush();
-            }
-          }
-          res.write('data: [DONE]\n\n');
+        cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+        cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
+        cleanedPyq = cleanedPyq.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?=\s*[a-z])/g, '');
+        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n\n');
+        cleanedPyq = cleanedPyq.trim();
+        
+        const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
             res.flush();
           }
-          res.end();
-          return;
         }
-        // If PYQ response is invalid, fall through to LLM
+        res.write('data: [DONE]\n\n');
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+        res.end();
+        return;
+      } else if (isFollowUpQuestion && previousPyqContext) {
+        if (chatId) {
+          clearPyqContext(pyqContextKey);
+        }
+        const noResultsMessage = `## Previous Year Questions (${previousPyqContext.examCode || 'UPSC'})\n\n**Topic:** ${previousPyqContext.theme || 'General'}\n\nNo additional questions were found in the database.\n\nYou've reached the end of the available questions for this topic.\n\n### Try:\n\n- A different topic or subject\n- A different year range\n- A broader search term`;
+        const chunks = noResultsMessage.match(/.{1,100}/g) || [noResultsMessage];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          if (typeof res.flush === 'function') {
+            res.flush();
+          }
+        }
+        res.write('data: [DONE]\n\n');
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+        res.end();
+        return;
       }
     }
     
@@ -560,16 +663,50 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       contextNote = `\nContext: ${previousPyqContext.theme || 'general'} (${previousPyqContext.fromYear || 'all'}-${previousPyqContext.toYear || 'present'}), ${previousPyqContext.examCode || ''}`;
     }
 
-    const optimalModel = contextOptimizer.selectOptimalModel(message, hasContext && optimizedHistory.length > 2);
-    const messagesForAPI = [
-      { role: 'system', content: systemContent + contextNote },
-      ...optimizedHistory,
-      { role: 'user', content: message }
-    ];
+    // Truncate system prompt if too long (Perplexity has limits)
+    const maxSystemLength = 2000;
+    let finalSystemContent = systemContent + contextNote;
+    if (finalSystemContent.length > maxSystemLength) {
+      finalSystemContent = finalSystemContent.substring(0, maxSystemLength - 100) + '...';
+    }
 
-    const maxTokens = Math.min(
-      Math.max(calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general'), 1500),
-      pyqPrompt ? 4000 : 3000
+    const optimalModel = contextOptimizer.selectOptimalModel(message, hasContext && optimizedHistory.length > 2);
+    
+    // Ensure we always have at least one user message
+    const messagesForAPI = [];
+    if (finalSystemContent && finalSystemContent.trim().length > 0) {
+      messagesForAPI.push({ role: 'system', content: finalSystemContent });
+    }
+    
+    // Add history if available
+    if (optimizedHistory && optimizedHistory.length > 0) {
+      messagesForAPI.push(...optimizedHistory);
+    }
+    
+    // Always add user message (ensure it's not empty)
+    if (message && message.trim().length > 0) {
+      messagesForAPI.push({ role: 'user', content: message.trim() });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: 'Message cannot be empty', final: true })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Final validation: ensure we have at least one user message
+    if (messagesForAPI.filter(m => m.role === 'user').length === 0) {
+      res.write(`data: ${JSON.stringify({ error: 'Invalid message format', final: true })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Increased token limits to prevent mid-response cutoffs
+    // Allow up to 20000 tokens for complex queries, minimum 2000 for any response
+    const calculatedTokens = calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general');
+    const maxTokens = Math.max(
+      Math.min(calculatedTokens, 20000), // Cap at 20000, but use calculated value if lower
+      pyqPrompt ? 4000 : 2000 // Minimum tokens: 4000 for PYQ, 2000 for general
     );
 
     let response;
@@ -588,20 +725,59 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           'Accept': 'text/event-stream'
         },
         responseType: 'stream',
-        timeout: 90000
+        timeout: 520000
       });
     } catch (apiError) {
-      console.error('Perplexity API error:', apiError.response?.status, apiError.response?.data || apiError.message);
+      let errorMessage = 'API request failed. Please try again.';
+      
       if (apiError.response?.status === 400) {
+        let errorText = '';
+        
+        try {
+          // Try to read error response if it's a stream
+          if (apiError.response?.data) {
+            if (typeof apiError.response.data === 'string') {
+              errorText = apiError.response.data;
+            } else if (apiError.response.data.error?.message) {
+              errorText = apiError.response.data.error.message;
+            } else if (apiError.response.data.message) {
+              errorText = apiError.response.data.message;
+            } else if (Buffer.isBuffer(apiError.response.data)) {
+              // Try to parse buffer as JSON
+              try {
+                const parsed = JSON.parse(apiError.response.data.toString());
+                errorText = parsed.error?.message || parsed.message || '';
+              } catch (e) {
+                errorText = apiError.response.data.toString().substring(0, 200);
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore parsing errors
+          errorText = apiError.message || '';
+        }
+        
+        console.error('Perplexity API 400 error:', errorText || apiError.message);
         console.error('API 400 Error Details:', {
           model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
           maxTokens,
           messageLength: message.length,
-          systemContentLength: systemContent.length,
-          hasPyqPrompt: !!pyqPrompt
+          systemContentLength: finalSystemContent.length,
+          messagesCount: messagesForAPI.length,
+          hasPyqPrompt: !!pyqPrompt,
+          errorMessage: errorText
         });
+        
+        if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
+          errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
+        } else if (errorText && errorText.includes('user message')) {
+          errorMessage = 'Invalid request format. Please try again.';
+        }
+      } else {
+        console.error('Perplexity API error:', apiError.response?.status, apiError.message);
       }
-      res.write(`data: ${JSON.stringify({ error: 'API request failed. Please try again.', final: true })}\n\n`);
+      
+      res.write(`data: ${JSON.stringify({ error: errorMessage, final: true })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       return;
@@ -622,7 +798,6 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             if (data === '[DONE]') {
               clearInterval(keepAlive);
               
-              // Validate that we have a meaningful response
               if (!fullResponse || fullResponse.trim().length < 10) {
                 res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
                 res.write('data: [DONE]\n\n');
@@ -631,21 +806,16 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 return;
               }
 
-              // Comprehensive cleaning of full response
               let cleanedResponse = cleanAIResponse(fullResponse);
               let isValid = validateAndCleanResponse(cleanedResponse, 30);
               
-              // If cleaning made response invalid, check original
               if (!isValid && fullResponse.trim().length > 50) {
-                // Check if original is garbled
                 if (!isGarbledResponse(fullResponse)) {
-                  // Try cleaning again with less strict rules
                   cleanedResponse = fullResponse.trim();
-                  // Remove only obvious issues
                   cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                  cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                  cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
+                  cleanedResponse = cleanedResponse.replace(/[ \t]+/g, ' ');
                   
-                  // Ensure it ends properly
                   if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
                     cleanedResponse += '.';
                   }
@@ -654,9 +824,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 }
               }
               
-              // Ensure we have a valid response before caching
               if (isValid && isValid.length > 30) {
-                // Cache the cleaned response if valid
                 responseCache.set(cacheKey, {
                   response: isValid,
                   timestamp: Date.now()
@@ -671,12 +839,11 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                   }
                 }
               } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
-                // Fallback: use original if it's not garbled and substantial
                 cleanedResponse = fullResponse.trim();
-                // Minimal cleaning
                 cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-                if (!/[.!?]$/.test(cleanedResponse)) {
+                cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
+                cleanedResponse = cleanedResponse.replace(/[ \t]+/g, ' ');
+                if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
                   cleanedResponse += '.';
                 }
                 responseCache.set(cacheKey, {
@@ -684,7 +851,6 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                   timestamp: Date.now()
                 });
               } else {
-                // Response is too short or garbled - send error
                 res.write(`data: ${JSON.stringify({ error: 'Response validation failed. Please try rephrasing your question.', final: true })}\n\n`);
                 res.write('data: [DONE]\n\n');
                 res.end();
@@ -704,36 +870,28 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               const parsed = JSON.parse(data);
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 let content = parsed.choices[0].delta.content;
-                // Comprehensive cleaning for streaming - remove citations and Perplexity patterns
                 content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                // Remove Perplexity citation patterns during streaming (more comprehensive)
                 content = content.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?![A-Z])/g, '');
                 content = content.replace(/From\s+result\s*\([^)]*\)\s*[:.]?\s*/gi, '');
                 content = content.replace(/From\s+result\s*[:.]?\s*/gi, '');
                 content = content.replace(/From\s+result[^.!?]*/gi, '');
-                // Remove broken citation patterns
                 content = content.replace(/\s*\([A-Z][a-zA-Z\s]{2,}\)\s*:\s*(?=\s*[a-z])/g, ' ');
-                // Remove UI elements
                 content = content.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
                 content = content.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
                 content = content.replace(/👤|🎓|🌐/g, '');
                 
-                // Skip empty or whitespace-only content
                 if (content.trim().length > 0) {
                   fullResponse += content;
-                  // Send content immediately for real-time streaming
                   res.write(`data: ${JSON.stringify({ content })}\n\n`);
                   if (typeof res.flush === 'function') {
                     res.flush();
                   }
                 }
               }
-              // Handle error in response
               if (parsed.error) {
                 throw new Error(parsed.error.message || 'API error');
               }
             } catch (e) {
-              // Silently skip malformed JSON chunks
               if (e.message && !e.message.includes('JSON')) {
                 console.error('Stream parsing error:', e.message);
               }
@@ -745,7 +903,6 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       response.data.on('end', () => {
         clearInterval(keepAlive);
         
-        // Validate that we have a meaningful response
         if (!fullResponse || fullResponse.trim().length < 10) {
           if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
@@ -756,21 +913,15 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           return;
         }
 
-        // Clean and validate response before caching
         let cleanedResponse = cleanAIResponse(fullResponse);
         let isValid = validateAndCleanResponse(cleanedResponse, 30);
         
-        // If cleaning made response invalid, check original
         if (!isValid && fullResponse.trim().length > 50) {
-          // Check if original is garbled
           if (!isGarbledResponse(fullResponse)) {
-            // Try cleaning again with less strict rules
             cleanedResponse = fullResponse.trim();
-            // Remove only obvious issues
             cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
             cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
             
-            // Ensure it ends properly
             if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
               cleanedResponse += '.';
             }
@@ -779,16 +930,13 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
         }
         
-        // Ensure we have a valid response
         if (isValid && isValid.length > 30) {
           responseCache.set(cacheKey, {
             response: isValid,
             timestamp: Date.now()
           });
         } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
-          // Fallback: use original if it's not garbled and substantial
           cleanedResponse = fullResponse.trim();
-          // Minimal cleaning
           cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
           cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
           if (!/[.!?]$/.test(cleanedResponse)) {
@@ -807,6 +955,53 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
           res.end();
         }
+        
+        if (chatId && isValid && isValid.length > 50) {
+          (async () => {
+            try {
+              await connectToDatabase();
+              const chat = await Chat.findOne({ 
+                _id: chatId, 
+                userEmail: session.user.email 
+              }).lean();
+              
+              if (chat && chat.messages && chat.messages.length > 0) {
+                const conversationFacts = await extractConversationFacts(chat.messages, session.user.email);
+                
+                if (conversationFacts.facts && conversationFacts.facts.length > 0) {
+                  const user = await User.findOne({ email: session.user.email });
+                  if (user) {
+                    const profile = user.profile || {};
+                    if (!profile.facts) {
+                      profile.facts = [];
+                    }
+                    conversationFacts.facts.forEach(fact => {
+                      if (!fact || typeof fact !== 'string') return;
+                      const normalizedFact = fact.toLowerCase().trim();
+                      if (normalizedFact.length < 10) return;
+                      const exists = profile.facts.some(f => {
+                        if (!f || typeof f !== 'string') return false;
+                        return f.toLowerCase().trim() === normalizedFact;
+                      });
+                      if (!exists) {
+                        profile.facts.push(fact);
+                      }
+                    });
+                    if (profile.facts.length > 20) {
+                      profile.facts = profile.facts.slice(-20);
+                    }
+                    profile.lastUpdated = new Date();
+                    user.profile = profile;
+                    await user.save();
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to extract conversation facts:', err.message);
+            }
+          })();
+        }
+        
         resolve();
       });
 

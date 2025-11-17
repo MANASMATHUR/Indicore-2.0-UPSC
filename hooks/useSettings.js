@@ -16,18 +16,14 @@ export function useSettings() {
 
   const loadSettings = useCallback(async () => {
     try {
-      // Load from localStorage first
       const savedSettings = localStorage.getItem('indicore-settings');
       if (savedSettings) {
         const parsedSettings = JSON.parse(savedSettings);
         
-        // Check if migration is needed
         if (!parsedSettings.settingsVersion || parsedSettings.settingsVersion !== defaultSettings.settingsVersion) {
-          // Migration: Update old settings to new defaults
           const migratedSettings = {
             ...defaultSettings,
             ...parsedSettings,
-            // Force update system prompt and model to new defaults
             systemPrompt: defaultSettings.systemPrompt,
             model: defaultSettings.model,
             settingsVersion: defaultSettings.settingsVersion
@@ -35,19 +31,15 @@ export function useSettings() {
           
           setSettings(prev => ({ ...prev, ...migratedSettings }));
           
-          // Save migrated settings back to localStorage
           localStorage.setItem('indicore-settings', JSON.stringify(migratedSettings));
         } else {
-          // Settings are up to date, use as-is
           setSettings(prev => ({ ...prev, ...parsedSettings }));
         }
       } else {
-        // No saved settings, use defaults
         setSettings(defaultSettings);
         localStorage.setItem('indicore-settings', JSON.stringify(defaultSettings));
       }
     } catch (error) {
-      // Fallback to defaults if there's an error
       setSettings(defaultSettings);
     }
   }, []);

@@ -35,7 +35,6 @@ export default function ChatInterface({ user }) {
   const [renameInitial, setRenameInitial] = useState('');
   const [currentChatId, setCurrentChatId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  // Temporarily disabled dark mode - force light mode only
   const [currentTheme, setCurrentTheme] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
@@ -461,6 +460,7 @@ export default function ChatInterface({ user }) {
           },
           body: JSON.stringify({
             message: sanitizedMessage,
+            chatId: chatId, // Add chatId for context
             model: settings.model,
             systemPrompt: settings.systemPrompt,
             language: messageLanguage

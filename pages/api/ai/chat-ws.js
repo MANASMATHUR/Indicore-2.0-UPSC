@@ -6,8 +6,10 @@ import axios from 'axios';
 import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
 import Chat from '@/models/Chat';
+import User from '@/models/User';
 import { Server } from 'socket.io';
 import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
+import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
 
 let io = null;
 const responseCache = new Map();
@@ -16,9 +18,9 @@ const CACHE_TTL = 10 * 60 * 1000;
 function calculateMaxTokens(message) {
   const messageLength = message.length;
   if (messageLength < 100) return 4000;
-  if (messageLength < 500) return 8000;
-  if (messageLength < 2000) return 12000;
-  return 16000;
+  if (messageLength < 500) return 10000;
+  if (messageLength < 2000) return 16000;
+  return 20000;
 }
 
 export default function handler(req, res) {
@@ -85,8 +87,8 @@ export default function handler(req, res) {
               .lean();
               
               if (chat && chat.messages && Array.isArray(chat.messages)) {
-                // Filter and map more efficiently - only get last 5 messages
-                const recentMessages = chat.messages.slice(-5);
+                // Get last 15 messages for better context (increased from 5)
+                const recentMessages = chat.messages.slice(-15);
                 conversationHistory = recentMessages
                   .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
                   .map(msg => ({
@@ -124,6 +126,22 @@ ACCURACY AND FACTUAL REQUIREMENTS:
 - For PYQ (Previous Year Questions), only reference actual questions from the database. Do not create or invent questions.
 
 Write naturally and conversationally, but ensure every response is complete, accurate, and truthful. Do not include citations or reference numbers.`;
+
+          // Add user profile context to system prompt
+          const profileContext = userProfile ? formatProfileContext(userProfile) : '';
+          if (profileContext) {
+            finalSystemPrompt += `\n\nUSER CONTEXT (Remember this across all conversations):\n${profileContext}\n\nIMPORTANT: Use this user context to provide personalized responses. If the user asks about "my exam" or "prep me for exam", refer to their specific exam details from the context above. Ask follow-up questions if needed to clarify which exam they're referring to (e.g., "Are you referring to your ${userProfile.targetExam || 'exam'}?" or reference specific facts from their profile). Always remember user-specific information like exam names, subjects, dates, and preferences mentioned in previous conversations.`;
+          }
+
+          // Add instruction for memory saving prompts
+          if (saveWorthyInfo && !isSaveConfirmation(message)) {
+            finalSystemPrompt += `\n\nMEMORY SAVING INSTRUCTION:\nThe user just mentioned: "${saveWorthyInfo.value}". This seems like important information that should be remembered. At the END of your response, add a friendly follow-up question asking if they want to save this to memory. Use this exact format: "[Your main response]\n\n💾 I noticed you mentioned "${saveWorthyInfo.value}". Would you like me to save this to your memory so I can remember it in future conversations?"`;
+          }
+          
+          // If user confirmed saving, add instruction to acknowledge and save
+          if (isSaveConfirmation(message)) {
+            finalSystemPrompt += `\n\nMEMORY SAVING CONFIRMATION:\nThe user just confirmed they want to save information to memory. Acknowledge this at the start of your response with something like "Got it! I've saved that to your memory." Then proceed with your normal response.`;
+          }
 
           // Detect translation requests
           const translationMatch = message.match(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+(hindi|marathi|tamil|bengali|punjabi|gujarati|telugu|malayalam|kannada|spanish|english)/i);
@@ -179,31 +197,99 @@ Write naturally and conversationally, but ensure every response is complete, acc
           const contextualEnhancement = needsContext ? contextualLayer.generateContextualPrompt(message) : '';
           const examContext = needsContext ? examKnowledge.generateContextualPrompt(message) : '';
 
-          const enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
+          let enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
+          
+          // Truncate system prompt if too long (Perplexity has limits)
+          const maxSystemLength = 2000;
+          if (enhancedSystemPrompt.length > maxSystemLength) {
+            enhancedSystemPrompt = enhancedSystemPrompt.substring(0, maxSystemLength - 100) + '...';
+          }
 
-          const messagesForAPI = [
-            { role: 'system', content: enhancedSystemPrompt },
-            ...conversationHistory,
-            { role: 'user', content: message }
-          ];
+          // Ensure proper message array structure
+          const messagesForAPI = [];
+          if (enhancedSystemPrompt && enhancedSystemPrompt.trim().length > 0) {
+            messagesForAPI.push({ role: 'system', content: enhancedSystemPrompt });
+          }
+          
+          // Add history if available
+          if (conversationHistory && conversationHistory.length > 0) {
+            messagesForAPI.push(...conversationHistory);
+          }
+          
+          // Always add user message (ensure it's not empty)
+          if (!message || message.trim().length === 0) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Message cannot be empty' }));
+            return;
+          }
+          
+          messagesForAPI.push({ role: 'user', content: message.trim() });
+
+          // Final validation: ensure we have at least one user message
+          if (messagesForAPI.filter(m => m.role === 'user').length === 0) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+            return;
+          }
 
           const selectedModel = model || 'sonar-pro';
-          const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-            model: selectedModel,
-            messages: messagesForAPI,
-            max_tokens: calculateMaxTokens(message),
-            temperature: 0.5,
-            top_p: 0.9,
-            stream: true
-          }, {
-            headers: {
-              'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream'
-            },
-            responseType: 'stream',
-            timeout: 90000
-          });
+          let response;
+          try {
+            response = await axios.post('https://api.perplexity.ai/chat/completions', {
+              model: selectedModel,
+              messages: messagesForAPI,
+              max_tokens: calculateMaxTokens(message),
+              temperature: 0.5,
+              top_p: 0.9,
+              stream: true
+            }, {
+              headers: {
+                'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream'
+              },
+              responseType: 'stream',
+              timeout: 90000
+            });
+          } catch (apiError) {
+            let errorMessage = 'API request failed. Please try again.';
+            
+            if (apiError.response?.status === 400) {
+              let errorText = '';
+              
+              try {
+                if (apiError.response?.data) {
+                  if (typeof apiError.response.data === 'string') {
+                    errorText = apiError.response.data;
+                  } else if (apiError.response.data.error?.message) {
+                    errorText = apiError.response.data.error.message;
+                  } else if (apiError.response.data.message) {
+                    errorText = apiError.response.data.message;
+                  } else if (Buffer.isBuffer(apiError.response.data)) {
+                    try {
+                      const parsed = JSON.parse(apiError.response.data.toString());
+                      errorText = parsed.error?.message || parsed.message || '';
+                    } catch (e) {
+                      errorText = apiError.response.data.toString().substring(0, 200);
+                    }
+                  }
+                }
+              } catch (e) {
+                errorText = apiError.message || '';
+              }
+              
+              console.error('Perplexity API 400 error (WS):', errorText || apiError.message);
+              
+              if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
+                errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
+              } else if (errorText && errorText.includes('user message')) {
+                errorMessage = 'Invalid request format. Please try again.';
+              }
+            } else {
+              console.error('Perplexity API error (WS):', apiError.response?.status, apiError.message);
+            }
+            
+            ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
+            return;
+          }
 
           let fullResponse = '';
           
@@ -288,7 +374,61 @@ Write naturally and conversationally, but ensure every response is complete, acc
             }
           });
 
-          response.data.on('end', () => {
+          response.data.on('end', async () => {
+            // If user confirmed saving, save the information to profile
+            if (isSaveConfirmation(message) && chatId) {
+              try {
+                await connectToDatabase();
+                const chat = await Chat.findOne({ 
+                  _id: chatId, 
+                  userEmail: session.user.email 
+                }).lean();
+                
+                if (chat && chat.messages && chat.messages.length > 1) {
+                  // Get last assistant message to find what was suggested to save
+                  const lastAssistantMsg = [...chat.messages].reverse().find(msg => msg.sender === 'assistant');
+                  if (lastAssistantMsg && lastAssistantMsg.text) {
+                    // Try to extract the fact from the assistant's previous message
+                    const saveMatch = lastAssistantMsg.text.match(/mentioned[^"]*"([^"]+)"/i);
+                    if (saveMatch && saveMatch[1]) {
+                      const factToSave = saveMatch[1].trim();
+                      const userDoc = await User.findOne({ email: session.user.email });
+                      if (userDoc) {
+                        if (!userDoc.profile) userDoc.profile = {};
+                        if (!userDoc.profile.facts) userDoc.profile.facts = [];
+                        
+                        const normalizedFact = factToSave.toLowerCase().trim();
+                        const exists = userDoc.profile.facts.some(f => {
+                          if (!f || typeof f !== 'string') return false;
+                          return f.toLowerCase().trim() === normalizedFact;
+                        });
+                        
+                        if (!exists) {
+                          userDoc.profile.facts.push(factToSave);
+                          if (userDoc.profile.facts.length > 20) {
+                            userDoc.profile.facts = userDoc.profile.facts.slice(-20);
+                          }
+                          userDoc.profile.lastUpdated = new Date();
+                          await userDoc.save();
+                        }
+                      }
+                    }
+                  }
+                }
+              } catch (err) {
+                console.warn('Failed to save to user memory:', err.message);
+              }
+            }
+            
+            // Emit save prompt info if available
+            if (saveWorthyInfo && !isSaveConfirmation(message)) {
+              socket.emit('chat:save-prompt', {
+                description: saveWorthyInfo.description,
+                type: saveWorthyInfo.type,
+                value: saveWorthyInfo.value
+              });
+            }
+            
             socket.emit('chat:chunk', { chunk: '', done: true });
           });
 

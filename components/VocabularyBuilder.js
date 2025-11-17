@@ -141,7 +141,6 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
       }
     } catch (error) {
       console.error('Error loading bookmarks from localStorage:', error);
-      // Continue with empty set if localStorage fails
     }
   }, []);
 
@@ -150,12 +149,10 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
       if (bookmarkedWords.size > 0) {
         localStorage.setItem('vocabBookmarks', JSON.stringify([...bookmarkedWords]));
       } else {
-        // Clear localStorage if no bookmarks
         localStorage.removeItem('vocabBookmarks');
       }
     } catch (error) {
       console.error('Error saving bookmarks to localStorage:', error);
-      // Continue silently if localStorage fails
     }
   }, [bookmarkedWords]);
 
@@ -344,13 +341,10 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
           )}
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
           {flashcards.length === 0 ? (
-            // Configuration Screen - Horizontal Layout
             <div className="max-w-[1800px] mx-auto p-6 lg:p-8 pb-40">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-                {/* Left Column - Category Selection */}
                 <div className="lg:col-span-3 space-y-4">
                   <div className="mb-4">
                     <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Tap to focus</h2>
@@ -554,9 +548,7 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
               </div>
             </div>
           ) : (
-            // Study Mode
             <div className="max-w-6xl mx-auto p-6 space-y-6">
-              {/* Controls Bar */}
               <div className="flex items-center justify-between gap-4 flex-wrap bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <Button

@@ -41,12 +41,15 @@ export default function Logo({
         <>
           <div className={`relative flex items-center justify-center`} style={{ height: sizes.container.replace('h-', '').replace('h', '') + 'px', width: 'auto' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoSrc}
               alt="Indicore Logo"
               className="h-full w-auto object-contain"
               style={{ maxHeight: '100%', maxWidth: '200px' }}
               onError={() => setImgError(true)}
+              loading="eager"
+              fetchPriority="high"
             />
           </div>
           {showText && (

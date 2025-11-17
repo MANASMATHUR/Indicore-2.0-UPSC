@@ -4,9 +4,20 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 import { Providers } from './providers';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import VisitorTracker from '@/components/VisitorTracker';
+import dynamic from 'next/dynamic';
 
-const inter = Inter({ subsets: ['latin'] });
+// Lazy load non-critical components
+const VisitorTracker = dynamic(() => import('@/components/VisitorTracker'), { 
+  ssr: false 
+});
+
+// Optimize font loading
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+  fallback: ['system-ui', 'arial'],
+});
 
 export const metadata = {
   title: 'Indicore - AI-Powered Exam Preparation for UPSC, PCS & SSC',
@@ -30,7 +41,7 @@ export default function RootLayout({ children }) {
             <VisitorTracker />
           </Providers>
         </ErrorBoundary>
-        <Analytics />
+        <Analytics mode="production" />
         <SpeedInsights />
       </body>
     </html>
