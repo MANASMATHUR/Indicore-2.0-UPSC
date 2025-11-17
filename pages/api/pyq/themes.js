@@ -14,9 +14,11 @@ export default async function handler(req, res) {
       limit = 1000
     } = req.query;
 
+    // Normalize filters
     const filter = {
-      exam: new RegExp(`^${exam}$`, 'i'),
-      level: new RegExp(level, 'i')
+      exam: exam.toUpperCase().trim(),
+      level: new RegExp(`^${level}$`, 'i'),
+      question: { $exists: true, $ne: '', $regex: /.{10,}/ } // Only valid questions
     };
 
     if (paper && paper.trim()) {
@@ -26,8 +28,8 @@ export default async function handler(req, res) {
     }
 
     const items = await PYQ.find(filter)
-      .sort({ year: -1 })
-      .limit(parseInt(limit, 10))
+      .sort({ verified: -1, year: -1 }) // Verified first, then newest
+      .limit(Math.min(parseInt(limit, 10) || 1000, 5000)) // Cap at 5000
       .lean();
 
     const themeMap = new Map();
