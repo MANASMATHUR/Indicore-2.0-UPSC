@@ -396,26 +396,6 @@ export default function Home() {
               </Card>
             </Link>
 
-            {/* Formula Sheets Feature - Temporarily Disabled */}
-            {/* 
-            <Link href="/formula-sheets">
-              <Card className="text-center h-full border-2 border-red-100 cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-lg hover-lift group">
-                <CardContent className="p-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <FileText className="h-8 w-8 text-red-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Formula Sheets</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Auto-generated formula sheets and concept maps
-                  </p>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Generate Sheets
-                  </Button>
-                </CardContent>
-              </Card>
-            </Link>
-            */}
-
             <Link href="/current-affairs-digest">
               <Card className="text-center h-full border-2 border-red-100 bg-white cursor-pointer transition-all duration-300 hover:border-red-300 hover:shadow-xl hover-lift group relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-red-50/0 to-orange-50/0 group-hover:from-red-50/50 group-hover:to-orange-50/30 transition-all duration-300 pointer-events-none"></div>
