@@ -347,7 +347,7 @@ export default async function handler(req, res) {
       ? digest.startDate 
       : (digest.startDate ? new Date(digest.startDate) : new Date());
     const dateStr = startDate.toISOString().split('T')[0];
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="current-affairs-${digest.period}-${dateStr}.pdf"`);
     res.setHeader('Content-Length', buffer.length);

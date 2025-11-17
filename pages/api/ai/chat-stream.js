@@ -382,7 +382,7 @@ Write naturally and conversationally, but ensure every response is complete, acc
               ...result.context,
               originalQuery: result.context.originalQuery || effectiveMsg
             });
-          }
+        }
           return result.content;
         }
       } catch (error) {
