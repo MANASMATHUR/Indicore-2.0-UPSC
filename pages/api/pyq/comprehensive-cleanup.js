@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
+import { cleanQuestion, removeOptionMarkers, extractQuestionFromText, hasEmbeddedOptions } from '@/lib/questionCleaner';
 
 /**
  * Comprehensive PYQ Database Cleanup
@@ -139,22 +140,59 @@ export default async function handler(req, res) {
             }
           }
 
-          // 5. Validate and normalize question
-          if (!pyq.question || typeof pyq.question !== 'string' || pyq.question.trim().length < 10) {
+          // 5. Clean and normalize question (remove options, fix formatting, handle mixed languages)
+          let cleanedQuestion = pyq.question;
+          
+          if (cleanedQuestion && typeof cleanedQuestion === 'string') {
+            // Check if question has embedded options
+            if (hasEmbeddedOptions(cleanedQuestion)) {
+              cleanedQuestion = extractQuestionFromText(cleanedQuestion);
+              stats.fixed.question++;
+            }
+            
+            // Remove option markers from the start
+            const withoutOptions = removeOptionMarkers(cleanedQuestion);
+            if (withoutOptions !== cleanedQuestion) {
+              cleanedQuestion = withoutOptions;
+              stats.fixed.question++;
+            }
+            
+            // Clean the question (handles mixed languages, formatting, etc.)
+            const currentLang = pyq.lang || 'en';
+            const fullyCleaned = cleanQuestion(cleanedQuestion, currentLang);
+            if (fullyCleaned !== pyq.question && fullyCleaned.length >= 10) {
+              updates.question = fullyCleaned;
+              needsUpdate = true;
+              stats.fixed.question++;
+              cleanedQuestion = fullyCleaned;
+            }
+          }
+          
+          // Validate question length
+          if (!cleanedQuestion || typeof cleanedQuestion !== 'string' || cleanedQuestion.trim().length < 10) {
             // Try to extract from answer or other fields
             const potentialQuestion = (pyq.answer || pyq.theme || '').trim();
             if (potentialQuestion && potentialQuestion.length >= 10) {
-              updates.question = potentialQuestion;
-              needsUpdate = true;
-              stats.fixed.question++;
+              const cleanedPotential = cleanQuestion(potentialQuestion, pyq.lang || 'en');
+              if (cleanedPotential.length >= 10) {
+                updates.question = cleanedPotential;
+                needsUpdate = true;
+                stats.fixed.question++;
+                cleanedQuestion = cleanedPotential;
+              } else if (aggressive) {
+                shouldDelete = true;
+                stats.invalid++;
+                continue;
+              }
             } else if (aggressive) {
               shouldDelete = true;
               stats.invalid++;
               continue;
             }
           } else {
-            const normalizedQuestion = pyq.question.trim().replace(/\s+/g, ' ');
-            if (normalizedQuestion !== pyq.question) {
+            // Final normalization
+            const normalizedQuestion = cleanedQuestion.trim().replace(/\s+/g, ' ');
+            if (normalizedQuestion !== pyq.question && normalizedQuestion.length >= 10) {
               updates.question = normalizedQuestion;
               needsUpdate = true;
               stats.fixed.question++;

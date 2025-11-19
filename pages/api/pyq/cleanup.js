@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
 import { detectLanguages, getPrimaryLanguage, isMultiLanguage } from '@/lib/languageDetector';
+import { cleanQuestion, removeOptionMarkers, extractQuestionFromText, hasEmbeddedOptions } from '@/lib/questionCleaner';
 
 /**
  * Cleanup and normalize PYQ data
@@ -190,18 +191,56 @@ export default async function handler(req, res) {
             }
           }
 
-          // 5. Validate and normalize question (must be at least 20 chars for user-friendly display)
-          if (!pyq.question || pyq.question.trim().length < 20) {
+          // 5. Clean and normalize question (remove options, fix formatting, handle mixed languages)
+          let cleanedQuestion = pyq.question;
+          
+          if (cleanedQuestion) {
+            // Check if question has embedded options
+            if (hasEmbeddedOptions(cleanedQuestion)) {
+              cleanedQuestion = extractQuestionFromText(cleanedQuestion);
+              stats.fixed.question++;
+            }
+            
+            // Remove option markers from the start
+            const withoutOptions = removeOptionMarkers(cleanedQuestion);
+            if (withoutOptions !== cleanedQuestion) {
+              cleanedQuestion = withoutOptions;
+              stats.fixed.question++;
+            }
+            
+            // Clean the question (handles mixed languages, formatting, etc.)
+            const currentLang = pyq.lang || 'en';
+            const fullyCleaned = cleanQuestion(cleanedQuestion, currentLang);
+            if (fullyCleaned !== pyq.question && fullyCleaned.length >= 20) {
+              updates.question = fullyCleaned;
+              needsUpdate = true;
+              stats.fixed.question++;
+              cleanedQuestion = fullyCleaned;
+            }
+          }
+
+          // 5a. Validate question length (must be at least 20 chars for user-friendly display)
+          if (!cleanedQuestion || cleanedQuestion.trim().length < 20) {
             // Try to extract question from answer or other fields
             const potentialQuestion = pyq.answer || pyq.theme || '';
             if (potentialQuestion && potentialQuestion.trim().length >= 20) {
-              updates.question = potentialQuestion.trim();
-              needsUpdate = true;
-              stats.fixed.question++;
+              const cleanedPotential = cleanQuestion(potentialQuestion, pyq.lang || 'en');
+              if (cleanedPotential.length >= 20) {
+                updates.question = cleanedPotential;
+                needsUpdate = true;
+                stats.fixed.question++;
+                cleanedQuestion = cleanedPotential;
+              } else {
+                // Only mark as invalid, don't delete - user can review
+                stats.invalid++;
+                console.warn(`Invalid question for PYQ ${pyq._id}: too short (${cleanedQuestion?.length || 0} chars)`);
+                // Skip this entry but don't delete
+                continue;
+              }
             } else {
               // Only mark as invalid, don't delete - user can review
               stats.invalid++;
-              console.warn(`Invalid question for PYQ ${pyq._id}: too short (${pyq.question?.length || 0} chars)`);
+              console.warn(`Invalid question for PYQ ${pyq._id}: too short (${cleanedQuestion?.length || 0} chars)`);
               // Skip this entry but don't delete
               continue;
             }
@@ -263,11 +302,16 @@ export default async function handler(req, res) {
             stats.fixed.lang++;
           }
 
-          const normalizedQuestion = pyq.question.trim().replace(/\s+/g, ' ');
-          if (normalizedQuestion !== pyq.question) {
-            updates.question = normalizedQuestion;
-            needsUpdate = true;
-            stats.fixed.question++;
+          // Question cleaning is already done above, just ensure final normalization
+          if (updates.question) {
+            // Already updated above
+          } else {
+            const normalizedQuestion = (cleanedQuestion || pyq.question).trim().replace(/\s+/g, ' ');
+            if (normalizedQuestion !== pyq.question && normalizedQuestion.length >= 20) {
+              updates.question = normalizedQuestion;
+              needsUpdate = true;
+              stats.fixed.question++;
+            }
           }
 
           // 6. Normalize answer
