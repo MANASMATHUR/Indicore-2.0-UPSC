@@ -3,6 +3,7 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { runClaudeFallbackForPerplexity } from '../lib/ai-providers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,35 +106,53 @@ Please provide the complete essay text only, without any additional explanations
 async function generateEssay(topic, letter) {
   try {
     const userPrompt = createUserPrompt(topic);
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
 
-    const response = await axios.post(
-      'https://api.perplexity.ai/chat/completions',
-      {
-        model: 'sonar-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7,
-        top_p: 0.9,
-        stream: false
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+    let essayContent = '';
+
+    try {
+      const response = await axios.post(
+        'https://api.perplexity.ai/chat/completions',
+        {
+          model: 'sonar-pro',
+          messages,
+          max_tokens: 4000,
+          temperature: 0.7,
+          top_p: 0.9,
+          stream: false
         },
-        timeout: 120000 // 2 minutes timeout
-      }
-    );
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 120000 // 2 minutes timeout
+        }
+      );
 
-    if (!response.data?.choices?.[0]?.message?.content) {
-      throw new Error('Invalid response format from Perplexity API');
+      essayContent = response.data?.choices?.[0]?.message?.content?.trim() || '';
+    } catch (error) {
+      const fallbackContent = await runClaudeFallbackForPerplexity(error, {
+        messages,
+        model: 'sonar-pro',
+        maxTokens: 4000,
+        temperature: 0.7
+      });
+
+      if (fallbackContent) {
+        essayContent = fallbackContent.trim();
+      } else {
+        throw error;
+      }
     }
 
-    const essayContent = response.data.choices[0].message.content.trim();
+    if (!essayContent) {
+      throw new Error('AI provider returned an empty response');
+    }
     const wordCount = essayContent.split(/\s+/).filter(word => word.length > 0).length;
 
     const essayData = {
