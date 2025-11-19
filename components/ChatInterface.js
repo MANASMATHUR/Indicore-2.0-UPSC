@@ -7,6 +7,7 @@ import Sidebar from './layout/Sidebar';
 import ChatMessages from './chat/ChatMessages';
 import StreamingChatMessages from './chat/StreamingChatMessages';
 import ChatInput from './chat/ChatInput';
+import ChatSearch from './chat/ChatSearch';
 import SettingsPanel from './settings/SettingsPanel';
 import VoiceDialog from './VoiceDialog';
 import RenameChatModal from './RenameChatModal';
@@ -14,6 +15,7 @@ import ExamPaperUpload from './ExamPaperUpload';
 import EssayEnhancement from './EssayEnhancement';
 import VocabularyBuilder from './VocabularyBuilder';
 import MockEvaluation from './MockEvaluation';
+import StudyStatistics from './StudyStatistics';
 import { useChat } from '@/hooks/useChat';
 import { useSettings } from '@/hooks/useSettings';
 import { ToastProvider, useToast } from './ui/ToastProvider';
@@ -37,6 +39,7 @@ export default function ChatInterface({ user }) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentTheme, setCurrentTheme] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [useWebSocketConnection, setUseWebSocketConnection] = useState(true);
@@ -179,6 +182,8 @@ export default function ChatInterface({ user }) {
             message,
             chatId,
             model: settings.model,
+            provider: settings.provider,
+            openAIModel: settings.openAIModel,
             systemPrompt: settings.systemPrompt,
             language: messageLanguage
           }, {
@@ -217,6 +222,8 @@ export default function ChatInterface({ user }) {
             message,
             chatId,
             model: settings.model,
+            provider: settings.provider,
+            openAIModel: settings.openAIModel,
             systemPrompt: settings.systemPrompt,
             language: messageLanguage,
             enableCaching: settings.enableCaching,
@@ -352,7 +359,7 @@ export default function ChatInterface({ user }) {
         user: user.email
       }, 'error');
     }
-  }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading]);
+  }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, settings.provider, settings.openAIModel, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading]);
 
   const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
     // Detect if user is asking for translation in voice input
@@ -462,6 +469,8 @@ export default function ChatInterface({ user }) {
             message: sanitizedMessage,
             chatId: chatId, // Add chatId for context
             model: settings.model,
+            provider: settings.provider,
+            openAIModel: settings.openAIModel,
             systemPrompt: settings.systemPrompt,
             language: messageLanguage
           }),
@@ -523,7 +532,7 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
     }
-  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse]);
+  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, settings.provider, settings.openAIModel, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse]);
 
   const handleChatSelect = useCallback(async (chatId) => {
     setCurrentChatId(chatId);
@@ -583,6 +592,37 @@ export default function ChatInterface({ user }) {
       showToast('Failed to update chat name', { type: 'error' });
     }
   };
+
+  const handleArchiveChat = useCallback(async (chatId) => {
+    const chat = chats.find(c => c._id === chatId);
+    if (!chat) return;
+    
+    const newArchivedState = !chat.archived;
+    try {
+      const response = await fetch(`/api/chat/${chatId}/organize`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: newArchivedState })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChats(prevChats => 
+          prevChats.map(c => 
+            c._id === chatId 
+              ? { ...c, archived: data.chat.archived }
+              : c
+          )
+        );
+        showToast(`Chat ${newArchivedState ? 'archived' : 'unarchived'}`, { type: 'success' });
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.error || `Failed to ${newArchivedState ? 'archive' : 'unarchive'} chat`, { type: 'error' });
+      }
+    } catch (error) {
+      showToast(`Failed to ${newArchivedState ? 'archive' : 'unarchive'} chat`, { type: 'error' });
+    }
+  }, [chats, showToast]);
 
   const handlePinChat = async (chatId) => {
     const chat = chats.find(c => c._id === chatId);
@@ -705,17 +745,91 @@ export default function ChatInterface({ user }) {
     handleSendMessage(prompt, false, settings.language);
   }, [handleSendMessage, settings.language]);
 
+  // Handle message actions
+  const handleBookmarkMessage = useCallback(async (messageIndex, bookmarked) => {
+    if (!currentChatId) return;
+    
+    try {
+      const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookmarked })
+      });
+      
+      if (response.ok) {
+        const updatedMessages = [...messages];
+        if (updatedMessages[messageIndex]) {
+          updatedMessages[messageIndex].bookmarked = bookmarked;
+          setMessages(updatedMessages);
+        }
+        showToast(bookmarked ? 'Message bookmarked' : 'Bookmark removed', { type: 'success' });
+      }
+    } catch (error) {
+      showToast('Failed to update bookmark', { type: 'error' });
+    }
+  }, [currentChatId, messages, setMessages, showToast]);
+
+  const handleEditMessage = useCallback(async (messageIndex, newText) => {
+    if (!currentChatId) return;
+    
+    try {
+      const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: newText })
+      });
+      
+      if (response.ok) {
+        const updatedMessages = [...messages];
+        if (updatedMessages[messageIndex]) {
+          updatedMessages[messageIndex].text = newText;
+          setMessages(updatedMessages);
+        }
+        showToast('Message updated', { type: 'success' });
+      }
+    } catch (error) {
+      showToast('Failed to update message', { type: 'error' });
+    }
+  }, [currentChatId, messages, setMessages, showToast]);
+
+  const handleDeleteMessage = useCallback(async (messageIndex) => {
+    if (!currentChatId) return;
+    
+    try {
+      const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        const updatedMessages = messages.filter((_, idx) => idx !== messageIndex);
+        setMessages(updatedMessages);
+        showToast('Message deleted', { type: 'success' });
+      }
+    } catch (error) {
+      showToast('Failed to delete message', { type: 'error' });
+    }
+  }, [currentChatId, messages, setMessages, showToast]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
       // Ctrl+K or Cmd+K: New chat
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k' && !e.shiftKey) {
         e.preventDefault();
         handleNewChat();
       }
-      // Escape: Close sidebar if open
-      if (e.key === 'Escape' && isSidebarOpen) {
-        setIsSidebarOpen(false);
+      // Ctrl+F or Cmd+F: Search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      }
+      // Escape: Close sidebar/search if open
+      if (e.key === 'Escape') {
+        if (isSearchOpen) {
+          setIsSearchOpen(false);
+        } else if (isSidebarOpen) {
+          setIsSidebarOpen(false);
+        }
       }
       // Ctrl+/ or Cmd+/: Toggle settings
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
@@ -726,7 +840,7 @@ export default function ChatInterface({ user }) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [handleNewChat, isSidebarOpen]);
+  }, [handleNewChat, isSidebarOpen, isSearchOpen]);
 
 
   return (
@@ -751,10 +865,11 @@ export default function ChatInterface({ user }) {
             setCurrentChatId(null);
           }
         }}
-        onEditChat={handleEditChat}
-        onPinChat={handlePinChat}
-        onSearchChat={handleSearchChat}
-      />
+          onEditChat={handleEditChat}
+          onPinChat={handlePinChat}
+          onSearchChat={handleSearchChat}
+          onArchiveChat={handleArchiveChat}
+        />
 
       <div 
         className={`chat-container min-h-screen flex flex-col ${isSidebarOpen ? 'chat-container-sidebar-open' : 'chat-container-sidebar-closed'}`}
@@ -774,12 +889,38 @@ export default function ChatInterface({ user }) {
           onVocabularyBuilder={useCallback(() => setIsVocabularyBuilderOpen(true), [])}
           onMockEvaluation={useCallback(() => setIsMockEvaluationOpen(true), [])}
           onDownloadPDF={downloadChatAsPDF}
+          onSearchClick={useCallback(() => setIsSearchOpen(prev => !prev), [])}
           currentTheme={currentTheme}
           onThemeChange={handleThemeChange}
         />
 
+        {/* Chat Search */}
+        <ChatSearch
+          messages={messages}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onSearchResultClick={(index) => {
+            const element = document.querySelector(`[data-message-index="${index}"]`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+          isOpen={isSearchOpen}
+          onClose={() => {
+            setIsSearchOpen(false);
+            setSearchQuery('');
+          }}
+        />
+
+        {/* Study Statistics */}
+        {currentChatId && (
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-slate-700">
+            <StudyStatistics />
+          </div>
+        )}
+
         {/* Chat Messages */}
-        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages">
+        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages" style={{ marginTop: isSearchOpen ? '60px' : '0' }}>
           {useStreaming ? (
             <StreamingChatMessages 
               messages={messages} 
@@ -788,6 +929,10 @@ export default function ChatInterface({ user }) {
               streamingMessage={streamingMessage}
               onRegenerate={handleRegenerate}
               onPromptClick={handlePromptClick}
+              searchQuery={searchQuery}
+              onBookmark={handleBookmarkMessage}
+              onEdit={handleEditMessage}
+              onDelete={handleDeleteMessage}
             />
           ) : (
             <ChatMessages 
@@ -796,6 +941,10 @@ export default function ChatInterface({ user }) {
               messagesEndRef={messagesEndRef}
               onRegenerate={handleRegenerate}
               onPromptClick={handlePromptClick}
+              searchQuery={searchQuery}
+              onBookmark={handleBookmarkMessage}
+              onEdit={handleEditMessage}
+              onDelete={handleDeleteMessage}
             />
           )}
         </main>

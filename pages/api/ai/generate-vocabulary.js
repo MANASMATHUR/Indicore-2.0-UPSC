@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
+import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -91,32 +92,37 @@ Return a JSON array of flashcards with the exact structure:
 - For History: Terms like "renaissance", "nationalism", "decolonization"
 - For Geography: Terms like "biodiversity", "sustainable development", "climate resilience"`;
 
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: 'sonar-pro',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Generate ${count || 10} vocabulary flashcards for ${categoryDesc} with ${sourceLangName} to ${targetLangName} translation. Difficulty: ${difficulty}. Return as JSON array.`
-        }
-      ],
-      max_tokens: 3000,
-      temperature: 0.3, // Lower temperature for more consistent vocabulary
-      top_p: 0.9,
-      stream: false,
-      presence_penalty: 0,
-      frequency_penalty: 1
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { 
+        role: 'user', 
+        content: `Generate ${count || 10} vocabulary flashcards for ${categoryDesc} with ${sourceLangName} to ${targetLangName} translation. Difficulty: ${difficulty}. Return as JSON array.`
       }
-    });
+    ];
 
-    if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
-      const content = response.data.choices[0].message.content;
+    let content = '';
+
+    try {
+      // Use OpenAI for vocabulary generation
+      const openAIKey = getOpenAIKey();
+      if (!openAIKey) {
+        throw new Error('OpenAI API key not configured');
+      }
       
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+      content = await callOpenAIAPI(
+        messages,
+        openAIModel,
+        undefined, // No token limit for OpenAI
+        0.3 // Lower temperature for more consistent vocabulary
+      );
+      content = content?.trim() || '';
+    } catch (error) {
+      console.error('OpenAI API error for vocabulary generation:', error.message);
+      throw error;
+    }
+
+    if (content && content.trim().length > 0) {
       let flashcards;
       try {
         const jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -137,9 +143,9 @@ Return a JSON array of flashcards with the exact structure:
         difficulty,
         generatedAt: new Date().toISOString()
       });
-    } else {
-      throw new Error('Invalid response format from Perplexity API');
     }
+
+    throw new Error('AI provider returned an empty response');
 
   } catch (error) {
 
@@ -148,11 +154,11 @@ Return a JSON array of flashcards with the exact structure:
       let errorMessage = 'An error occurred while generating vocabulary.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }

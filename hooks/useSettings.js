@@ -5,10 +5,12 @@ import { useState, useCallback, useEffect } from 'react';
 const defaultSettings = {
   language: 'en',
   model: 'sonar-pro',
+  provider: 'openai',
+  openAIModel: 'gpt-4o-mini',
   systemPrompt: `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. Provide clear, well-structured answers that are easy to read. Use simple formatting: write in paragraphs with proper spacing, use bullet points sparingly, and avoid markdown headers (###) or excessive bold text. Keep responses natural and readable. Write in complete sentences. Do not include citations or reference numbers.`,
   totalQuestions: 0,
   sessionQuestions: 0,
-  settingsVersion: '2.6', // Version to track migrations
+  settingsVersion: '2.8', // Version to track migrations
 };
 
 export function useSettings() {
@@ -26,6 +28,8 @@ export function useSettings() {
             ...parsedSettings,
             systemPrompt: defaultSettings.systemPrompt,
             model: defaultSettings.model,
+            provider: parsedSettings.provider || defaultSettings.provider,
+            openAIModel: parsedSettings.openAIModel || defaultSettings.openAIModel,
             settingsVersion: defaultSettings.settingsVersion
           };
           
@@ -33,7 +37,14 @@ export function useSettings() {
           
           localStorage.setItem('indicore-settings', JSON.stringify(migratedSettings));
         } else {
-          setSettings(prev => ({ ...prev, ...parsedSettings }));
+          const normalizedSettings = {
+            ...parsedSettings,
+            provider: parsedSettings.provider || defaultSettings.provider,
+            openAIModel: parsedSettings.openAIModel || defaultSettings.openAIModel,
+            settingsVersion: defaultSettings.settingsVersion
+          };
+          setSettings(prev => ({ ...prev, ...normalizedSettings }));
+          localStorage.setItem('indicore-settings', JSON.stringify(normalizedSettings));
         }
       } else {
         setSettings(defaultSettings);
@@ -46,9 +57,15 @@ export function useSettings() {
 
   const updateSettings = useCallback(async (newSettings) => {
     try {
-      setSettings(newSettings);
+      const normalizedSettings = {
+        ...newSettings,
+        provider: newSettings?.provider || defaultSettings.provider,
+        openAIModel: newSettings?.openAIModel || defaultSettings.openAIModel,
+        settingsVersion: defaultSettings.settingsVersion
+      };
+      setSettings(normalizedSettings);
       
-      localStorage.setItem('indicore-settings', JSON.stringify(newSettings));
+      localStorage.setItem('indicore-settings', JSON.stringify(normalizedSettings));
     } catch (error) {
     }
   }, []);

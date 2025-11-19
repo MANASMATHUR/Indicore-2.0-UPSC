@@ -192,16 +192,50 @@ export default function DocumentUpload({ isOpen, onClose, onTranslate }) {
         // OCR for images using tesseract.js (lazy import)
         try {
           const { createWorker } = await import('tesseract.js');
-          const lang = sourceLanguage === 'en' ? 'eng' : 'eng'; 
-          const worker = await createWorker(lang);
-          const { data: { text: ocrText } } = await worker.recognize(file);
+          
+          // Map language codes to Tesseract language codes
+          const tesseractLangMap = {
+            'en': 'eng',
+            'hi': 'hin+eng', // Hindi + English for mixed content
+            'mr': 'mar+eng', // Marathi + English
+            'ta': 'tam+eng', // Tamil + English
+            'bn': 'ben+eng', // Bengali + English
+            'pa': 'pan+eng', // Punjabi + English
+            'gu': 'guj+eng', // Gujarati + English
+            'te': 'tel+eng', // Telugu + English
+            'ml': 'mal+eng', // Malayalam + English
+            'kn': 'kan+eng', // Kannada + English
+            'es': 'spa+eng'  // Spanish + English
+          };
+          
+          // Use detected language or source language, fallback to English
+          const detectedLang = detectedLanguage || sourceLanguage || 'en';
+          const tesseractLang = tesseractLangMap[detectedLang] || tesseractLangMap[sourceLanguage] || 'eng';
+          
+          // Show progress
+          setExtractedText('🔄 Processing image with OCR...\n\nThis may take a few moments...');
+          
+          const worker = await createWorker(tesseractLang);
+          
+          // Add progress callback
+          await worker.recognize(file, {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                const progress = Math.round(m.progress * 100);
+                setExtractedText(`🔄 Processing image with OCR... ${progress}%\n\nPlease wait...`);
+              }
+            }
+          }).then(({ data: { text: ocrText } }) => {
+            text = (ocrText || '').trim();
+            if (!text) {
+              text = `⚠️ No readable text detected in the image ${file.name}.\n\nSuggestions:\n• Try a clearer photo with better lighting\n• Ensure text is not too small or blurry\n• Check if the image contains text\n• Try a different image format`;
+            }
+          });
+          
           await worker.terminate();
-          text = (ocrText || '').trim();
-          if (!text) {
-            text = ` No readable text detected in the image ${file.name}. Try a clearer photo with good lighting.`;
-          }
         } catch (e) {
-          text = ` OCR failed for ${file.name}. Please try another image or ensure the text is clear.`;
+          console.error('OCR error:', e);
+          text = `❌ OCR failed for ${file.name}.\n\nError: ${e.message || 'Unknown error'}\n\nPlease try:\n• Another image with clearer text\n• Ensuring the image is not corrupted\n• A different image format (PNG, JPG, JPEG)`;
         }
       } else {
         text = await readFileAsText(file);

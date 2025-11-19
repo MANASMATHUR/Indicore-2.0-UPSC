@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
+import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -63,14 +64,11 @@ export default async function handler(req, res) {
 **Response Format:**
 Provide only the enhanced essay text in ${targetLangName}. Do not include explanations or comments.`;
 
-    // Call Perplexity/Sonar API for enhancement
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: 'sonar-pro',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Please enhance and translate this essay from ${sourceLangName} to ${targetLangName}:
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { 
+        role: 'user', 
+        content: `Please enhance and translate this essay from ${sourceLangName} to ${targetLangName}:
 
 **Original Essay:**
 ${essayText}
@@ -81,36 +79,43 @@ ${essayText}
 ${wordLimit ? `- Word Limit: ${wordLimit} words` : ''}
 
 Please provide the enhanced essay in ${targetLangName} only.`
-        }
-      ],
-      max_tokens: 4000,
-      temperature: 0.5, // Slightly higher for more creative enhancement
-      top_p: 0.9,
-      stream: false,
-      presence_penalty: 0,
-      frequency_penalty: 1
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
       }
-    });
+    ];
 
-    if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
-      const enhancedEssay = response.data.choices[0].message.content;
+    let enhancedEssay = '';
+
+    try {
+      // Use OpenAI for essay enhancement
+      const openAIKey = getOpenAIKey();
+      if (!openAIKey) {
+        throw new Error('OpenAI API key not configured');
+      }
       
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+      enhancedEssay = await callOpenAIAPI(
+        messages,
+        openAIModel,
+        undefined, // No token limit for OpenAI
+        0.5 // Slightly higher for more creative enhancement
+      );
+      enhancedEssay = enhancedEssay?.trim() || '';
+    } catch (error) {
+      console.error('OpenAI API error for essay enhancement:', error.message);
+      throw error;
+    }
+
+    if (enhancedEssay && enhancedEssay.trim().length > 0) {
       return res.status(200).json({ 
-        enhancedEssay,
+        enhancedEssay: enhancedEssay.trim(),
         sourceLanguage,
         targetLanguage,
         essayType,
         wordLimit,
         enhancedAt: new Date().toISOString()
       });
-    } else {
-      throw new Error('Invalid response format from Perplexity API');
     }
+
+    throw new Error('AI provider returned an empty response');
 
   } catch (error) {
 
@@ -119,11 +124,11 @@ Please provide the enhanced essay in ${targetLangName} only.`
       let errorMessage = 'An error occurred while enhancing your essay.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }

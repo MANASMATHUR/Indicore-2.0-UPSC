@@ -19,15 +19,18 @@ export function useWebSocket() {
 
     const newSocket = io(socketUrl, {
       path: '/api/socket',
-      transports: ['websocket', 'polling'], // Prefer websocket for lower latency
+      transports: ['websocket'], // Force websocket only for lowest latency
       reconnection: true,
-      reconnectionDelay: 500, // Faster reconnection
-      reconnectionDelayMax: 2000,
+      reconnectionDelay: 300, // Faster reconnection
+      reconnectionDelayMax: 1500,
       reconnectionAttempts: maxReconnectAttempts,
-      timeout: 10000, // Reduced timeout for faster failure detection
+      timeout: 8000, // Reduced timeout for faster failure detection
       forceNew: false, // Reuse connection when possible
-      upgrade: true, // Auto-upgrade from polling to websocket
-      rememberUpgrade: true
+      upgrade: false, // Skip polling upgrade - websocket only
+      rememberUpgrade: true,
+      // Optimize for low latency
+      autoConnect: true,
+      multiplex: false // Disable multiplexing for simpler, faster connections
     });
 
     newSocket.on('connect', () => {
@@ -60,7 +63,7 @@ export function useWebSocket() {
     }
 
     return new Promise((resolve, reject) => {
-      const { message: msg, chatId, model, systemPrompt, language } = message;
+      const { message: msg, chatId, model, provider, openAIModel, systemPrompt, language } = message;
       
       let fullResponse = '';
       let isComplete = false;
@@ -71,9 +74,13 @@ export function useWebSocket() {
           socket.off('chat:chunk', onChunk);
           socket.off('chat:error', onError);
           resolve({ success: true, response: fullResponse, complete: true });
-        } else {
+        } else if (data.chunk) {
+          // Process chunk immediately - no buffering
           fullResponse += data.chunk;
-          options.onChunk?.(data.chunk, fullResponse);
+          // Call onChunk synchronously for immediate UI update
+          if (options.onChunk) {
+            options.onChunk(data.chunk, fullResponse);
+          }
         }
       };
 
@@ -90,6 +97,8 @@ export function useWebSocket() {
         message: msg,
         chatId,
         model: model || 'sonar-pro',
+        provider: provider || 'openai',
+        openAIModel,
         systemPrompt,
         language: language || 'en',
         sessionToken: session?.user?.email

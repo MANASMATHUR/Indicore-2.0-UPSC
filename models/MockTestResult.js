@@ -2,7 +2,9 @@ import mongoose from 'mongoose';
 
 const answerSchema = new mongoose.Schema({
   questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  questionType: { type: String, enum: ['mcq', 'subjective'], default: 'mcq' },
   selectedAnswer: String,
+  textAnswer: String,
   isCorrect: Boolean,
   timeSpent: Number, // in seconds
   marksObtained: Number
@@ -39,7 +41,12 @@ const mockTestResultSchema = new mongoose.Schema({
     marks: Number
   }],
   startedAt: { type: Date, default: Date.now },
-  finishedAt: Date
+  finishedAt: Date,
+  detailedAnalysis: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  analyzedAt: Date
 }, { timestamps: true });
 
 mockTestResultSchema.index({ userId: 1, completedAt: -1 });

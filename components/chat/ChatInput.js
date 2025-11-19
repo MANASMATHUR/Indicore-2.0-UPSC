@@ -54,26 +54,49 @@ const ChatInput = ({
 
     setIsProcessingImage(true);
     setShowImageDropdown(false);
+    
+    // Show progress toast
+    showToast('Processing image with OCR... This may take a moment.', { type: 'info', duration: 3000 });
 
     try {
-      // OCR the image
+      // OCR the image with multi-language support
       const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng');
       
-      const { data: { text: ocrText } } = await worker.recognize(file);
+      // Try English first, then fallback to multi-language if needed
+      // For Indic languages, use eng+hin (or other) for better accuracy
+      const tesseractLang = 'eng+hin+tam+ben'; // Multi-language: English + Hindi + Tamil + Bengali
+      
+      const worker = await createWorker(tesseractLang);
+      
+      // Recognize with progress tracking
+      const { data: { text: ocrText } } = await worker.recognize(file, {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            const progress = Math.round(m.progress * 100);
+            // Update toast with progress (if possible)
+            if (progress % 25 === 0) { // Update every 25%
+              showToast(`OCR Progress: ${progress}%`, { type: 'info', duration: 1000 });
+            }
+          }
+        }
+      });
       
       await worker.terminate();
       
       const extractedText = (ocrText || '').trim();
       
-      if (extractedText) {
+      if (extractedText && extractedText.length > 10) {
         // Send the OCR text as a normal user message
+        showToast('Text extracted successfully!', { type: 'success' });
         onSendMessage(extractedText);
       } else {
-        onSendMessage(' No readable text found in the image. Please try a clearer photo with better lighting.');
+        showToast('No readable text found in the image.', { type: 'warning' });
+        onSendMessage('⚠️ No readable text found in the image.\n\nPlease try:\n• A clearer photo with better lighting\n• Ensuring text is not too small or blurry\n• An image with visible, readable text');
       }
     } catch (error) {
-      onSendMessage(` Failed to process the image: ${error.message || 'Unknown error'}. Please try again or upload a clearer image.`);
+      console.error('OCR error:', error);
+      showToast('OCR processing failed. Please try again.', { type: 'error' });
+      onSendMessage(`❌ Failed to process the image: ${error.message || 'Unknown error'}.\n\nPlease try:\n• Another image with clearer text\n• Ensuring the image is not corrupted\n• A different image format`);
     } finally {
       setIsProcessingImage(false);
       // Reset file input

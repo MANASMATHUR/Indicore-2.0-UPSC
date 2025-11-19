@@ -17,7 +17,16 @@ const messageSchema = new mongoose.Schema({
   metadata: {
     model: String,
     language: String,
-    tokens: Number
+    tokens: Number,
+    bookmarked: {
+      type: Boolean,
+      default: false
+    },
+    editedAt: Date
+  },
+  bookmarked: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -55,6 +64,17 @@ const chatSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  folder: {
+    type: String,
+    default: null
+  },
+  tags: [{
+    type: String
+  }],
+  archived: {
+    type: Boolean,
+    default: false
+  },
   lastMessageAt: {
     type: Date,
     default: Date.now
@@ -66,6 +86,9 @@ const chatSchema = new mongoose.Schema({
 chatSchema.index({ userId: 1, createdAt: -1 });
 chatSchema.index({ userEmail: 1, createdAt: -1 });
 chatSchema.index({ lastMessageAt: -1 });
+chatSchema.index({ userEmail: 1, archived: 1, lastMessageAt: -1 });
+chatSchema.index({ userEmail: 1, folder: 1, lastMessageAt: -1 });
+chatSchema.index({ userEmail: 1, tags: 1, lastMessageAt: -1 });
 
 chatSchema.pre('save', function(next) {
   if (this.messages && this.messages.length > 0) {

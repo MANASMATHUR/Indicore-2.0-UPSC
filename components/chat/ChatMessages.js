@@ -13,7 +13,7 @@ import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingSt
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 import { stripMarkdown, supportedLanguages } from '@/lib/messageUtils';
 
-const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, onRegenerate, onPromptClick }) => {
+const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, onRegenerate, onPromptClick, searchQuery = '', onBookmark, onEdit, onDelete }) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
   const translationLoading = useLoadingState();
@@ -199,6 +199,11 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
             onRegenerate={onRegenerate}
             onPromptClick={onPromptClick}
             messages={messages}
+            searchQuery={searchQuery}
+            onBookmark={onBookmark}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isBookmarked={message.bookmarked || false}
           />
         ))}
 
@@ -217,10 +222,17 @@ const MessageItem = memo(({
   translatedText,
   onRegenerate,
   onPromptClick,
-  messages = []
+  messages = [],
+  searchQuery = '',
+  onBookmark,
+  onEdit,
+  onDelete,
+  isBookmarked = false
 }) => {
   const { showToast } = useToast();
   const [isHovered, setIsHovered] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
   const sender = message?.sender || message?.role || 'assistant';
   const text = message?.text || message?.content || '';
   const ts = message?.timestamp ? new Date(message.timestamp) : null;
@@ -240,12 +252,48 @@ const MessageItem = memo(({
     }
   };
 
+  const highlightText = (text, query) => {
+    if (!query || !query.trim()) return text;
+    
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, i) => 
+      regex.test(part) ? (
+        <mark key={i} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
+  const handleEdit = () => {
+    if (sender !== 'user') return;
+    setEditText(text);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (onEdit && editText.trim() && editText !== text) {
+      await onEdit(index, editText.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditText('');
+  };
+
   return (
     <div 
-      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3`} 
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3 highlight-match`} 
       style={{ animationDelay: `${index * 0.05}s` }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      data-message-index={index}
     >
       {sender === 'assistant' && (
         <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
@@ -259,10 +307,35 @@ const MessageItem = memo(({
             : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
         }`}
       >
-        <div className={`prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base ${sender === 'user' ? 'prose-invert' : ''}`}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
+        {isEditing && sender === 'user' ? (
+          <div className="w-full">
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="w-full p-3 border border-blue-300 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+              autoFocus
+            />
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={handleSaveEdit}
+                className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="px-3 py-1.5 bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-slate-500 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className={`prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base ${sender === 'user' ? 'prose-invert' : ''}`}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
               p: ({ children }) => <p className={`mb-3 last:mb-0 leading-7 text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
               strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
               em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
@@ -294,9 +367,10 @@ const MessageItem = memo(({
               ),
             }}
           >
-            {cleanText(text)}
+            {searchQuery ? highlightText(cleanText(text), searchQuery) : cleanText(text)}
           </ReactMarkdown>
         </div>
+        )}
         
         {/* Translation dropdown for AI messages and OCR results */}
         {sender === 'assistant' && text.trim() && onTranslate && (
@@ -345,8 +419,8 @@ const MessageItem = memo(({
         )}
 
         {/* Message Action Buttons - At Bottom, Visible on Hover */}
-        {isHovered && text.trim() && (
-          <div className={`mt-3 flex gap-2 justify-end ${sender === 'user' ? 'justify-start' : ''}`}>
+        {isHovered && text.trim() && !isEditing && (
+          <div className={`mt-3 flex gap-2 flex-wrap justify-end ${sender === 'user' ? 'justify-start' : ''}`}>
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
@@ -358,6 +432,57 @@ const MessageItem = memo(({
               </svg>
               Copy
             </button>
+            
+            {onBookmark && (
+              <button
+                onClick={() => onBookmark(index, !isBookmarked)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium backdrop-blur-sm rounded-lg shadow-sm border transition-all duration-200 ${
+                  isBookmarked
+                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300'
+                    : 'bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-yellow-300 dark:hover:border-yellow-600'
+                }`}
+                title={isBookmarked ? "Unbookmark message" : "Bookmark message"}
+                aria-label={isBookmarked ? "Unbookmark message" : "Bookmark message"}
+              >
+                <svg className="w-3.5 h-3.5" fill={isBookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                {isBookmarked ? 'Bookmarked' : 'Bookmark'}
+              </button>
+            )}
+            
+            {sender === 'user' && onEdit && (
+              <button
+                onClick={handleEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200"
+                title="Edit message"
+                aria-label="Edit message"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit
+              </button>
+            )}
+            
+            {onDelete && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this message?')) {
+                    onDelete(index);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
+                title="Delete message"
+                aria-label="Delete message"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+              </button>
+            )}
+            
             {sender === 'assistant' && onRegenerate && (
               <button
                 onClick={() => onRegenerate(index)}

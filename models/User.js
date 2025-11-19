@@ -48,6 +48,36 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     }
   },
+  statistics: {
+    totalStudyTime: {
+      type: Number,
+      default: 0 // in minutes
+    },
+    totalQuestions: {
+      type: Number,
+      default: 0
+    },
+    totalChats: {
+      type: Number,
+      default: 0
+    },
+    topicsCovered: [{
+      topic: String,
+      count: Number,
+      lastStudied: Date
+    }],
+    studyStreak: {
+      type: Number,
+      default: 0
+    },
+    lastStudyDate: Date,
+    weeklyStats: [{
+      week: String, // YYYY-WW format
+      studyTime: Number,
+      questions: Number,
+      chats: Number
+    }]
+  },
   profile: {
     cgpa: {
       type: Number,
@@ -91,8 +121,11 @@ const userSchema = new mongoose.Schema({
     },
     conversationSummaries: [{
       chatId: String,
+      title: String,
       summary: String,
       keyPoints: [String],
+      userMessage: String,
+      assistantSummary: String,
       timestamp: Date
     }],
     preferences: {

@@ -4,19 +4,30 @@ import { withCache } from '@/lib/cache';
 import { contextualLayer } from '@/lib/contextual-layer';
 import examKnowledge from '@/lib/exam-knowledge';
 import { findPresetAnswer } from '@/lib/presetAnswers';
-import axios from 'axios';
+import { callAIWithFallback } from '@/lib/ai-providers';
 import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import User from '@/models/User';
 import pyqService from '@/lib/pyqService';
 import { cleanAIResponse, validateAndCleanResponse } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
+import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
 
 const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
+
+function estimateTokenLength(messages) {
+  if (!Array.isArray(messages)) return 0;
+  const totalChars = messages.reduce((sum, msg) => {
+    if (!msg || !msg.content) return sum;
+    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+    return sum + content.length;
+  }, 0);
+  return Math.ceil(totalChars / 4);
+}
 
 function validateChatRequest(req) {
   const { message, model, systemPrompt, language } = req.body;
@@ -93,7 +104,13 @@ function formatAnalysisResponse(analysisData) {
   return response;
 }
 
-function calculateMaxTokens(message, queryType = 'general') {
+function calculateMaxTokens(message, queryType = 'general', useOpenAI = false) {
+  // For OpenAI: No token limit - let the model use its full context window (ChatGPT-like behavior)
+  if (useOpenAI) {
+    return undefined; // undefined means no limit - model uses full context window
+  }
+  
+  // For other providers: Use higher limits for long conversations
   const msgLen = message.length;
   const wordCount = message.split(/\s+/).length;
   
@@ -104,21 +121,20 @@ function calculateMaxTokens(message, queryType = 'general') {
   let base = 1500;
   
   if (isShort) {
-    base = 800;
+    base = 8000;
   } else if (isList) {
-    base = 2000;
+    base = 16000;
   } else if (isComplex) {
-    base = 4000;
+    base = 32000;
   } else {
-    base = Math.min(2500, Math.max(1200, msgLen * 3));
+    base = Math.min(40000, Math.max(8000, msgLen * 10));
   }
   
   if (queryType === 'pyq') {
-    base = Math.max(base, 3000);
+    base = Math.max(base, 40000);
   }
   
-  // Increased max tokens to 20000 to prevent cutoffs for complex/long responses
-  return Math.min(base, 20000);
+  return base; // Higher limits for other providers
 }
 
 function isResponseComplete(response) {
@@ -180,12 +196,6 @@ async function chatHandler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
 
-  if (!process.env.PERPLEXITY_API_KEY) {
-    console.error('PERPLEXITY_API_KEY is not configured');
-    return res.status(500).json({ 
-      error: 'AI service configuration error. Please contact support.',
-    });
-  }
   res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
@@ -210,6 +220,8 @@ async function chatHandler(req, res) {
   try {
     const { message, model, systemPrompt, language } = validateChatRequest(req);
     const { inputType, enableCaching = true, quickResponses = true, chatId } = req.body;
+    const providerPreference = (req.body?.provider || 'openai').toLowerCase();
+    const openAIModel = typeof req.body?.openAIModel === 'string' ? req.body.openAIModel.trim() : '';
 
     if (typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Invalid message format' });
@@ -239,7 +251,7 @@ async function chatHandler(req, res) {
       });
     }
 
-    const cacheKey = `${message.trim()}-${language || 'en'}-${model || 'sonar-pro'}`;
+    const cacheKey = `${message.trim()}-${language || 'en'}-${model || 'sonar-pro'}-${providerPreference}-${openAIModel || 'default'}`;
     const cached = responseCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return res.status(200).json({
@@ -249,13 +261,18 @@ async function chatHandler(req, res) {
       });
     }
 
-    const presetAnswer = findPresetAnswer(message);
-    if (presetAnswer) {
-      return res.status(200).json({
-        response: presetAnswer,
-        source: 'preset',
-        timestamp: new Date().toISOString()
-      });
+    const allowPresetAnswers = process.env.ENABLE_PRESET_ANSWERS !== 'false';
+    if (allowPresetAnswers) {
+      const presetAnswer = findPresetAnswer(message);
+      if (presetAnswer) {
+        const cleanedPreset = cleanAIResponse(presetAnswer);
+        const finalPreset = validateAndCleanResponse(cleanedPreset, 30) || cleanedPreset || presetAnswer;
+        return res.status(200).json({
+          response: finalPreset,
+          source: 'preset',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     if (quickResponses) {
@@ -267,6 +284,36 @@ async function chatHandler(req, res) {
         });
       }
     }
+
+    const userProfilePromise = (async () => {
+      try {
+        await connectToDatabase();
+        const user = await User.findOne({ email: session.user.email }).lean();
+        return user?.profile || null;
+      } catch (err) {
+        console.warn('Failed to load user profile:', err.message);
+        return null;
+      }
+    })();
+
+    const extractedInfo = extractUserInfo(message);
+    let userProfile = await userProfilePromise;
+    if (Object.keys(extractedInfo).length > 0) {
+      try {
+        await connectToDatabase();
+        const userDoc = await User.findOne({ email: session.user.email });
+        if (userDoc) {
+          const updatedProfile = updateUserProfile(userDoc, extractedInfo);
+          userDoc.profile = updatedProfile;
+          await userDoc.save();
+          userProfile = updatedProfile;
+        }
+      } catch (err) {
+        console.warn('Failed to update user profile:', err.message);
+      }
+    }
+
+    const saveWorthyInfo = detectSaveWorthyInfo(message);
 
     let conversationHistory = [];
     if (chatId) {
@@ -304,53 +351,70 @@ async function chatHandler(req, res) {
     const previousPyqContext = cachedPyqContext || historyPyqContext;
     const isPyqFollowUp = previousPyqContext && isPyqFollowUpMessage(message);
 
-    let finalSystemPrompt = systemPrompt || `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. 
+    let finalSystemPrompt = systemPrompt || `You are Indicore, your intelligent exam preparation companion—think of me as ChatGPT, but specialized for UPSC, PCS, and SSC exam preparation. I'm here to help you succeed, whether you need explanations, practice questions, answer writing guidance, or just someone to discuss exam topics with.
 
-CRITICAL REQUIREMENTS - RESPONSE COMPLETENESS:
-1. ALWAYS write complete, comprehensive answers. Never leave sentences incomplete or cut off mid-thought.
-2. Write in full, well-formed sentences. Each sentence must have a subject, verb, and complete meaning.
-3. Provide thorough, detailed responses that fully address the question asked.
-4. Use proper paragraph structure with clear topic sentences and supporting details.
-5. Ensure your response has a logical flow: introduction, main content, and conclusion where appropriate.
-6. Use bullet points only when listing multiple items. Otherwise, write in paragraph form.
-7. Avoid markdown headers (###) or excessive bold text. Keep formatting simple and natural.
-8. Never use placeholders, incomplete phrases, or cut-off words.
-9. If discussing historical topics, provide complete information including time periods, locations, characteristics, and significance.
-10. Always finish your response with a complete sentence. Never end with incomplete thoughts.
-11. NEVER end responses with incomplete phrases like "and", "or", "but", "the", "a", "to", "from", "with", "for", "I can", "Let me", "Please note", etc.
-12. Every sentence must be grammatically complete and meaningful. Do not leave any sentence hanging or incomplete.
-13. If you need to stop, ensure you complete the current thought before ending. Never cut off mid-sentence.
+MY PERSONALITY & APPROACH:
+- I'm conversational, friendly, and genuinely interested in helping you succeed. Think of me as a knowledgeable friend who's been through these exams and wants to share everything I know.
+- I adapt to your style—if you're casual, I'll be casual. If you're formal, I'll match that. If you're stressed, I'll be supportive and encouraging.
+- I remember our conversations and build on them naturally. I'll reference things we've discussed before without you having to repeat yourself.
+- I ask clarifying questions when needed, but I also make intelligent assumptions based on context. I don't over-question—I help.
+- I'm proactive. If I think something might be helpful, I'll mention it. If I see a connection to another topic, I'll point it out.
+- I'm honest about what I know and don't know. If I'm uncertain, I'll say so. If something is beyond my knowledge, I'll admit it.
 
-ANSWER FRAMEWORK INTEGRATION:
-- ALWAYS follow the provided answer framework structure (Introduction → Main Body → Conclusion)
-- When an answer framework is provided, strictly adhere to its structure and components
-- When discussing topics that have appeared in previous year questions, reference PYQ patterns to show exam relevance
-- Use PYQ context to show how similar questions have been framed in actual exams
-- Balance theoretical knowledge with practical exam-oriented insights
+HOW I RESPOND:
+- I write naturally, like I'm talking to you. No robotic language, no excessive formality unless the topic demands it.
+- I use examples, analogies, and real-world connections to make things stick. I don't just list facts—I help you understand.
+- I structure my responses clearly but naturally. I use paragraphs, bullet points when helpful, and I make sure everything flows logically.
+- I'm comprehensive but not overwhelming. I give you what you need, and if you want more depth, just ask.
+- I always complete my thoughts. Every sentence is finished, every idea is fully expressed. No cut-offs, no incomplete phrases.
 
-ACCURACY AND FACTUAL REQUIREMENTS:
-- ONLY provide information you are certain about. If you are unsure about a fact, date, or detail, clearly state that you are uncertain.
-- Do NOT make up facts, dates, names, or statistics. If you don't know something, say so rather than guessing.
-- When discussing exam-related topics, be precise and accurate. Do not provide incorrect information.
-- If asked about specific exam questions, papers, or dates, only provide information if you are confident it is correct.
-- Never fabricate or hallucinate information. It is better to admit uncertainty than to provide incorrect information.
-- When discussing current affairs, clearly distinguish between confirmed facts and general knowledge.
-- For PYQ (Previous Year Questions), only reference actual questions from the database. Do not create or invent questions.
+EXAM PREPARATION FOCUS:
+- Everything I share connects back to your exam prep. But I do it naturally—not like I'm forcing it, but because it genuinely matters for your success.
+- I know the exam patterns: what UPSC asks, how PCS frames questions, what SSC focuses on. I'll help you see these patterns.
+- I understand answer writing: how to structure Mains answers, what examiners look for, common pitfalls to avoid.
+- I know the syllabus inside out: GS-1, GS-2, GS-3, GS-4, Prelims patterns, Essay requirements. I'll help you see how topics connect.
+- I'm aware of PYQ trends: what's been asked before, how questions evolve, what might come next.
+- I stay current: I know recent developments, new schemes, policy changes, and how they relate to your preparation.
 
-PRESENTATION & FORMATTING GUIDELINES:
-- Use Markdown naturally: short paragraphs separated by a blank line, clear section headers (bold or "## Heading"), and bullet/numbered lists for steps or points.
-- Never dump everything into one block of text. Each idea or subheading must have its own paragraph or list entry.
-- When giving lists, prefer numbered lists for sequences/steps and bullet lists for unordered points.
-- Highlight key terms with bold (e.g., **Keyword:** explanation) to improve scanability, but avoid over-formatting.
-- Ensure tables or structured data are formatted cleanly with Markdown or plain text columns.
-- Always end with a concise summary or actionable next steps when relevant.
+WHAT I DO BEST:
+- Explain complex topics simply: I break down difficult concepts into understandable pieces.
+- Connect the dots: I show how different topics relate, how history connects to polity, how geography links to environment.
+- Provide context: I don't just give facts—I explain why they matter, how they fit into the bigger picture.
+- Offer practical advice: Study strategies, revision tips, answer writing techniques, time management.
+- Answer follow-ups naturally: If you ask "what about X?" or "can you explain Y?", I understand the context and respond accordingly.
+- Handle ambiguity: If your question is unclear, I'll interpret it intelligently and answer what I think you're asking, while checking if I got it right.
 
-Write naturally and conversationally, but ensure every response is complete, accurate, and follows the structured framework. Integrate PYQ context seamlessly to enhance the answer's value for exam preparation. Do not include citations or reference numbers.`;
+CONVERSATION FLOW:
+- I maintain context across the conversation. If you say "tell me more about that" or "what about the other one?", I know what you're referring to.
+- I build on previous messages. If we discussed something earlier, I'll reference it naturally.
+- I anticipate needs. If you ask about a topic, I might mention related areas you should also know about.
+- I'm encouraging. Exam prep is hard, and I acknowledge that. I celebrate your progress and help you through challenges.
+
+ACCURACY & HONESTY - CRITICAL REQUIREMENTS:
+- I ONLY provide verifiable, factual information. I NEVER make up facts, dates, names, statistics, or any information.
+- If I'm uncertain about something, I clearly state: "I'm not certain about this, but..." or "This information may need verification..."
+- When information is outside my direct knowledge or scope, I provide sources or suggest where to verify: "According to [source]" or "You can verify this in [official source/document]"
+- For current affairs, I distinguish between confirmed facts and general knowledge. I mention dates, official sources, and government documents when available.
+- For PYQs, I only reference actual questions from the database—no invented questions.
+- I tag subjects properly: When discussing topics, I identify the subject area (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and mention relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+
+EXAM RELEVANCE - MANDATORY:
+- EVERY response must be highly exam-relevant. Connect every explanation to UPSC/PCS/SSC exam requirements.
+- Tag subjects clearly: Identify which subject area (Polity, History, Geography, Economics, Science, Environment, etc.) and which GS paper it relates to.
+- Provide exam context: Mention how topics appear in exams, PYQ patterns, answer writing frameworks.
+- Include practical exam insights: How examiners frame questions, common mistakes, scoring strategies.
+
+Write like you're having a natural conversation with a knowledgeable friend who happens to be an exam prep expert. Be helpful, be real, be engaging. Make every interaction feel valuable and personal. Always prioritize exam relevance and factual accuracy.`;
 
     // Add user profile context to system prompt
     const profileContext = userProfile ? formatProfileContext(userProfile) : '';
     if (profileContext) {
       finalSystemPrompt += `\n\nUSER CONTEXT (Remember this across all conversations):\n${profileContext}\n\nIMPORTANT: Use this user context to provide personalized responses. If the user asks about "my exam" or "prep me for exam", refer to their specific exam details from the context above. Ask follow-up questions if needed to clarify which exam they're referring to (e.g., "Are you referring to your ${userProfile.targetExam || 'exam'}?" or reference specific facts from their profile). Always remember user-specific information like exam names, subjects, dates, and preferences mentioned in previous conversations.`;
+    }
+
+    const memoryPrompt = buildConversationMemoryPrompt(userProfile?.conversationSummaries);
+    if (memoryPrompt) {
+      finalSystemPrompt += `\n\nRECENT CONVERSATIONS WITH THIS USER:\n${memoryPrompt}\nUse this continuity to avoid repeating earlier explanations unless the user asks again.`;
     }
 
     // Add instruction for memory saving prompts
@@ -447,7 +511,14 @@ Write naturally and conversationally, but ensure every response is complete, acc
       };
 
       const langName = languageNames[language] || 'English';
-      finalSystemPrompt += ` Your response MUST be entirely in ${langName}. Do not use any other language. Ensure perfect grammar and natural flow in ${langName}.`;
+      finalSystemPrompt += `\n\nCRITICAL LANGUAGE REQUIREMENT:
+- Your ENTIRE response MUST be written EXCLUSIVELY in ${langName} (${language}).
+- Do NOT mix languages. Do NOT use English words unless they are technical terms that have no ${langName} equivalent.
+- Use proper ${langName} script/characters. For Indic languages, use the native script (Devanagari for Hindi/Marathi, Tamil script for Tamil, etc.).
+- Ensure natural, fluent ${langName} that sounds native and professional.
+- Maintain exam-appropriate formality and clarity in ${langName}.
+- If you must use an English technical term, provide the ${langName} equivalent immediately after in parentheses.
+- Your response should be completely understandable to a native ${langName} speaker preparing for competitive exams.`;
     }
 
     const needsContext = !/(pyq|previous year)/i.test(message);
@@ -614,20 +685,25 @@ Requirements:
     }
 
     // Truncate system prompt if too long (Perplexity has limits)
-    const maxSystemLength = 2000;
+    const maxSystemLength = 1400;
     finalSystemPrompt = enhancedSystemPrompt;
     if (finalSystemPrompt.length > maxSystemLength) {
       finalSystemPrompt = finalSystemPrompt.substring(0, maxSystemLength - 100) + '...';
     }
 
     const optimalModel = contextOptimizer.selectOptimalModel(message, !!hasContext);
-    // Increased token limits to prevent mid-response cutoffs
-    // Allow up to 20000 tokens for complex queries, minimum 2000 for any response
-    const calculatedTokens = calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general');
-    const maxTokens = Math.max(
-      Math.min(calculatedTokens, 20000), // Cap at 20000, but use calculated value if lower
-      pyqPrompt ? 4000 : 2000 // Minimum tokens: 4000 for PYQ, 2000 for general
-    );
+    
+    const estimatedPromptTokens = estimateTokenLength(messagesForAPI);
+    const requiresLargeContextProvider = estimatedPromptTokens >= 16000;
+    
+    const openAIKey = process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY;
+    const useOpenAI = (requiresLargeContextProvider || providerPreference === 'openai') && !!openAIKey;
+    
+    // Calculate token budget: undefined for OpenAI (unlimited), higher limits for others
+    const calculatedTokens = calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general', useOpenAI);
+    const maxTokens = useOpenAI 
+      ? undefined // OpenAI: no limit - uses full context window
+      : (calculatedTokens || 40000); // Other providers: use calculated or default high limit
 
     // Ensure proper message array structure
     const messagesForAPI = [];
@@ -667,35 +743,54 @@ Requirements:
       });
     }
 
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: optimalModel === 'sonar' ? 'sonar' : (model || 'sonar-pro'),
-      messages: messagesForAPI,
-      max_tokens: maxTokens,
-      temperature: pyqPrompt ? 0.2 : 0.7,
-      top_p: 0.9,
-      stream: false
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      timeout: 520000 // Allow up to ~520 seconds for very long responses
-    });
+    const conversationMessages = messagesForAPI.filter(msg => msg.role !== 'system');
 
-    if (response && response.data && response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
-      const rawResponse = response.data.choices[0].message.content;
-      
-      const cleanedResponse = cleanAIResponse(rawResponse);
-      const validResponse = validateAndCleanResponse(cleanedResponse, 30);
-      
-      if (!validResponse) {
-        return res.status(500).json({
-          error: 'Unable to generate a valid response. Please try rephrasing your question.',
-          code: 'INVALID_RESPONSE',
-          timestamp: new Date().toISOString()
-        });
-      }
+    const effectiveProvider = useOpenAI ? 'openai' : providerPreference;
+
+    const providerOptions = {
+      preferredProvider: effectiveProvider,
+      model: optimalModel === 'sonar' ? 'sonar' : (model || 'sonar-pro'),
+      useLongContextModel: !useOpenAI && requiresLargeContextProvider,
+      openAIModel: openAIModel || undefined
+    };
+
+    if (requiresLargeContextProvider && !useOpenAI) {
+      providerOptions.excludeProviders = ['perplexity'];
+    } else if (useOpenAI) {
+      providerOptions.excludeProviders = ['perplexity', 'claude'];
+    }
+
+    const aiResult = await callAIWithFallback(
+      conversationMessages,
+      finalSystemPrompt,
+      maxTokens,
+      pyqPrompt ? 0.2 : 0.7,
+      providerOptions
+    );
+
+    const rawResponse = aiResult?.content;
+    
+    if (!rawResponse || rawResponse.trim().length === 0) {
+      throw new Error('Empty response from AI provider');
+    }
+    
+    const cleanedResponse = cleanAIResponse(rawResponse);
+    const validResponse = validateAndCleanResponse(cleanedResponse, 30);
+    
+    if (!validResponse) {
+      return res.status(500).json({
+        error: 'Unable to generate a valid response. Please try rephrasing your question.',
+        code: 'INVALID_RESPONSE',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    await saveConversationMemory({
+      userEmail: session.user.email,
+      chatId: chatId ? String(chatId) : undefined,
+      userMessage: message,
+      assistantResponse: validResponse
+    });
 
       // If user confirmed saving, save the information to profile
       // Check conversation history for previous save prompt
@@ -757,14 +852,11 @@ Requirements:
         }
       }
       
-      return res.status(200).json({ 
-        response: validResponse,
-        savePrompt: saveWorthyInfo ? saveWorthyInfo.description : null,
-        saveWorthyInfo: saveWorthyInfo ? { type: saveWorthyInfo.type, value: saveWorthyInfo.value } : null
-      });
-    } else {
-      throw new Error('Invalid response format from Perplexity API');
-    }
+    return res.status(200).json({ 
+      response: validResponse,
+      savePrompt: saveWorthyInfo ? saveWorthyInfo.description : null,
+      saveWorthyInfo: saveWorthyInfo ? { type: saveWorthyInfo.type, value: saveWorthyInfo.value } : null
+    });
 
   } catch (error) {
     console.error('Chat API Error:', error);
@@ -777,28 +869,18 @@ Requirements:
       });
     }
 
-    if (error.response) {
-      const status = error.response.status;
-      let errorMessage = 'An error occurred while processing your request.';
-      let errorCode = 'API_ERROR';
-
-      if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
-        errorCode = 'API_CREDITS_EXHAUSTED';
-      } else if (status === 429) {
-        errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
-        errorCode = 'RATE_LIMIT_EXCEEDED';
-      } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
-        errorCode = 'API_CREDITS_EXHAUSTED';
-      } else if (status === 403) {
-        errorMessage = 'Access denied. Please verify your API key permissions.';
-        errorCode = 'ACCESS_DENIED';
-      }
-
-      return res.status(status).json({ 
-        error: errorMessage,
-        code: errorCode,
+    const normalizedMessage = error.message?.toLowerCase() || '';
+    if (normalizedMessage.includes('rate limit')) {
+      return res.status(429).json({
+        error: 'Rate limit exceeded. Please wait a moment and try again.',
+        code: 'RATE_LIMIT_EXCEEDED',
+        timestamp: new Date().toISOString()
+      });
+    }
+    if (normalizedMessage.includes('api key') || normalizedMessage.includes('unauthorized')) {
+      return res.status(401).json({
+        error: 'AI provider rejected the request. Please verify API keys and quotas.',
+        code: 'API_CREDITS_EXHAUSTED',
         timestamp: new Date().toISOString()
       });
     }

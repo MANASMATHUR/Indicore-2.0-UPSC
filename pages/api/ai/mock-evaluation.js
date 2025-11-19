@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
+import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -87,14 +88,11 @@ Give a detailed evaluation with:
 
 Be encouraging but honest, specific but constructive. Focus on helping the student improve their performance in ${examName} exams.`;
 
-    // Call Perplexity/Sonar API for evaluation
-    const response = await axios.post('https://api.perplexity.ai/chat/completions', {
-      model: 'sonar-pro',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `Please evaluate this ${questionTypeName} answer for ${examName} in the subject "${subject}" written in ${langName}:
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { 
+        role: 'user', 
+        content: `Please evaluate this ${questionTypeName} answer for ${examName} in the subject "${subject}" written in ${langName}:
 
 **Answer Text:**
 ${answerText}
@@ -108,27 +106,34 @@ ${wordLimit ? `- Word Limit: ${wordLimit} words` : ''}
 - Current Word Count: ${answerText.split(/\s+/).filter(word => word.length > 0).length} words
 
 Please provide a detailed evaluation following the format specified in your system prompt.`
-        }
-      ],
-      max_tokens: 4000,
-      temperature: 0.2, // Lower temperature for more consistent evaluation
-      top_p: 0.9,
-      stream: false,
-      presence_penalty: 0,
-      frequency_penalty: 1
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
       }
-    });
+    ];
 
-    if (response.data.choices && response.data.choices[0] && response.data.choices[0].message) {
-      const evaluation = response.data.choices[0].message.content;
+    let evaluation = '';
+
+    try {
+      // Use OpenAI for mock evaluation
+      const openAIKey = getOpenAIKey();
+      if (!openAIKey) {
+        throw new Error('OpenAI API key not configured');
+      }
       
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+      evaluation = await callOpenAIAPI(
+        messages,
+        openAIModel,
+        undefined, // No token limit for OpenAI
+        0.2 // Lower temperature for more consistent evaluation
+      );
+      evaluation = evaluation?.trim() || '';
+    } catch (error) {
+      console.error('OpenAI API error for mock evaluation:', error.message);
+      throw error;
+    }
+
+    if (evaluation && evaluation.trim().length > 0) {
       return res.status(200).json({ 
-        evaluation,
+        evaluation: evaluation.trim(),
         examType,
         language,
         questionType,
@@ -136,9 +141,9 @@ Please provide a detailed evaluation following the format specified in your syst
         wordLimit,
         evaluatedAt: new Date().toISOString()
       });
-    } else {
-      throw new Error('Invalid response format from Perplexity API');
     }
+
+    throw new Error('AI provider returned an empty response');
 
   } catch (error) {
 
@@ -147,11 +152,11 @@ Please provide a detailed evaluation following the format specified in your syst
       let errorMessage = 'An error occurred while evaluating your answer.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }

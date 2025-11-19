@@ -15,6 +15,7 @@ const Header = ({
   onVocabularyBuilder,
   onMockEvaluation,
   onDownloadPDF,
+  onSearchClick,
   currentTheme,
   onThemeChange
 }) => {
@@ -118,6 +119,23 @@ const Header = ({
       </div>
 
       <div className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 flex gap-1 sm:gap-2">
+        {/* Search Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            if (onSearchClick) {
+              onSearchClick();
+            }
+          }}
+          title="Search in chat (Ctrl+F or Cmd+F)"
+          className="text-red-600 hover:text-red-800 hover:bg-red-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
+        >
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </Button>
+
         {/* Consolidated Tools Menu */}
         <div className="relative">
             <Button

@@ -17,12 +17,33 @@ export default async function handler(req, res) {
     await connectToDatabase();
 
     if (req.method === 'GET') {
-      const chats = await Chat.find({ 
+      const { archived, folder, tag } = req.query;
+      
+      const query = { 
         userEmail: session.user.email,
         isActive: true 
-      })
-      .sort({ lastMessageAt: -1 })
-      .select('_id name messages settings lastMessageAt createdAt pinned')
+      };
+      
+      // Filter by archived status (default: show non-archived)
+      if (archived === 'true') {
+        query.archived = true;
+      } else if (archived === 'false' || archived === undefined) {
+        query.archived = { $ne: true };
+      }
+      
+      // Filter by folder
+      if (folder) {
+        query.folder = folder;
+      }
+      
+      // Filter by tag
+      if (tag) {
+        query.tags = tag;
+      }
+      
+      const chats = await Chat.find(query)
+      .sort({ pinned: -1, lastMessageAt: -1 })
+      .select('_id name messages settings lastMessageAt createdAt pinned folder tags archived')
       .limit(50);
 
       return res.status(200).json({ chats });

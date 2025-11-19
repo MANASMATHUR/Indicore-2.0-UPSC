@@ -4,11 +4,44 @@ import { useState, useEffect, memo, useCallback } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
+const MODEL_PRESETS = [
+  // OpenAI (general + reasoning + budget tiers)
+  { id: 'openai:gpt-5.1', label: 'OpenAI • GPT-5.1 — flagship reasoning', provider: 'openai', openAIModel: 'gpt-5.1' },
+  { id: 'openai:gpt-5', label: 'OpenAI • GPT-5 — next-gen balanced', provider: 'openai', openAIModel: 'gpt-5' },
+  { id: 'openai:gpt-5-mini', label: 'OpenAI • GPT-5 Mini — affordable high quality', provider: 'openai', openAIModel: 'gpt-5-mini' },
+  { id: 'openai:gpt-5-nano', label: 'OpenAI • GPT-5 Nano — ultra low cost', provider: 'openai', openAIModel: 'gpt-5-nano' },
+  { id: 'openai:gpt-5.1-chat-latest', label: 'OpenAI • GPT-5.1 Chat Latest — chat tuned', provider: 'openai', openAIModel: 'gpt-5.1-chat-latest' },
+  { id: 'openai:gpt-4.1', label: 'OpenAI • GPT-4.1 — deep reasoning (8k context)', provider: 'openai', openAIModel: 'gpt-4.1' },
+  { id: 'openai:gpt-4.1-mini', label: 'OpenAI • GPT-4.1 Mini — faster reasoning', provider: 'openai', openAIModel: 'gpt-4.1-mini' },
+  { id: 'openai:gpt-4.1-nano', label: 'OpenAI • GPT-4.1 Nano — ultra budget reasoning', provider: 'openai', openAIModel: 'gpt-4.1-nano' },
+  { id: 'openai:gpt-4o', label: 'OpenAI • GPT-4o — balanced flagship', provider: 'openai', openAIModel: 'gpt-4o' },
+  { id: 'openai:gpt-4o-2024-05-13', label: 'OpenAI • GPT-4o (May 2024) — legacy stable', provider: 'openai', openAIModel: 'gpt-4o-2024-05-13' },
+  { id: 'openai:gpt-4o-mini', label: 'OpenAI • GPT-4o Mini — fastest general model', provider: 'openai', openAIModel: 'gpt-4o-mini' },
+  { id: 'openai:gpt-4o-mini-2024-07-18', label: 'OpenAI • GPT-4o Mini (Jul 2024) — tuned economy', provider: 'openai', openAIModel: 'gpt-4o-mini-2024-07-18' },
+  { id: 'openai:o4-mini', label: 'OpenAI • o4 Mini — structured reasoning', provider: 'openai', openAIModel: 'o4-mini' },
+  { id: 'openai:o4-mini-deep-research', label: 'OpenAI • o4 Mini Deep Research — analytical deep-dives', provider: 'openai', openAIModel: 'o4-mini-deep-research' },
+  { id: 'openai:o3', label: 'OpenAI • o3 — chain-of-thought heavy', provider: 'openai', openAIModel: 'o3' },
+  { id: 'openai:o3-pro', label: 'OpenAI • o3 Pro — premium reasoning', provider: 'openai', openAIModel: 'o3-pro' },
+  { id: 'openai:o3-mini', label: 'OpenAI • o3 Mini — budget reasoning', provider: 'openai', openAIModel: 'o3-mini' },
+  { id: 'openai:o1', label: 'OpenAI • o1 — guided reasoning', provider: 'openai', openAIModel: 'o1' },
+  { id: 'openai:o1-mini', label: 'OpenAI • o1 Mini — affordable guided reasoning', provider: 'openai', openAIModel: 'o1-mini' },
+  { id: 'openai:o1-pro', label: 'OpenAI • o1 Pro — enterprise reasoning', provider: 'openai', openAIModel: 'o1-pro' },
+  { id: 'openai:o1-32k', label: 'OpenAI • o1 32K — long context reasoning', provider: 'openai', openAIModel: 'o1-32k' },
+  { id: 'claude:sonar-pro', label: 'Claude • 3.5 Sonnet — rich balanced answers', provider: 'claude', model: 'sonar-pro' },
+  { id: 'claude:sonar', label: 'Claude • 3 Haiku — ultra-fast', provider: 'claude', model: 'sonar' },
+  { id: 'claude:sonar-reasoning', label: 'Claude • 3 Sonnet — reasoning mode', provider: 'claude', model: 'sonar-reasoning' },
+  { id: 'claude:sonar-reasoning-pro', label: 'Claude • 3 Opus — deep reasoning', provider: 'claude', model: 'sonar-reasoning-pro' },
+  { id: 'claude:sonar-deep-research', label: 'Claude • 3.5 Sonnet — deep research', provider: 'claude', model: 'sonar-deep-research' },
+  { id: 'perplexity:sonar-pro', label: 'Perplexity • Sonar Pro — research style', provider: 'perplexity', model: 'sonar-pro' }
+];
+
 const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => {
 
   const defaultLocalSettings = {
     language: 'en',
     model: 'sonar-pro',
+    provider: 'openai',
+    openAIModel: 'gpt-4o-mini',
     useStreaming: true,
     enableCaching: true,
     quickResponses: true,
@@ -20,6 +53,18 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
   };
   
   const [localSettings, setLocalSettings] = useState(defaultLocalSettings);
+
+  const resolvePresetId = (settingsObj) => {
+    if (!settingsObj) return MODEL_PRESETS[0].id;
+    if ((settingsObj.provider || 'openai') === 'openai') {
+      const match = MODEL_PRESETS.find(p => p.provider === 'openai' && p.openAIModel === (settingsObj.openAIModel || 'gpt-4o-mini'));
+      return match?.id || MODEL_PRESETS[0].id;
+    }
+    const match = MODEL_PRESETS.find(p => p.provider === settingsObj.provider && p.model === settingsObj.model);
+    return match?.id || MODEL_PRESETS[0].id;
+  };
+
+  const selectedPresetId = resolvePresetId(localSettings);
 
   useEffect(() => {
     if (isOpen && settings) {
@@ -98,16 +143,33 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                     AI Model
                   </label>
                   <select
-                    value={localSettings?.model || 'sonar-pro'}
-                    onChange={(e) => handleChange('model', e.target.value)}
+                    value={selectedPresetId}
+                    onChange={(e) => {
+                      const preset = MODEL_PRESETS.find(p => p.id === e.target.value) || MODEL_PRESETS[0];
+                      handleChange('provider', preset.provider);
+                      if (preset.provider === 'openai') {
+                        handleChange('openAIModel', preset.openAIModel);
+                      } else {
+                        handleChange('model', preset.model || 'sonar-pro');
+                      }
+                      setLocalSettings(prev => ({
+                        ...prev,
+                        provider: preset.provider,
+                        openAIModel: preset.openAIModel || prev.openAIModel,
+                        model: preset.model || prev.model
+                      }));
+                    }}
                     className="w-full p-3 sm:p-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 touch-manipulation"
                   >
-                    <option value="sonar-pro">Sonar Pro (Recommended - Best for complex queries)</option>
-                    <option value="sonar">Sonar (Fast - Best for quick responses)</option>
-                    <option value="sonar-reasoning">Sonar Reasoning (Analytical tasks)</option>
-                    <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Advanced reasoning)</option>
-                    <option value="sonar-deep-research">Sonar Deep Research (Comprehensive reports)</option>
+                    {MODEL_PRESETS.map(option => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Choose the exact model you want to use—this will automatically select the right provider under the hood.
+                  </p>
                 </div>
               </div>
             </div>

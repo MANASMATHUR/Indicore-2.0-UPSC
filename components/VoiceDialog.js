@@ -13,15 +13,29 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   const [recognitionError, setRecognitionError] = useState('');
   const recognitionRef = useRef(null);
   const animationRef = useRef(null);
+  const shouldKeepListeningRef = useRef(false);
   
   const voiceLoading = useLoadingState();
   const processingLoading = useLoadingState();
 
   useEffect(() => {
     if (isOpen) {
+      // Check browser support
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       
-      if (SpeechRecognition) {
+      if (!SpeechRecognition) {
+        setRecognitionError('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+        return;
+      }
+
+      // Check if microphone is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setRecognitionError('Microphone access not available. Please use a modern browser with microphone support.');
+        return;
+      }
+
+      // Initialize recognition
+      try {
         recognitionRef.current = new SpeechRecognition();
         const recognition = recognitionRef.current;
         
@@ -29,20 +43,12 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
         recognition.interimResults = true;
         recognition.lang = getLanguageCode(language);
         recognition.maxAlternatives = 3;
-        recognition.serviceURI = '';
-        
-        let recognitionTimeout;
         
         recognition.onstart = () => {
           setIsListening(true);
           setRecognitionError('');
           startAudioLevelAnimation();
-          
-          recognitionTimeout = setTimeout(() => {
-            if (recognition && recognition.state !== 'stopped') {
-              recognition.stop();
-            }
-          }, 30000);
+          shouldKeepListeningRef.current = true;
         };
 
         recognition.onresult = (event) => {
@@ -54,76 +60,108 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
             const transcriptPart = result[0].transcript;
             
             if (result.isFinal) {
-              finalTranscript += transcriptPart;
+              finalTranscript += transcriptPart + ' ';
             } else {
               interimTranscript += transcriptPart;
             }
           }
 
           setTranscript(prev => {
-            const cleanPrev = prev.replace(/\s*\[interim\].*$/g, '');
-            return cleanPrev + finalTranscript + (interimTranscript ? ` [interim]${interimTranscript}` : '');
+            const cleanPrev = prev.replace(/\s*\[interim\].*$/g, '').trim();
+            const newFinal = cleanPrev + (cleanPrev ? ' ' : '') + finalTranscript.trim();
+            return newFinal + (interimTranscript ? ` [interim]${interimTranscript}` : '');
           });
         };
 
         recognition.onerror = (event) => {
           setIsListening(false);
           stopAudioLevelAnimation();
-          clearTimeout(recognitionTimeout);
+          
+          // Stop media stream if it exists
+          if (recognition._mediaStream) {
+            recognition._mediaStream.getTracks().forEach(track => track.stop());
+            recognition._mediaStream = null;
+          }
           
           switch (event.error) {
             case 'no-speech':
               setRecognitionError('No speech detected. Please try speaking again.');
               break;
             case 'audio-capture':
-              setRecognitionError('Microphone not accessible. Please check permissions.');
+              setRecognitionError('Microphone not accessible. Please check your microphone permissions and ensure it\'s not being used by another application.');
               break;
             case 'not-allowed':
-              setRecognitionError('Microphone access denied. Please allow microphone access.');
+              setRecognitionError('Microphone access denied. Please allow microphone access in your browser settings and try again.');
               break;
             case 'network':
-              setRecognitionError('Network error. Please check your connection.');
+              setRecognitionError('Network error. Please check your internet connection and try again.');
               break;
             case 'aborted':
-              setRecognitionError('Speech recognition was aborted.');
+              // Don't show error for manual aborts
               break;
             case 'language-not-supported':
-              setRecognitionError('Language not supported for speech recognition.');
+              setRecognitionError(`Language "${getLanguageCode(language)}" not supported for speech recognition. Please try a different language.`);
               break;
             default:
-              setRecognitionError(`Speech recognition error: ${event.error}`);
+              setRecognitionError(`Speech recognition error: ${event.error}. Please try again.`);
           }
         };
 
         recognition.onend = () => {
-          setIsListening(false);
-          stopAudioLevelAnimation();
-          clearTimeout(recognitionTimeout);
+          // If user wants to keep listening, restart automatically
+          // (Web Speech API sometimes stops after silence)
+          if (shouldKeepListeningRef.current && recognition.state === 'stopped') {
+            try {
+              // Small delay before restarting to avoid rapid restarts
+              setTimeout(() => {
+                if (shouldKeepListeningRef.current && recognition.state === 'stopped') {
+                  recognition.start();
+                }
+              }, 100);
+            } catch (error) {
+              // If restart fails, stop listening
+              setIsListening(false);
+              stopAudioLevelAnimation();
+              shouldKeepListeningRef.current = false;
+            }
+          } else {
+            setIsListening(false);
+            stopAudioLevelAnimation();
+            
+            // Stop media stream if it exists
+            if (recognition._mediaStream) {
+              recognition._mediaStream.getTracks().forEach(track => track.stop());
+              recognition._mediaStream = null;
+            }
+          }
         };
 
         recognition.onnomatch = () => {
-          // No speech was recognized
+          // No speech was recognized - this is normal, don't show error
         };
 
-        recognition.onspeechstart = () => {
-          // Speech has been detected
-        };
-
-        recognition.onspeechend = () => {
-          // Speech has stopped being detected
-        };
-
-        recognition.onsoundstart = () => {
-          // Some sound has been detected
-        };
-
-        recognition.onsoundend = () => {
-          // Some sound has stopped being detected
-        };
-
-      } else {
-        setRecognitionError('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+      } catch (error) {
+        console.error('Error initializing speech recognition:', error);
+        setRecognitionError('Failed to initialize speech recognition. Please refresh the page and try again.');
       }
+    } else {
+      // Cleanup when dialog closes
+      if (recognitionRef.current) {
+        try {
+          if (recognitionRef.current.state !== 'stopped') {
+            recognitionRef.current.stop();
+          }
+          recognitionRef.current.abort();
+        } catch (error) {
+          console.error('Error cleaning up recognition:', error);
+        }
+        recognitionRef.current = null;
+      }
+      setIsListening(false);
+      stopAudioLevelAnimation();
+      setTranscript('');
+      setRecognitionError('');
+      shouldKeepListeningRef.current = false;
     }
   }, [isOpen, language]);
 
@@ -162,34 +200,75 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   };
 
   const startListening = async () => {
-    if (recognitionRef.current) {
-      try {
-        setTranscript('');
-        setRecognitionError('');
-        
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-          } catch (error) {
-            setRecognitionError('Microphone access denied. Please allow microphone access and try again.');
-            return;
-          }
-        }
-        
-        recognitionRef.current.start();
-      } catch (error) {
-        console.error('Error starting speech recognition:', error);
-        setRecognitionError('Failed to start speech recognition. Please try again.');
+    if (!recognitionRef.current) {
+      setRecognitionError('Speech recognition not initialized. Please close and reopen the dialog.');
+      return;
+    }
+
+    try {
+      setTranscript('');
+      setRecognitionError('');
+      
+      // Check browser support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setRecognitionError('Microphone access not available. Please use a modern browser.');
+        return;
       }
+
+      // Request microphone permission first
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        
+        // Store stream reference for cleanup
+        if (recognitionRef.current) {
+          recognitionRef.current._mediaStream = stream;
+        }
+      } catch (error) {
+        console.error('Microphone permission error:', error);
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          setRecognitionError('Microphone access denied. Please allow microphone access in your browser settings and try again.');
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          setRecognitionError('No microphone found. Please connect a microphone and try again.');
+        } else {
+          setRecognitionError(`Microphone error: ${error.message || 'Unknown error'}. Please check your microphone and try again.`);
+        }
+        return;
+      }
+      
+      // Start recognition
+      if (recognitionRef.current.state === 'idle' || recognitionRef.current.state === 'stopped') {
+        recognitionRef.current.start();
+      } else {
+        setRecognitionError('Speech recognition is already running.');
+      }
+    } catch (error) {
+      console.error('Error starting speech recognition:', error);
+      setRecognitionError(`Failed to start speech recognition: ${error.message || 'Unknown error'}. Please try again.`);
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current && recognitionRef.current.state !== 'stopped') {
+    shouldKeepListeningRef.current = false; // Signal that user wants to stop
+    
+    if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        if (recognitionRef.current.state !== 'stopped') {
+          recognitionRef.current.stop();
+        }
         setIsListening(false);
         stopAudioLevelAnimation();
+        
+        // Stop media stream if it exists
+        if (recognitionRef.current._mediaStream) {
+          recognitionRef.current._mediaStream.getTracks().forEach(track => track.stop());
+          recognitionRef.current._mediaStream = null;
+        }
       } catch (error) {
         console.error('Error stopping speech recognition:', error);
       }
@@ -252,13 +331,24 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   };
 
   const handleClose = () => {
+    shouldKeepListeningRef.current = false; // Signal that user wants to stop
+    
     stopListening();
     setTranscript('');
     setRecognitionError('');
     
     if (recognitionRef.current) {
       try {
+        if (recognitionRef.current.state !== 'stopped') {
+          recognitionRef.current.stop();
+        }
         recognitionRef.current.abort();
+        
+        // Stop media stream if it exists
+        if (recognitionRef.current._mediaStream) {
+          recognitionRef.current._mediaStream.getTracks().forEach(track => track.stop());
+          recognitionRef.current._mediaStream = null;
+        }
       } catch (error) {
         console.error('Error aborting recognition:', error);
       }
@@ -340,10 +430,12 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
             {isListening ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                Listening... Speak now.
+                Listening... Speak now. Click "Stop" when finished.
               </span>
+            ) : transcript.trim() ? (
+              'Click "Start Listening" to add more, or "Send Message" to send.'
             ) : (
-              'Click "Start Listening" to begin speaking...'
+              'Click "Start Listening" to begin speaking. Make sure your microphone is connected and permissions are granted.'
             )}
           </p>
         </div>
