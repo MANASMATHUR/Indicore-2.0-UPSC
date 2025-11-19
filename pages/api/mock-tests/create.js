@@ -6,6 +6,59 @@ import PYQ from '@/models/PYQ';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { translateText } from '@/pages/api/ai/translate';
 
+const DEFAULT_DIFFICULTY_MIX = { easy: 0.3, medium: 0.5, hard: 0.2 };
+
+function normalizeDifficultyMix(input = {}) {
+  const mix = { ...DEFAULT_DIFFICULTY_MIX };
+  ['easy', 'medium', 'hard'].forEach((key) => {
+    if (input[key] !== undefined) {
+      const value = Number(input[key]);
+      if (!Number.isNaN(value) && value >= 0) {
+        mix[key] = value;
+      }
+    }
+  });
+  const total = Object.values(mix).reduce((sum, value) => sum + value, 0) || 1;
+  Object.keys(mix).forEach((key) => {
+    mix[key] = mix[key] / total;
+  });
+  return mix;
+}
+
+function buildDifficultyTargets(totalQuestions, mix) {
+  const targets = { easy: 0, medium: 0, hard: 0 };
+  const order = ['easy', 'medium', 'hard'];
+  let assigned = 0;
+  order.forEach((key, index) => {
+    let count = Math.round(totalQuestions * mix[key]);
+    if (index === order.length - 1) {
+      count = totalQuestions - assigned;
+    }
+    count = Math.max(0, Math.min(totalQuestions - assigned, count));
+    targets[key] = count;
+    assigned += count;
+  });
+  return targets;
+}
+
+function applyDifficultyBlueprint(questions, targets) {
+  const queue = [];
+  Object.entries(targets).forEach(([difficulty, count]) => {
+    queue.push(...Array(count).fill(difficulty));
+  });
+  questions.forEach((question, idx) => {
+    question.difficulty = queue[idx] || question.difficulty || 'medium';
+  });
+}
+
+function buildDistribution(questions, field) {
+  return questions.reduce((acc, question) => {
+    const key = (question[field] || 'unspecified').toString();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -17,13 +70,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { examType, paperType, subject, duration, totalQuestions, topics, language = 'en', usePYQ = false } = req.body;
+    const {
+      examType,
+      paperType,
+      subject,
+      duration,
+      totalQuestions,
+      topics,
+      language = 'en',
+      usePYQ = false,
+      difficultyMix: requestedDifficultyMix
+    } = req.body;
 
     if (!examType || !duration || !totalQuestions) {
       return res.status(400).json({ error: 'Exam type, duration, and total questions are required' });
     }
 
     await connectToDatabase();
+
+    const difficultyMix = normalizeDifficultyMix(requestedDifficultyMix);
 
     const isMains = paperType === 'Mains';
     
@@ -75,6 +140,7 @@ export default async function handler(req, res) {
     const examInfo = getExamSpecificInfo(examType);
     const examSpecificSubjects = isMains ? examInfo.mains?.subjects : examInfo.prelims?.subjects;
     const examSpecificFocus = isMains ? examInfo.mains?.focus : examInfo.prelims?.focus;
+    const difficultyTargets = buildDifficultyTargets(totalQuestions, difficultyMix);
     
     // Get language name for prompt
     const languageNames = {
@@ -125,6 +191,8 @@ ${isMains ? `
 
 **IMPORTANT**: Generate all questions, options, explanations, and content in English. The system will handle translation to other languages using professional translation services.`;
 
+    const difficultyInstruction = `Maintain approximately ${difficultyTargets.easy} easy, ${difficultyTargets.medium} medium, and ${difficultyTargets.hard} hard questions. Every question must include a difficulty label that aligns with this distribution.`;
+
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
@@ -140,6 +208,8 @@ ${isMains ? `
 - Exam Type: ${examType}
 ${topics ? `- Topics to cover: ${topics.join(', ')}` : ''}
 ${examSpecificSubjects ? `- Subjects to cover: ${examSpecificSubjects.join(', ')}` : ''}
+
+${difficultyInstruction}
 
 ${isMains ? `
 **IMPORTANT: This is a ${examType} MAINS exam - Generate SUBJECTIVE questions only (no multiple choice).**
@@ -265,7 +335,8 @@ Generate exactly ${totalQuestions} questions. Ensure questions are:
             difficulty: 'medium',
             marks: isSubjective ? 10 : 1,
             explanation: pyq.answer || `Source: ${examType} ${paperType} ${pyq.year}${pyq.paper ? ` - ${pyq.paper}` : ''}`,
-            _pyqSource: {
+            source: 'pyq',
+            sourceMetadata: {
               year: pyq.year,
               paper: pyq.paper,
               verified: pyq.verified,
@@ -354,7 +425,7 @@ Format as JSON array:
 
         // Remove temporary fields
         processedQuestions = processedQuestions.map(q => {
-          const { _pyqSource, _needsOptions, _pyqAnswer, ...cleanQ } = q;
+          const { _needsOptions, _pyqAnswer, ...cleanQ } = q;
           return cleanQ;
         });
 
@@ -410,7 +481,8 @@ Format as JSON array:
         topic: q.topic || 'General',
         difficulty: q.difficulty || 'medium',
         marks: q.marks || (isMains ? 10 : 1),
-        explanation: q.explanation || ''
+        explanation: q.explanation || '',
+        source: 'ai'
       };
 
       // Validate question text
@@ -460,6 +532,9 @@ Format as JSON array:
       // Combine PYQ and AI questions
       processedQuestions = [...processedQuestions, ...aiQuestions];
     }
+
+    const appliedDifficultyTargets = buildDifficultyTargets(processedQuestions.length, difficultyMix);
+    applyDifficultyBlueprint(processedQuestions, appliedDifficultyTargets);
 
     // Validate total questions count
     if (processedQuestions.length !== totalQuestions) {
@@ -518,6 +593,9 @@ Format as JSON array:
       }
     }
 
+    const subjectDistribution = buildDistribution(processedQuestions, 'subject');
+    const sourceDistribution = buildDistribution(processedQuestions, 'source');
+
     const totalMarks = processedQuestions.reduce((sum, q) => sum + (q.marks || 1), 0);
 
     const testData = {
@@ -535,7 +613,13 @@ Format as JSON array:
       totalMarks,
       questions: processedQuestions,
       createdBy: session.user.id,
-      tags: [examType, paperType, subject].filter(Boolean)
+      tags: [examType, paperType, subject].filter(Boolean),
+      blueprint: {
+        requestedMix: difficultyMix,
+        appliedTargets: appliedDifficultyTargets,
+        subjectDistribution,
+        sourceDistribution
+      }
     };
 
     const mockTest = await MockTest.create(testData);

@@ -3,6 +3,7 @@
 import { useState, useEffect, memo, useCallback } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
+import { SkeletonLine } from '../ui/Skeleton';
 
 const MODEL_PRESETS = [
   // OpenAI (general + reasoning + budget tiers)
@@ -53,6 +54,8 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
   };
   
   const [localSettings, setLocalSettings] = useState(defaultLocalSettings);
+  const [metrics, setMetrics] = useState(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   const resolvePresetId = (settingsObj) => {
     if (!settingsObj) return MODEL_PRESETS[0].id;
@@ -72,6 +75,21 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
         ...prev,
         ...settings
       }));
+      const fetchMetrics = async () => {
+        try {
+          setMetricsLoading(true);
+          const response = await fetch('/api/metrics/model-usage');
+          if (response.ok) {
+            const data = await response.json();
+            setMetrics(data);
+          }
+        } catch (error) {
+          console.error('Failed to load metrics:', error);
+        } finally {
+          setMetricsLoading(false);
+        }
+      };
+      fetchMetrics();
     }
   }, [settings, isOpen]);
 
@@ -293,6 +311,62 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Metrics */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">📈 Token & Latency Monitor</h3>
+          {metricsLoading ? (
+            <div className="space-y-2">
+              <SkeletonLine className="h-4 w-1/2" />
+              <SkeletonLine className="h-3 w-full" />
+              <SkeletonLine className="h-3 w-4/5" />
+            </div>
+          ) : metrics && metrics.totalCalls > 0 ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="text-xs text-gray-500 uppercase">Avg latency</div>
+                  <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    {metrics.avgLatencyMs} ms
+                  </div>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="text-xs text-gray-500 uppercase">Avg tokens</div>
+                  <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    {metrics.avgTokens}
+                  </div>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="text-xs text-gray-500 uppercase">Model calls</div>
+                  <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    {metrics.totalCalls}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Recent providers</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {metrics.providerBreakdown.slice(0, 5).map((provider) => (
+                    <div key={`${provider.provider}-${provider.model}`} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{provider.provider.toUpperCase()}</p>
+                        <p className="text-xs text-gray-500">{provider.model}</p>
+                      </div>
+                      <div className="text-right text-xs text-gray-500">
+                        <p>{provider.calls} calls</p>
+                        <p>{provider.avgLatencyMs} ms · {provider.avgTokens} tok</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Start a chat to populate token and latency metrics.
+            </p>
+          )}
         </div>
 
         {/* Reset Settings */}

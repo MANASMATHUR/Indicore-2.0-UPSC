@@ -1,9 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useState, useMemo } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Badge } from '../ui/Badge';
 import ChatListItem from '../ChatListItem';
 
 const Sidebar = ({ 
@@ -181,3 +180,4 @@ lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
 
 
 export default Sidebar;
+

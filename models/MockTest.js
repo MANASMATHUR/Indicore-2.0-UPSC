@@ -24,6 +24,12 @@ const mockTestSchema = new mongoose.Schema({
   totalQuestions: { type: Number, required: true },
   totalMarks: { type: Number, required: true },
   questions: [questionSchema],
+  blueprint: {
+    requestedMix: { type: mongoose.Schema.Types.Mixed },
+    appliedTargets: { type: mongoose.Schema.Types.Mixed },
+    subjectDistribution: { type: mongoose.Schema.Types.Mixed },
+    sourceDistribution: { type: mongoose.Schema.Types.Mixed }
+  },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   isPublic: { type: Boolean, default: false },
   tags: [String],

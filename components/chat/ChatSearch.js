@@ -1,73 +1,25 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useToast } from '../ui/ToastProvider';
 
-export default function ChatSearch({ messages = [], onSearchResultClick, isOpen, onClose, searchQuery: externalSearchQuery, onSearchQueryChange }) {
+export default function ChatSearch({
+  messages = [],
+  onSearchResultClick,
+  isOpen,
+  onClose,
+  searchQuery: externalSearchQuery = '',
+  onSearchQueryChange
+}) {
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery || '');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
   const [matches, setMatches] = useState([]);
   const inputRef = useRef(null);
-  const { showToast } = useToast();
 
-  // Sync with external search query
+  const normalizedMessages = useMemo(() => (Array.isArray(messages) ? messages : []), [messages]);
+
   useEffect(() => {
-    if (externalSearchQuery !== undefined) {
-      setSearchQuery(externalSearchQuery);
-    }
-  }, [externalSearchQuery]);
-
-  const handleSearchChange = (value) => {
-    setSearchQuery(value);
-    if (onSearchQueryChange) {
-      onSearchQueryChange(value);
-    }
-  };
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery || !searchQuery.trim()) {
-      setMatches([]);
-      setCurrentMatchIndex(-1);
-      return [];
-    }
-
-    const query = searchQuery.toLowerCase().trim();
-    const results = [];
-
-    messages.forEach((message, messageIndex) => {
-      const text = (message.text || message.content || '').toLowerCase();
-      if (text.includes(query)) {
-        const messageText = message.text || message.content || '';
-        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-        const matchesInMessage = [...messageText.matchAll(regex)];
-        
-        matchesInMessage.forEach((match) => {
-          results.push({
-            messageIndex,
-            matchIndex: match.index,
-            message,
-            text: messageText,
-            preview: getPreview(messageText, match.index, query.length)
-          });
-        });
-      }
-    });
-
-    setMatches(results);
-    setCurrentMatchIndex(results.length > 0 ? 0 : -1);
-    return results;
-  }, [searchQuery, messages]);
-
-  function getPreview(text, matchIndex, queryLength) {
-    const start = Math.max(0, matchIndex - 50);
-    const end = Math.min(text.length, matchIndex + queryLength + 50);
-    let preview = text.substring(start, end);
-    
-    if (start > 0) preview = '...' + preview;
-    if (end < text.length) preview = preview + '...';
-    
-    return preview;
-  }
+    setSearchQuery(externalSearchQuery || '');
+  }, [externalSearchQuery, isOpen]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -75,26 +27,68 @@ export default function ChatSearch({ messages = [], onSearchResultClick, isOpen,
     }
   }, [isOpen]);
 
+  const computedMatches = useMemo(() => {
+    if (!searchQuery || !searchQuery.trim()) {
+      return [];
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const results = [];
+
+    normalizedMessages.forEach((message, messageIndex) => {
+      const rawText = message?.text || message?.content || '';
+      if (!rawText) return;
+      const text = rawText.toLowerCase();
+      if (!text.includes(query)) return;
+
+      const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const matchesInMessage = [...rawText.matchAll(regex)];
+
+      matchesInMessage.forEach((match) => {
+        results.push({
+          messageIndex,
+          matchIndex: match.index ?? 0,
+          preview: buildPreview(rawText, match.index ?? 0, query.length)
+        });
+      });
+    });
+
+    return results;
+  }, [searchQuery, normalizedMessages]);
+
+  useEffect(() => {
+    setMatches(computedMatches);
+    setCurrentMatchIndex(computedMatches.length ? 0 : -1);
+  }, [computedMatches]);
+
   useEffect(() => {
     if (currentMatchIndex >= 0 && matches.length > 0) {
-      scrollToMatch(matches[currentMatchIndex]);
+      focusMatch(matches[currentMatchIndex]);
     }
   }, [currentMatchIndex, matches]);
 
-  const scrollToMatch = (match) => {
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    onSearchQueryChange?.(value);
+  };
+
+  const buildPreview = (text, matchIndex = 0, queryLength = 0) => {
+    const start = Math.max(0, matchIndex - 50);
+    const end = Math.min(text.length, matchIndex + queryLength + 50);
+    let preview = text.substring(start, end);
+    if (start > 0) preview = '...' + preview;
+    if (end < text.length) preview = preview + '...';
+    return preview;
+  };
+
+  const focusMatch = (match) => {
     if (!match) return;
-    
     const messageElement = document.querySelector(`[data-message-index="${match.messageIndex}"]`);
     if (messageElement) {
       messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       messageElement.classList.add('highlight-match');
-      setTimeout(() => {
-        messageElement.classList.remove('highlight-match');
-      }, 2000);
-      
-      if (onSearchResultClick) {
-        onSearchResultClick(match.messageIndex);
-      }
+      setTimeout(() => messageElement.classList.remove('highlight-match'), 2000);
+      onSearchResultClick?.(match.messageIndex);
     }
   };
 
@@ -147,15 +141,10 @@ export default function ChatSearch({ messages = [], onSearchResultClick, isOpen,
               className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
           </div>
-          
+
           {searchQuery.trim() && (
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <span>
-                {matches.length > 0 
-                  ? `${currentMatchIndex + 1} of ${matches.length}`
-                  : 'No matches'
-                }
-              </span>
+              <span>{matches.length > 0 ? `${currentMatchIndex + 1} of ${matches.length}` : 'No matches'}</span>
               <button
                 onClick={handlePrevious}
                 disabled={matches.length === 0}
@@ -178,7 +167,7 @@ export default function ChatSearch({ messages = [], onSearchResultClick, isOpen,
               </button>
             </div>
           )}
-          
+
           <button
             onClick={() => {
               handleSearchChange('');
@@ -196,4 +185,3 @@ export default function ChatSearch({ messages = [], onSearchResultClick, isOpen,
     </div>
   );
 }
-

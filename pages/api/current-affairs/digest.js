@@ -193,6 +193,65 @@ async function translateDigestContent(data, targetLanguage) {
       })
     );
   }
+
+  if (data.practiceQuestions && Array.isArray(data.practiceQuestions)) {
+    translated.practiceQuestions = await Promise.all(
+      data.practiceQuestions.map(async (item) => {
+        const translatedItem = { ...item };
+        try {
+          if (item.question) {
+            translatedItem.question = await translateText(item.question, 'en', targetLanguage, true);
+          }
+          if (item.answerKey) {
+            translatedItem.answerKey = await translateText(item.answerKey, 'en', targetLanguage, true);
+          }
+          if (item.subjectTag) {
+            translatedItem.subjectTag = await translateText(item.subjectTag, 'en', targetLanguage, true);
+          }
+          if (item.gsPaper) {
+            translatedItem.gsPaper = await translateText(item.gsPaper, 'en', targetLanguage, true);
+          }
+        } catch (e) {
+          console.warn('Failed to translate practice question:', e.message);
+        }
+        return translatedItem;
+      })
+    );
+  }
+
+  if (data.trendWatch && Array.isArray(data.trendWatch)) {
+    translated.trendWatch = await Promise.all(
+      data.trendWatch.map(async (item) => {
+        const translatedItem = { ...item };
+        try {
+          if (item.theme) {
+            translatedItem.theme = await translateText(item.theme, 'en', targetLanguage, true);
+          }
+          if (item.insight) {
+            translatedItem.insight = await translateText(item.insight, 'en', targetLanguage, true);
+          }
+          if (item.examImpact) {
+            translatedItem.examImpact = await translateText(item.examImpact, 'en', targetLanguage, true);
+          }
+        } catch (e) {
+          console.warn('Failed to translate trend insight:', e.message);
+        }
+        return translatedItem;
+      })
+    );
+  }
+
+  if (data.sourceNotes && Array.isArray(data.sourceNotes)) {
+    translated.sourceNotes = await Promise.all(
+      data.sourceNotes.map(async (note) => {
+        try {
+          return await translateText(note, 'en', targetLanguage, true);
+        } catch (e) {
+          return note;
+        }
+      })
+    );
+  }
   
   // Translate exam relevance
   if (data.examRelevance) {
@@ -216,7 +275,7 @@ async function translateDigestContent(data, targetLanguage) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -226,42 +285,105 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { period = 'daily', startDate, endDate, categories, language = 'en' } = req.body;
+    await connectToDatabase();
+
+    if (req.method === 'GET') {
+      const { period = 'daily', language = 'en', limit = 5, focus, startDate, endDate } = req.query;
+      const limitNum = Math.min(20, Math.max(1, parseInt(limit, 10) || 5));
+
+      const filter = { language };
+      if (period !== 'all') {
+        filter.period = period;
+      }
+      if (startDate || endDate) {
+        filter.startDate = {};
+        if (startDate) filter.startDate.$gte = new Date(startDate);
+        if (endDate) filter.startDate.$lte = new Date(endDate);
+      }
+      if (focus) {
+        const focusAreas = focus.split(',').map((item) => item.trim()).filter(Boolean);
+        if (focusAreas.length) {
+          filter.focusAreas = { $in: focusAreas };
+        }
+      }
+
+      const digests = await CurrentAffairsDigest.find(filter)
+        .sort({ startDate: -1 })
+        .limit(limitNum)
+        .lean();
+
+      return res.status(200).json({ digests });
+    }
+
+    const {
+      period = 'daily',
+      startDate,
+      endDate,
+      categories = [],
+      language = 'en',
+      focusAreas = [],
+      includePractice = true,
+      includeTrendWatch = true,
+      limitPerCategory = 3
+    } = req.body;
+
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
     const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
-    await connectToDatabase();
-
     const start = startDate ? new Date(startDate) : new Date();
     const end = endDate ? new Date(endDate) : new Date();
+    const safeLimitPerCategory = Math.min(5, Math.max(1, parseInt(limitPerCategory, 10) || 3));
 
-    // Check if digest already exists (include language in cache check)
+    const defaultCategories = [
+      'National Affairs',
+      'International Affairs',
+      'Science & Technology',
+      'Environment & Ecology',
+      'Economy & Finance',
+      'Sports & Culture',
+      'Awards & Honours',
+      'Government Schemes',
+      'Judicial Developments',
+      'Defense & Security'
+    ];
+
+    const requestedCategories = Array.isArray(categories) && categories.length ? categories : defaultCategories;
+
     const existing = await CurrentAffairsDigest.findOne({
       period,
-      language: language || 'en',
+      language,
       startDate: { $gte: start, $lte: end }
     });
 
     if (existing) {
-      // Ensure _id is properly serialized
       const existingResponse = existing.toObject ? existing.toObject() : existing;
-      return res.status(200).json({
-        digest: existingResponse,
-        cached: true
-      });
+      return res.status(200).json({ digest: existingResponse, cached: true });
     }
 
-    // Get language name for prompt
     const languageNames = {
-      'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 'bn': 'Bengali',
-      'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 'ml': 'Malayalam',
-      'kn': 'Kannada', 'es': 'Spanish'
+      en: 'English', hi: 'Hindi', mr: 'Marathi', ta: 'Tamil', bn: 'Bengali',
+      pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam',
+      kn: 'Kannada', es: 'Spanish'
     };
     const langName = languageNames[language] || 'English';
-    
+
+    const focusInstruction = focusAreas.length
+      ? `Give special emphasis to the following focus areas: ${focusAreas.join(', ')}.`
+      : '';
+
+    const categoryInstruction = `Limit each category to at most ${safeLimitPerCategory} high-impact items. Categories to prioritise: ${requestedCategories.join(', ')}.`;
+
+    const practiceInstruction = includePractice
+      ? 'Include a "practiceQuestions" array with 2-3 exam-ready questions (mention exam targets, GS paper, difficulty, and answerKey).'
+      : 'Set "practiceQuestions": [] if there are no exam-ready questions to share.';
+
+    const trendInstruction = includeTrendWatch
+      ? 'Provide a "trendWatch" section with key themes, insights, exam impact, and urgency labels (immediate, upcoming, monitor).'
+      : 'Set "trendWatch": [] if no patterns are observed.';
+
     const systemPrompt = `You are an expert current affairs analyst specializing in competitive exam preparation (UPSC, PCS, SSC). Your task is to create comprehensive current affairs digests that are:
 
 CRITICAL REQUIREMENTS:
@@ -271,63 +393,67 @@ CRITICAL REQUIREMENTS:
 4. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
 5. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
 6. **CONCISE**: Clear summaries with key points
-7. **ACTIONABLE**: Include exam relevance indicators and subject tags
+7. **ACTIONABLE**: Include exam relevance indicators, subject tags, GS paper references, and a short exam-focused note.
 
-**Categories to cover:**
-- National Affairs (tag: Polity/Governance, GS-2)
-- International Affairs (tag: International Relations, GS-2)
-- Science & Technology (tag: Science & Tech, GS-3)
-- Environment & Ecology (tag: Environment, GS-3)
-- Economy & Finance (tag: Economics, GS-3)
-- Sports & Culture (tag: Culture, GS-1)
-- Awards & Honours (tag: Current Affairs, Prelims)
-- Government Schemes (tag: Governance/Policy, GS-2/GS-3)
-- Judicial Developments (tag: Polity, GS-2)
-- Defense & Security (tag: Security, GS-3)
+Always highlight continuity with previous developments where relevant.`;
 
-**IMPORTANT**: 
-- Generate all content in English. The system will handle translation to other languages using professional translation services.
-- Every news item MUST include: subject tag, GS paper relevance, and source information when available.
-- If you're uncertain about any fact, clearly state it or omit it rather than guessing.`;
+    const userPrompt = `Create a ${period} current affairs digest for ${langName} readers covering ${start.toDateString()} to ${end.toDateString()}.
 
-    const userPrompt = `Create a ${period} current affairs digest for the period from ${start.toDateString()} to ${end.toDateString()} in English.
+${categoryInstruction}
+${focusInstruction}
+${practiceInstruction}
+${trendInstruction}
 
-Include:
-1. Important news items with summaries
-2. Categorization by topic
-3. Exam relevance (UPSC/PCS/SSC)
-4. Key highlights
-5. Source information
-
-Format as JSON:
+Structure the response as JSON:
 {
   "title": "Current Affairs Digest - ${period}",
-  "summary": "Overall summary of the period",
-  "keyHighlights": ["Highlight 1", "Highlight 2"],
+  "summary": "...",
+  "keyHighlights": ["...", "..."],
   "newsItems": [
     {
-      "title": "News Title",
-      "summary": "Brief summary",
-      "source": "Source name",
-      "date": "Date",
-      "category": "Category",
-      "tags": ["tag1", "tag2"],
+      "title": "...",
+      "summary": "...",
+      "source": "...",
+      "date": "YYYY-MM-DD",
+      "category": "National Affairs",
+      "tags": ["Polity", "GS-2"],
       "relevance": "high|medium|low",
+      "subjectTag": "Polity",
+      "gsPaper": "GS-2",
       "examRelevance": ["UPSC", "PCS"]
     }
   ],
   "categories": [
     {
-      "name": "Category Name",
-      "count": 5,
-      "items": [/* news items in this category */]
+      "name": "Economy & Finance",
+      "count": 2,
+      "items": [/* mapped news items */]
     }
   ],
   "examRelevance": {
-    "upsc": ["Relevant topic 1", "Relevant topic 2"],
-    "pcs": ["Relevant topic 1"],
-    "ssc": ["Relevant topic 1"]
-  }
+    "upsc": ["..."],
+    "pcs": ["..."],
+    "ssc": ["..."]
+  },
+  "practiceQuestions": [
+    {
+      "question": "...",
+      "answerKey": "...",
+      "subjectTag": "Economics",
+      "gsPaper": "GS-3",
+      "difficulty": "medium",
+      "examTargets": ["UPSC"]
+    }
+  ],
+  "trendWatch": [
+    {
+      "theme": "...",
+      "insight": "...",
+      "examImpact": "...",
+      "urgency": "monitor"
+    }
+  ],
+  "sourceNotes": ["PIB - ...", "The Hindu - ..."]
 }`;
 
     let parsedData;
@@ -345,16 +471,11 @@ Format as JSON:
         }
       );
       const aiResponse = aiResult?.content || '';
-
-      try {
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsedData = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('No JSON found');
-        }
-      } catch (parseError) {
-        parsedData = null;
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found');
       }
     } catch (aiError) {
       console.warn('AI generation failed for current affairs digest, using fallback content:', aiError?.message);
@@ -366,82 +487,24 @@ Format as JSON:
       const formattedEnd = end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
       parsedData = {
         title: `Current Affairs Digest - ${period.charAt(0).toUpperCase() + period.slice(1)}`,
-        summary: `Key developments between ${formattedStart} and ${formattedEnd} across national, international, and economic domains.`,
+        summary: `Key developments between ${formattedStart} and ${formattedEnd} across governance, economy, and science.`,
         keyHighlights: [
           'Focus on government initiatives with impact on governance and welfare delivery.',
           'Track global developments affecting India’s strategic and economic interests.',
           'Review science and technology breakthroughs relevant for prelims and mains.'
         ],
-        newsItems: [
-          {
-            title: 'Government launches mission to accelerate green hydrogen adoption',
-            summary: 'The Union Government approved a multi-phase mission to support indigenous production, infrastructure, and R&D for green hydrogen.',
-            source: 'PIB',
-            date: start,
-            category: 'Environment & Ecology',
-            tags: ['Green Energy', 'Climate Action'],
-            relevance: 'high',
-            examRelevance: ['UPSC', 'PCS']
-          },
-          {
-            title: 'RBI retains repo rate; focuses on inflation management',
-            summary: 'The Monetary Policy Committee kept the repo rate unchanged while signalling continued vigilance on inflation and liquidity.',
-            source: 'RBI',
-            date: end,
-            category: 'Economy & Finance',
-            tags: ['Monetary Policy', 'Inflation'],
-            relevance: 'high',
-            examRelevance: ['UPSC', 'SSC']
-          }
-        ],
-        categories: [
-          {
-            name: 'Economy & Finance',
-            count: 1,
-            items: [
-              {
-                title: 'RBI retains repo rate; focuses on inflation management',
-                summary: 'The Monetary Policy Committee kept the repo rate unchanged while signalling continued vigilance on inflation and liquidity.',
-                source: 'RBI',
-                date: end,
-                tags: ['Monetary Policy', 'Inflation'],
-                relevance: 'high',
-                examRelevance: ['UPSC', 'SSC']
-              }
-            ]
-          },
-          {
-            name: 'Environment & Ecology',
-            count: 1,
-            items: [
-              {
-                title: 'Government launches mission to accelerate green hydrogen adoption',
-                summary: 'The Union Government approved a multi-phase mission to support indigenous production, infrastructure, and R&D for green hydrogen.',
-                source: 'PIB',
-                date: start,
-                tags: ['Green Energy', 'Climate Action'],
-                relevance: 'high',
-                examRelevance: ['UPSC', 'PCS']
-              }
-            ]
-          }
-        ],
-        examRelevance: {
-          upsc: [
-            'Green Hydrogen Mission and climate commitments',
-            'Monetary policy stance amidst inflationary pressures'
-          ],
-          pcs: ['State-level implications of national green energy missions'],
-          ssc: ['Key macroeconomic indicators and recent policy decisions']
-        }
+        newsItems: [],
+        categories: [],
+        examRelevance: { upsc: [], pcs: [], ssc: [] },
+        practiceQuestions: [],
+        trendWatch: [],
+        sourceNotes: []
       };
     }
 
-    // Process parsedData to convert date strings to Date objects
     const processedData = processDigestData(parsedData);
-    
-    // Translate to target language if not English (using Azure Translator)
     let finalData = processedData || parsedData;
+
     if (language && language !== 'en') {
       try {
         console.log(`Translating digest content to ${language} using Azure Translator...`);
@@ -449,32 +512,31 @@ Format as JSON:
         console.log('Translation completed successfully');
       } catch (translationError) {
         console.warn('Translation failed, using English content:', translationError.message);
-        // Continue with English content if translation fails
       }
     }
-    
+
     const digestData = {
       title: finalData.title || processedData.title || parsedData.title || `Current Affairs Digest - ${period}`,
       period,
-      language: language || 'en', // Store language for proper caching
+      language,
       startDate: start,
       endDate: end,
       newsItems: finalData.newsItems || processedData.newsItems || parsedData.newsItems || [],
       categories: finalData.categories || processedData.categories || parsedData.categories || [],
       summary: finalData.summary || processedData.summary || parsedData.summary || '',
       keyHighlights: finalData.keyHighlights || processedData.keyHighlights || parsedData.keyHighlights || [],
-      examRelevance: finalData.examRelevance || processedData.examRelevance || parsedData.examRelevance || { upsc: [], pcs: [], ssc: [] }
+      examRelevance: finalData.examRelevance || processedData.examRelevance || parsedData.examRelevance || { upsc: [], pcs: [], ssc: [] },
+      focusAreas,
+      requestedCategories,
+      practiceQuestions: includePractice ? (finalData.practiceQuestions || []) : [],
+      trendWatch: includeTrendWatch ? (finalData.trendWatch || []) : [],
+      sourceNotes: finalData.sourceNotes || [],
     };
 
     const digest = await CurrentAffairsDigest.create(digestData);
-
-    // Ensure _id is properly serialized
     const digestResponse = digest.toObject ? digest.toObject() : digest;
 
-    return res.status(200).json({
-      digest: digestResponse,
-      cached: false
-    });
+    return res.status(200).json({ digest: digestResponse, cached: false });
   } catch (error) {
     console.error('Error generating current affairs digest:', error);
     return res.status(500).json({ error: 'Failed to generate digest', details: error.message });

@@ -15,7 +15,6 @@ import ExamPaperUpload from './ExamPaperUpload';
 import EssayEnhancement from './EssayEnhancement';
 import VocabularyBuilder from './VocabularyBuilder';
 import MockEvaluation from './MockEvaluation';
-import StudyStatistics from './StudyStatistics';
 import { useChat } from '@/hooks/useChat';
 import { useSettings } from '@/hooks/useSettings';
 import { ToastProvider, useToast } from './ui/ToastProvider';
@@ -43,6 +42,7 @@ export default function ChatInterface({ user }) {
   const [streamingMessage, setStreamingMessage] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [useWebSocketConnection, setUseWebSocketConnection] = useState(true);
+  const [isLowBandwidth, setIsLowBandwidth] = useState(false);
   const renameTargetIdRef = useRef(null);
   const messagesEndRef = useRef(null);
   
@@ -76,6 +76,25 @@ export default function ChatInterface({ user }) {
   useEffect(() => {
     document.documentElement.classList.remove('dark');
   }, [currentTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection) return;
+
+    const updateNetworkState = () => {
+      const effectiveType = connection.effectiveType || '';
+      const downlink = connection.downlink || 0;
+      const saveData = connection.saveData || false;
+      const isSlow = saveData || ['slow-2g', '2g'].includes(effectiveType) || downlink < 1.2;
+      setIsLowBandwidth(isSlow);
+      setUseWebSocketConnection(!isSlow);
+    };
+
+    updateNetworkState();
+    connection.addEventListener?.('change', updateNetworkState);
+    return () => connection.removeEventListener?.('change', updateNetworkState);
+  }, []);
 
   const getLanguageCode = useCallback((lang) => {
     const languageMap = {
@@ -174,8 +193,10 @@ export default function ChatInterface({ user }) {
         return;
       }
 
-      // Use WebSocket for lowest latency if available and connected
-      if (useWebSocketConnection && isConnected && socket) {
+      const canUseWebSocket = useWebSocketConnection && isConnected && socket && !isLowBandwidth;
+
+      // Use WebSocket for lowest latency if available and connection is healthy
+      if (canUseWebSocket) {
         try {
           let fullResponse = '';
           const result = await sendWebSocketMessage({
@@ -911,13 +932,6 @@ export default function ChatInterface({ user }) {
             setSearchQuery('');
           }}
         />
-
-        {/* Study Statistics */}
-        {currentChatId && (
-          <div className="px-4 py-2 border-b border-gray-200 dark:border-slate-700">
-            <StudyStatistics />
-          </div>
-        )}
 
         {/* Chat Messages */}
         <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages" style={{ marginTop: isSearchOpen ? '60px' : '0' }}>

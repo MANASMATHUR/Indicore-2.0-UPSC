@@ -135,29 +135,29 @@ export default function handler(req, res) {
             // Conversation history query
             (async () => {
               if (!chatId) return [];
-              try {
-                await connectToDatabase();
-                const chat = await Chat.findOne({ 
-                  _id: chatId, 
-                  userEmail: session.user.email 
-                })
-                .select('messages.sender messages.text messages.timestamp')
-                .lean();
-                
-                if (chat && chat.messages && Array.isArray(chat.messages)) {
-                  const recentMessages = chat.messages.slice(-15);
+            try {
+              await connectToDatabase();
+              const chat = await Chat.findOne({ 
+                _id: chatId, 
+                userEmail: session.user.email 
+              })
+              .select('messages.sender messages.text messages.timestamp')
+              .lean();
+              
+              if (chat && chat.messages && Array.isArray(chat.messages)) {
+                const recentMessages = chat.messages.slice(-15);
                   return recentMessages
-                    .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
-                    .map(msg => ({
-                      role: msg.sender === 'user' ? 'user' : 'assistant',
-                      content: msg.text
-                    }));
-                }
-                return [];
-              } catch (err) {
-                console.warn('Failed to load conversation history:', err.message);
-                return [];
+                  .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
+                  .map(msg => ({
+                    role: msg.sender === 'user' ? 'user' : 'assistant',
+                    content: msg.text
+                  }));
               }
+                return [];
+            } catch (err) {
+              console.warn('Failed to load conversation history:', err.message);
+                return [];
+            }
             })()
           ]);
 
@@ -345,7 +345,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           if (openAIKey && (estimatedTokens >= 16000 || providerPreference === 'openai')) {
             useOpenAI = true;
           }
-          
+
           const selectedModel = model || 'sonar-pro';
           const providerName = useOpenAI ? 'openai' : 'perplexity';
           const tokenBudget = calculateMaxTokens(message, useOpenAI);
@@ -353,7 +353,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           // Start API call immediately - no delays
           let response;
           if (useOpenAI) {
-            try {
+          try {
               // OpenAI: No max_tokens = unlimited (uses full context window like ChatGPT)
               const payload = {
                 model: resolvedOpenAIModel,
@@ -558,11 +558,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                     let memoryCandidate = '';
                     
                     if (!isValid && fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
-                      cleanedResponse = fullResponse.trim();
-                      cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                      cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-                      if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
-                        cleanedResponse += '.';
+                        cleanedResponse = fullResponse.trim();
+                        cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                        cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                        if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                          cleanedResponse += '.';
                       }
                       isValid = cleanedResponse;
                     }
@@ -615,7 +615,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                     // Light cleaning for streaming (citations only) - minimal processing
                     // Use faster regex for streaming
                     if (content.includes('[') && /\d/.test(content)) {
-                      content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                    content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                     }
                     fullResponse += content;
                     // Emit immediately - no buffering, no await

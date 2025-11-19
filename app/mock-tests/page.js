@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,6 +11,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import { Clock, CheckCircle2, XCircle, BarChart3, TrendingUp, FileText, ArrowLeft, Sparkles, Loader2, Play, Plus, Award, Languages } from 'lucide-react';
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference, translateText } from '@/lib/translationUtils';
+import { Skeleton, SkeletonLine } from '@/components/ui/Skeleton';
 
 export default function MockTestsPage() {
   const { data: session } = useSession();
@@ -35,6 +36,53 @@ export default function MockTestsPage() {
   const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
   const [translatedQuestions, setTranslatedQuestions] = useState({});
   const [translating, setTranslating] = useState(false);
+
+  const difficultyInsights = useMemo(() => {
+    if (!currentTest?.questions?.length) return null;
+    const counts = currentTest.questions.reduce(
+      (acc, question) => {
+        const level = (question?.difficulty || 'medium').toLowerCase();
+        if (acc[level] !== undefined) {
+          acc[level] += 1;
+        } else {
+          acc.other += 1;
+        }
+        return acc;
+      },
+      { easy: 0, medium: 0, hard: 0, other: 0 }
+    );
+    const total = currentTest.questions.length;
+    const breakdown = Object.entries(counts)
+      .filter(([, value]) => value > 0)
+      .map(([level, count]) => ({
+        level,
+        count,
+        percentage: Math.round((count / total) * 100)
+      }));
+    return {
+      total,
+      breakdown
+    };
+  }, [currentTest]);
+
+  const topicInsights = useMemo(() => {
+    if (!testResult?.topicWisePerformance || testResult.topicWisePerformance.length === 0) {
+      return null;
+    }
+    const sorted = [...testResult.topicWisePerformance]
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+    const total = sorted.reduce((sum, topic) => sum + topic.total, 0) || 1;
+    return {
+      totalQuestions: total,
+      breakdown: sorted.map(topic => ({
+        label: topic.topic || 'General',
+        total: topic.total,
+        correctRate: topic.total > 0 ? Math.round((topic.correct / topic.total) * 100) : 0,
+        percentage: Math.round((topic.total / total) * 100)
+      }))
+    };
+  }, [testResult]);
 
   useEffect(() => {
     if (view === 'list') {
@@ -243,10 +291,23 @@ export default function MockTestsPage() {
         {view === 'list' && (
           <div>
             {loading ? (
-              <Card className="border-2 border-red-100 p-12 text-center">
-                <Loader2 className="h-12 w-12 animate-spin text-red-600 mx-auto mb-4" />
-                <p className="text-gray-600">Loading tests...</p>
-              </Card>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[0, 1, 2].map((idx) => (
+                  <Card key={`test-skeleton-${idx}`} className="border-2 border-red-50 p-6 space-y-4">
+                    <SkeletonLine className="h-4 w-3/4" />
+                    <div className="space-y-2">
+                      <SkeletonLine className="h-3 w-1/2" />
+                      <SkeletonLine className="h-3 w-1/3" />
+                    </div>
+                    <div className="space-y-2">
+                      <SkeletonLine className="h-3 w-full" />
+                      <SkeletonLine className="h-3 w-4/5" />
+                      <SkeletonLine className="h-3 w-2/3" />
+                    </div>
+                    <Skeleton className="h-10 w-full" />
+                  </Card>
+                ))}
+              </div>
             ) : tests.length > 0 ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {tests.map((test) => (
@@ -644,6 +705,66 @@ export default function MockTestsPage() {
                     <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Percentage</div>
                   </div>
                 </div>
+
+                {(difficultyInsights || topicInsights) && (
+                  <div className="grid md:grid-cols-2 gap-4 mb-6">
+                    {difficultyInsights && (
+                      <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Difficulty mix</h3>
+                          <span className="text-xs uppercase text-gray-500">Total {difficultyInsights.total}</span>
+                        </div>
+                        <div className="space-y-3">
+                          {difficultyInsights.breakdown.map((item) => (
+                            <div key={item.level}>
+                              <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 capitalize mb-1">
+                                <span>{item.level}</span>
+                                <span>{item.percentage}% · {item.count}</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                                <div
+                                  className={`h-2 rounded-full ${
+                                    item.level === 'easy'
+                                      ? 'bg-emerald-500'
+                                      : item.level === 'medium'
+                                      ? 'bg-amber-500'
+                                      : 'bg-rose-500'
+                                  }`}
+                                  style={{ width: `${item.percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {topicInsights && (
+                      <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Top topic coverage</h3>
+                          <span className="text-xs uppercase text-gray-500">Last test</span>
+                        </div>
+                        <div className="space-y-3">
+                          {topicInsights.breakdown.map((topic) => (
+                            <div key={topic.label}>
+                              <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                                <span className="font-semibold text-gray-800 dark:text-gray-100">{topic.label}</span>
+                                <span>{topic.correctRate}% accuracy</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                                <div
+                                  className="h-2 rounded-full bg-blue-500"
+                                  style={{ width: `${topic.percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {testResult.subjectWisePerformance && testResult.subjectWisePerformance.length > 0 && (
                   <div className="mb-4">

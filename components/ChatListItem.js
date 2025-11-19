@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { Badge } from './ui/Badge';
 
 export default function ChatListItem({ chat, isActive, index, onSelect, onEdit, onPin, onDelete, onArchive }) {
   const lastMsgText = chat.lastMessageContent || 'No messages yet';
@@ -101,21 +102,21 @@ export default function ChatListItem({ chat, isActive, index, onSelect, onEdit, 
         <div className="flex items-center justify-between gap-2">
           <div className="flex-1 min-w-0" onClick={onSelect}>
             <div className="flex items-center gap-2">
-              {chat.pinned && (
-                <svg className="w-3 h-3 text-yellow-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 2L3 7v11h4v-6h6v6h4V7l-7-5z" />
-                </svg>
-              )}
-              {chat.archived && (
-                <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
-              )}
-              {chat.folder && (
-                <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded">
-                  {chat.folder}
-                </span>
-              )}
+            {chat.pinned && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 text-yellow-700 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700">
+                Pinned
+              </Badge>
+            )}
+            {chat.archived && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600">
+                Archived
+              </Badge>
+            )}
+            {chat.folder && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
+                {chat.folder}
+              </Badge>
+            )}
               <p className="text-sm font-medium truncate">
                 {chat.name || `Chat ${index + 1}`}
               </p>
@@ -125,10 +126,10 @@ export default function ChatListItem({ chat, isActive, index, onSelect, onEdit, 
             </p>
             {chat.tags && chat.tags.length > 0 && (
               <div className="flex gap-1 mt-1 flex-wrap">
-                {chat.tags.slice(0, 2).map((tag, idx) => (
-                  <span key={idx} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
+                {chat.tags.slice(0, 3).map((tag, idx) => (
+                  <Badge key={`${tag}-${idx}`} variant="outline" className="text-[10px] px-1 py-0 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
                     {tag}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             )}
@@ -152,6 +153,17 @@ export default function ChatListItem({ chat, isActive, index, onSelect, onEdit, 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             </button>
+            {onArchive && (
+              <button
+                className="p-1 rounded hover:bg-blue-50 text-blue-500"
+                title={chat.archived ? 'Unarchive chat' : 'Archive chat'}
+                onClick={(e) => { e.stopPropagation(); onArchive?.(); }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+              </button>
+            )}
             <button
               className="p-1 rounded hover:bg-blue-50 text-blue-500"
               title="Delete chat"
@@ -167,5 +179,3 @@ export default function ChatListItem({ chat, isActive, index, onSelect, onEdit, 
     </div>
   );
 }
-
-

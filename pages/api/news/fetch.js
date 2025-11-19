@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
 import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
+import { storeTrendingSnapshot } from '@/lib/cacheLayer';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -151,6 +152,12 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
       ...item
     }));
 
+    const trendingKey = `${examType}:${category || 'all'}:${dateRange}:${searchQuery || 'all'}`;
+    const trendingPayload = buildTrendingPayload(enrichedNews);
+    if (trendingPayload.totalItems > 0) {
+      await storeTrendingSnapshot(trendingKey, trendingPayload);
+    }
+
     return res.status(200).json({
       news: enrichedNews,
       count: enrichedNews.length,
@@ -158,7 +165,8 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
       category,
       dateRange,
       searchQuery,
-      fetchedAt: new Date().toISOString()
+      fetchedAt: new Date().toISOString(),
+      trending: trendingPayload
     });
 
   } catch (error) {
@@ -265,6 +273,50 @@ function parseTextResponse(text, examType, category) {
   }
 
   return newsItems;
+}
+
+function buildTrendingPayload(newsList = []) {
+  if (!Array.isArray(newsList) || newsList.length === 0) {
+    return {
+      categories: [],
+      tags: [],
+      relevance: [],
+      totalItems: 0
+    };
+  }
+
+  const categoryCounts = new Map();
+  const tagCounts = new Map();
+  const relevanceCounts = new Map();
+
+  newsList.forEach((item) => {
+    const category = item.category || 'General';
+    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+
+    const relevance = item.relevance || 'Medium';
+    relevanceCounts.set(relevance, (relevanceCounts.get(relevance) || 0) + 1);
+
+    if (Array.isArray(item.tags)) {
+      item.tags.forEach((tag) => {
+        if (typeof tag !== 'string' || tag.trim().length === 0) return;
+        const normalized = tag.trim();
+        tagCounts.set(normalized, (tagCounts.get(normalized) || 0) + 1);
+      });
+    }
+  });
+
+  const toSortedArray = (map, limit = 6) =>
+    Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([label, count]) => ({ label, count }));
+
+  return {
+    categories: toSortedArray(categoryCounts),
+    tags: toSortedArray(tagCounts, 10),
+    relevance: toSortedArray(relevanceCounts, 3),
+    totalItems: newsList.length
+  };
 }
 
 

@@ -9,7 +9,23 @@ const newsItemSchema = new mongoose.Schema({
   tags: [String],
   relevance: { type: String, enum: ['high', 'medium', 'low'], default: 'medium' },
   examRelevance: [String] // ['UPSC', 'PCS', 'SSC']
-});
+}, { _id: false });
+
+const practiceQuestionSchema = new mongoose.Schema({
+  question: String,
+  answerKey: String,
+  subjectTag: String,
+  gsPaper: String,
+  difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'medium' },
+  examTargets: [String]
+}, { _id: false });
+
+const trendWatchSchema = new mongoose.Schema({
+  theme: String,
+  insight: String,
+  examImpact: String,
+  urgency: { type: String, enum: ['immediate', 'upcoming', 'monitor'], default: 'monitor' }
+}, { _id: false });
 
 const currentAffairsDigestSchema = new mongoose.Schema({
   title: { type: String, required: true },
@@ -23,6 +39,8 @@ const currentAffairsDigestSchema = new mongoose.Schema({
     items: [newsItemSchema],
     count: Number
   }],
+  focusAreas: [String],
+  requestedCategories: [String],
   summary: String,
   keyHighlights: [String],
   examRelevance: {
@@ -30,6 +48,9 @@ const currentAffairsDigestSchema = new mongoose.Schema({
     pcs: [String],
     ssc: [String]
   },
+  practiceQuestions: [practiceQuestionSchema],
+  trendWatch: [trendWatchSchema],
+  sourceNotes: [String],
   generatedAt: { type: Date, default: Date.now },
   isPublished: { type: Boolean, default: false }
 }, { timestamps: true });

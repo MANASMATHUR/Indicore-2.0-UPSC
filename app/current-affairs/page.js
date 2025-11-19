@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -21,6 +21,7 @@ import {
   Clock,
   Tag
 } from 'lucide-react';
+import { Skeleton, SkeletonLine } from '@/components/ui/Skeleton';
 
 const categories = [
   'National Affairs',
@@ -46,6 +47,78 @@ export default function CurrentAffairsPage() {
   const [loading, setLoading] = useState(false);
   const [news, setNews] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [insights, setInsights] = useState(null);
+  const [trendingSummary, setTrendingSummary] = useState(null);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+
+  const categoryInsights = useMemo(() => {
+    if (insights?.categories?.length) return insights.categories;
+    if (trendingSummary?.categories?.length) return trendingSummary.categories;
+    return [];
+  }, [insights, trendingSummary]);
+
+  const tagHighlights = useMemo(() => {
+    if (insights?.tags?.length) return insights.tags;
+    if (trendingSummary?.tags?.length) return trendingSummary.tags;
+    return [];
+  }, [insights, trendingSummary]);
+
+  const relevanceInsights = useMemo(() => {
+    if (insights?.relevance?.length) return insights.relevance;
+    if (trendingSummary?.relevance?.length) return trendingSummary.relevance;
+    return [];
+  }, [insights, trendingSummary]);
+
+  const hasInsights = categoryInsights.length > 0 || tagHighlights.length > 0 || relevanceInsights.length > 0;
+
+  const computeInsights = useCallback((items = []) => {
+    if (!Array.isArray(items) || items.length === 0) return null;
+    const categoryCounts = new Map();
+    const tagCounts = new Map();
+    const relevanceCounts = new Map();
+
+    items.forEach((item) => {
+      const category = item.category || 'General';
+      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+      const relevance = item.relevance || 'Medium';
+      relevanceCounts.set(relevance, (relevanceCounts.get(relevance) || 0) + 1);
+      if (Array.isArray(item.tags)) {
+        item.tags.forEach((tag) => {
+          if (!tag) return;
+          const normalized = typeof tag === 'string' ? tag.trim() : tag;
+          if (!normalized) return;
+          tagCounts.set(normalized, (tagCounts.get(normalized) || 0) + 1);
+        });
+      }
+    });
+
+    const toList = (map, limit = 6) =>
+      Array.from(map.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([label, count]) => ({ label, count }));
+
+    return {
+      categories: toList(categoryCounts),
+      tags: toList(tagCounts, 10),
+      relevance: toList(relevanceCounts, 3),
+      totalItems: items.length
+    };
+  }, []);
+
+  const loadTrending = useCallback(async () => {
+    try {
+      setTrendingLoading(true);
+      const response = await fetch('/api/news/trending');
+      if (!response.ok) return;
+      const data = await response.json();
+      setTrendingSummary(data);
+    } catch (error) {
+      console.error('Error fetching trending topics:', error);
+    } finally {
+      setTrendingLoading(false);
+    }
+  }, []);
 
   const handleSearch = async () => {
     setLoading(true);
@@ -64,6 +137,10 @@ export default function CurrentAffairsPage() {
       if (response.ok) {
         const data = await response.json();
         setNews(data.news || []);
+        setInsights(data.trending || computeInsights(data.news));
+        if (data.trending) {
+          setTrendingSummary(data.trending);
+        }
       } else {
         const errorData = await response.json();
         console.error('Error fetching news:', errorData.error);
@@ -81,7 +158,11 @@ export default function CurrentAffairsPage() {
     if (session) {
       handleSearch();
     }
-  }, [session]);
+  }, [session, computeInsights]);
+
+  useEffect(() => {
+    loadTrending();
+  }, [loadTrending]);
 
   if (!session) {
     return (
@@ -201,14 +282,103 @@ export default function CurrentAffairsPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-6">
-            {loading ? (
-              <Card className="text-center">
-                <CardContent className="p-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-red-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Fetching latest news...</p>
+          {trendingLoading && !hasInsights ? (
+            <Card className="mb-8 border border-gray-200">
+              <CardContent className="p-6 space-y-3">
+                <SkeletonLine className="h-4 w-1/3" />
+                <SkeletonLine className="h-3 w-full" />
+                <SkeletonLine className="h-3 w-5/6" />
+                <SkeletonLine className="h-3 w-2/3" />
+              </CardContent>
+            </Card>
+          ) : hasInsights ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card className="border border-gray-200 dark:border-gray-700 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Focus mix (current search)
+                  </CardTitle>
+                  <CardDescription>
+                    Top categories identified by the AI for your filters
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {categoryInsights.slice(0, 5).map((cat) => (
+                    <div key={cat.label}>
+                      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 mb-1">
+                        <span>{cat.label}</span>
+                        <span>{cat.count} topics</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                        <div
+                          className="h-2 rounded-full bg-red-500"
+                          style={{ width: `${Math.min((cat.count / (categoryInsights[0]?.count || 1)) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
+              <Card className="border border-gray-200 dark:border-gray-700 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Trending tags & relevance
+                  </CardTitle>
+                  <CardDescription>
+                    Hot GS topics + exam weightage trends
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {tagHighlights.slice(0, 8).map((tag) => (
+                      <Badge key={tag.label} variant="outline" className="text-xs border-red-200 text-red-600">
+                        {tag.label}
+                      </Badge>
+                    ))}
+                    {tagHighlights.length === 0 && (
+                      <span className="text-sm text-gray-500">No tags yet — run a search to populate insights.</span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {relevanceInsights.map((rel) => (
+                      <div key={rel.label}>
+                        <div className="flex justify-between text-xs uppercase text-gray-500 mb-1">
+                          <span>{rel.label} relevance</span>
+                          <span>{rel.count}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                          <div
+                            className="h-2 rounded-full bg-blue-500"
+                            style={{ width: `${Math.min((rel.count / (relevanceInsights[0]?.count || 1)) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          <div className="space-y-6">
+            {loading ? (
+              <div className="space-y-4">
+                {[0, 1, 2].map((idx) => (
+                  <Card key={`news-skeleton-${idx}`} className="border-l-4 border-l-red-200">
+                    <CardContent className="p-6 space-y-3">
+                      <SkeletonLine className="h-4 w-1/5" />
+                      <SkeletonLine className="h-6 w-3/4" />
+                      <SkeletonLine className="h-3 w-full" />
+                      <SkeletonLine className="h-3 w-5/6" />
+                      <SkeletonLine className="h-3 w-2/3" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-8 w-24" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             ) : news.length > 0 ? (
               news.map((item, index) => (
                 <Card 
@@ -260,6 +430,18 @@ export default function CurrentAffairsPage() {
                       ))}
                     </div>
                   )}
+                  <div className="mt-4">
+                    <div className="flex justify-between text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                      <span>Exam focus</span>
+                      <span>{item.relevance || 'Medium'}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700">
+                      <div
+                        className="h-2 rounded-full bg-red-500"
+                        style={{ width: `${item.relevance === 'High' ? 90 : item.relevance === 'Low' ? 45 : 65}%` }}
+                      />
+                    </div>
+                  </div>
                   <div className="flex gap-3">
                     <Button
                       variant="secondary"

@@ -324,23 +324,23 @@ export default async function handler(req, res) {
     await browser.close();
     browser = null;
 
+    // Ensure pdfBuffer is a proper Buffer for validation/response
+    const buffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+
     // Validate PDF buffer
-    if (!pdfBuffer || pdfBuffer.length === 0) {
+    if (!buffer || buffer.length === 0) {
       throw new Error('Generated PDF buffer is empty');
     }
 
     // Check if it's a valid PDF (starts with %PDF)
-    const bufferStart = pdfBuffer.slice(0, 4).toString();
+    const bufferStart = buffer.slice(0, 4).toString();
     if (!bufferStart.startsWith('%PDF')) {
-      console.error('Invalid PDF buffer. First bytes:', bufferStart);
-      console.error('Buffer length:', pdfBuffer.length);
+      console.error('Invalid PDF buffer. First bytes:', buffer.slice(0, 4));
+      console.error('Buffer length:', buffer.length);
       throw new Error('Generated PDF is invalid');
     }
 
-    console.log('PDF generated successfully. Size:', pdfBuffer.length, 'bytes');
-
-    // Ensure pdfBuffer is a proper Buffer
-    const buffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+    console.log('PDF generated successfully. Size:', buffer.length, 'bytes');
 
     // Set response headers BEFORE sending
     const startDate = digest.startDate instanceof Date 
