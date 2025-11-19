@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     const { examType = 'UPSC', questionType = 'personality', count = 5, language = 'en' } = req.body;
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'perplexity';
+    const preferredProvider = preferences.provider || 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
     // Get language name for prompt
@@ -65,6 +66,7 @@ Format as JSON array:
 
     let questions;
     try {
+      // Force OpenAI usage for interview questions
       const aiResult = await callAIWithFallback(
         [{ role: 'user', content: userPrompt }],
         systemPrompt,
@@ -72,8 +74,9 @@ Format as JSON array:
         0.7,
         {
           model: preferredModel,
-          preferredProvider,
-          excludeProviders: excludedProviders
+          preferredProvider: 'openai', // Force OpenAI
+          excludeProviders: ['perplexity', 'claude'], // Exclude other providers
+          openAIModel: preferredOpenAIModel
         }
       );
       const aiResponse = aiResult?.content || '';
