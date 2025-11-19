@@ -229,7 +229,8 @@ export default async function handler(req, res) {
     const { period = 'daily', startDate, endDate, categories, language = 'en' } = req.body;
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'perplexity';
+    const preferredProvider = preferences.provider || 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
     await connectToDatabase();
@@ -263,24 +264,31 @@ export default async function handler(req, res) {
     
     const systemPrompt = `You are an expert current affairs analyst specializing in competitive exam preparation (UPSC, PCS, SSC). Your task is to create comprehensive current affairs digests that are:
 
-1. **Exam-Relevant**: Focus on topics likely to appear in competitive exams
-2. **Well-Organized**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
-3. **Concise**: Clear summaries with key points
-4. **Actionable**: Include exam relevance indicators
+CRITICAL REQUIREMENTS:
+1. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify.
+2. **EXAM-RELEVANT**: Focus exclusively on topics likely to appear in competitive exams. Every item must have clear exam relevance.
+3. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+4. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
+5. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
+6. **CONCISE**: Clear summaries with key points
+7. **ACTIONABLE**: Include exam relevance indicators and subject tags
 
 **Categories to cover:**
-- National Affairs
-- International Affairs
-- Science & Technology
-- Environment & Ecology
-- Economy & Finance
-- Sports & Culture
-- Awards & Honours
-- Government Schemes
-- Judicial Developments
-- Defense & Security
+- National Affairs (tag: Polity/Governance, GS-2)
+- International Affairs (tag: International Relations, GS-2)
+- Science & Technology (tag: Science & Tech, GS-3)
+- Environment & Ecology (tag: Environment, GS-3)
+- Economy & Finance (tag: Economics, GS-3)
+- Sports & Culture (tag: Culture, GS-1)
+- Awards & Honours (tag: Current Affairs, Prelims)
+- Government Schemes (tag: Governance/Policy, GS-2/GS-3)
+- Judicial Developments (tag: Polity, GS-2)
+- Defense & Security (tag: Security, GS-3)
 
-**IMPORTANT**: Generate all content in English. The system will handle translation to other languages using professional translation services.`;
+**IMPORTANT**: 
+- Generate all content in English. The system will handle translation to other languages using professional translation services.
+- Every news item MUST include: subject tag, GS paper relevance, and source information when available.
+- If you're uncertain about any fact, clearly state it or omit it rather than guessing.`;
 
     const userPrompt = `Create a ${period} current affairs digest for the period from ${start.toDateString()} to ${end.toDateString()} in English.
 
@@ -332,7 +340,8 @@ Format as JSON:
         {
           model: preferredModel,
           preferredProvider,
-          excludeProviders: excludedProviders
+          excludeProviders: excludedProviders,
+          openAIModel: preferredOpenAIModel
         }
       );
       const aiResponse = aiResult?.content || '';

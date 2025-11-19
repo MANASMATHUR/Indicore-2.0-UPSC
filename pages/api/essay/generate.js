@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/mongodb';
 import Essay from '@/models/Essay';
 import axios from 'axios';
 import { translateText } from '@/pages/api/ai/translate';
+import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -49,9 +50,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // Generate new essay using Perplexity
-    if (!process.env.PERPLEXITY_API_KEY) {
-      return res.status(500).json({ error: 'Perplexity API key not configured' });
+    // Generate new essay using OpenAI
+    const openAIKey = getOpenAIKey();
+    if (!openAIKey) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
 
     const systemPrompt = `You are Indicore, an AI-powered essay writing specialist for competitive exams like UPSC, PCS, and SSC. You excel at writing comprehensive, well-structured essays that are:
@@ -87,34 +89,33 @@ export default async function handler(req, res) {
 
 Please provide the complete essay text only, without any additional explanations or metadata.`;
 
-    const response = await axios.post(
-      'https://api.perplexity.ai/chat/completions',
-      {
-        model: 'sonar-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7,
-        top_p: 0.9,
-        stream: false
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: 60000
-      }
-    );
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
 
-    if (!response.data?.choices?.[0]?.message?.content) {
-      throw new Error('Invalid response format from Perplexity API');
+    let essayText = '';
+
+    try {
+      // Use OpenAI for essay generation
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+      essayText = await callOpenAIAPI(
+        messages,
+        openAIModel,
+        undefined, // No token limit for OpenAI
+        0.7
+      );
+      essayText = essayText?.trim() || '';
+    } catch (error) {
+      console.error('OpenAI API error for essay generation:', error.message);
+      throw error;
     }
 
-    let essayContent = response.data.choices[0].message.content.trim();
+    if (!essayText || essayText.trim().length === 0) {
+      throw new Error('AI provider returned an empty response');
+    }
+
+    let essayContent = essayText.trim();
     
     // Translate to target language if not English (using Azure Translator)
     if (language && language !== 'en') {
@@ -141,7 +142,7 @@ Please provide the complete essay text only, without any additional explanations
       wordCount: wordCount,
       language: language,
       essayType: 'general',
-      generatedBy: 'perplexity',
+      generatedBy: 'openai',
       generatedAt: new Date(),
       lastAccessedAt: new Date(),
       accessCount: 1
@@ -189,11 +190,11 @@ Please provide the complete essay text only, without any additional explanations
       let errorMessage = 'An error occurred while generating the essay.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }

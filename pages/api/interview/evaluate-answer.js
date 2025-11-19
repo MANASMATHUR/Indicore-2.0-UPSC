@@ -21,7 +21,8 @@ export default async function handler(req, res) {
 
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'perplexity';
+    const preferredProvider = preferences.provider || 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
     const systemPrompt = `You are an expert interview evaluator for competitive exams (UPSC, PCS, SSC). Your task is to evaluate interview answers based on:
@@ -50,6 +51,7 @@ Provide evaluation in JSON format:
 
 Score should be out of 10.`;
 
+    // Force OpenAI usage for interview evaluation
     const aiResult = await callAIWithFallback(
       [{ role: 'user', content: userPrompt }],
       systemPrompt,
@@ -57,8 +59,9 @@ Score should be out of 10.`;
       0.6,
       {
         model: preferredModel,
-        preferredProvider,
-        excludeProviders: excludedProviders
+        preferredProvider: 'openai', // Force OpenAI
+        excludeProviders: ['perplexity', 'claude'], // Exclude other providers
+        openAIModel: preferredOpenAIModel
       }
     );
     const aiResponse = aiResult?.content || '';

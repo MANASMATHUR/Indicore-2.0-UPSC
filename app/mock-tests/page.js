@@ -539,7 +539,17 @@ export default function MockTestsPage() {
                                 name={`question-${index}`}
                                 value={option}
                                 checked={answers[index] === option}
-                                onChange={() => setAnswers(prev => ({ ...prev, [index]: option }))}
+                                onChange={() => {
+                                  setAnswers(prev => {
+                                    // Allow unselecting by clicking the same option again
+                                    if (prev[index] === option) {
+                                      const updated = { ...prev };
+                                      delete updated[index];
+                                      return updated;
+                                    }
+                                    return { ...prev, [index]: option };
+                                  });
+                                }}
                                 className="mr-3 w-5 h-5 text-red-600"
                               />
                               <span className="text-gray-700 dark:text-gray-300 flex-1">{option}</span>
@@ -709,6 +719,114 @@ export default function MockTestsPage() {
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Question-wise review with correct answers */}
+            {currentTest && testResult.answers && (
+              <Card className="border-2 border-red-100 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-red-600" />
+                    Question-wise Review
+                  </CardTitle>
+                  <CardDescription>
+                    Your answer vs correct answer for each question. Use this to identify exact gaps.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {currentTest.questions.map((question, index) => {
+                    const answerDetail = testResult.answers[index];
+                    const isSubjective = question.questionType === 'subjective';
+                    const userAnswer = answerDetail?.selectedAnswer || answerDetail?.textAnswer || null;
+                    const correctAnswer = isSubjective ? null : question.correctAnswer;
+                    const isCorrect = isSubjective ? null : answerDetail?.isCorrect;
+
+                    return (
+                      <div
+                        key={index}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          isSubjective
+                            ? 'border-blue-100 bg-blue-50/40'
+                            : isCorrect === true
+                            ? 'border-green-200 bg-green-50/40'
+                            : isCorrect === false
+                            ? 'border-red-200 bg-red-50/40'
+                            : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">Q{index + 1}</Badge>
+                            {question.subject && (
+                              <Badge variant="secondary" className="text-xs">
+                                {question.subject}
+                              </Badge>
+                            )}
+                          </div>
+                          {!isSubjective && (
+                            <div className="flex items-center gap-2 text-sm">
+                              {isCorrect === true && (
+                                <span className="flex items-center text-green-600 font-semibold">
+                                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                                  Correct
+                                </span>
+                              )}
+                              {isCorrect === false && (
+                                <span className="flex items-center text-red-600 font-semibold">
+                                  <XCircle className="w-4 h-4 mr-1" />
+                                  Wrong
+                                </span>
+                              )}
+                              {(isCorrect === null || isCorrect === undefined) && (
+                                <span className="text-gray-500 text-xs">Not auto-evaluated</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="font-semibold text-gray-900 mb-2">
+                          {question.question}
+                        </p>
+
+                        <div className="space-y-1 text-sm">
+                          <p className="text-gray-700">
+                            <span className="font-semibold">Your answer:</span>{' '}
+                            {userAnswer ? (
+                              <span
+                                className={
+                                  isSubjective
+                                    ? 'whitespace-pre-wrap'
+                                    : isCorrect
+                                    ? 'text-green-700 font-medium'
+                                    : 'text-red-700 font-medium'
+                                }
+                              >
+                                {userAnswer}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500 italic">Not attempted</span>
+                            )}
+                          </p>
+                          {!isSubjective && (
+                            <p className="text-gray-700">
+                              <span className="font-semibold">Correct answer:</span>{' '}
+                              <span className="text-green-700 font-medium">
+                                {correctAnswer || 'Not available'}
+                              </span>
+                            </p>
+                          )}
+                          {question.explanation && (
+                            <p className="text-gray-600 text-xs mt-1">
+                              <span className="font-semibold">Explanation:</span>{' '}
+                              {question.explanation}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
             )}
