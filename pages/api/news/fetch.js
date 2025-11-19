@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
+import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -20,8 +21,9 @@ export default async function handler(req, res) {
       searchQuery = '' 
     } = req.body;
 
-    if (!process.env.PERPLEXITY_API_KEY) {
-      return res.status(500).json({ error: 'Perplexity API key not configured' });
+    const openAIKey = getOpenAIKey();
+    if (!openAIKey) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
 
     let query = `Get latest current affairs and news relevant for ${examType} exam preparation`;
@@ -59,6 +61,11 @@ Format the response as a JSON array of news items, where each item has: title, s
 
     const systemPrompt = `You are Indicore, an AI assistant specialized in providing current affairs and news relevant to competitive exams like UPSC, PCS, and SSC. 
 
+CRITICAL REQUIREMENTS:
+1. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify. If uncertain, state it clearly or omit it.
+2. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
+3. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+
 **EXAM-FOCUSED REQUIREMENTS:**
 1. **UPSC Relevance**: Focus on topics that appear in GS papers (GS-1, GS-2, GS-3, GS-4), Prelims, and Essay papers. Prioritize:
    - Constitutional provisions, amendments, and judicial interpretations
@@ -80,42 +87,40 @@ Format the response as a JSON array of news items, where each item has: title, s
 - Mention relevant topics from syllabus (e.g., "Relevant for GS-2: Governance, Polity")
 - Avoid generic news; focus on what examiners ask about
 - Include recent developments (last 7-90 days based on dateRange parameter)
+- Every news item MUST include: subject tag, GS paper relevance, and source information when available
 
 **Format Requirements:**
 - Format responses as valid JSON arrays when requested
-- Each news item must have: title, summary, category, date, relevance (High/Medium/Low), keyPoints (array), and tags (array)
-- Tags should include exam-specific tags like "GS-2", "Prelims", "Governance", etc.
+- Each news item must have: title, summary, category, date, relevance (High/Medium/Low), keyPoints (array), tags (array), and source
+- Tags should include exam-specific tags like "GS-2", "Prelims", "Governance", etc., and subject tags like "Polity", "Economics", etc.
 
-Always prioritize accuracy, exam relevance, and actionable insights for competitive exam preparation.`;
+Always prioritize accuracy, exam relevance, verifiable information, and actionable insights for competitive exam preparation.`;
 
-    const response = await axios.post(
-      'https://api.perplexity.ai/chat/completions',
-      {
-        model: 'sonar-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: query }
-        ],
-        max_tokens: 4000,
-        temperature: 0.7,
-        top_p: 0.9,
-        stream: false
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: 60000
-      }
-    );
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: query }
+    ];
 
-    if (!response.data?.choices?.[0]?.message?.content) {
-      throw new Error('Invalid response format from Perplexity API');
+    let content = '';
+
+    try {
+      // Use OpenAI for news fetching
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+      content = await callOpenAIAPI(
+        messages,
+        openAIModel,
+        undefined, // No token limit for OpenAI
+        0.7
+      );
+      content = content?.trim() || '';
+    } catch (error) {
+      console.error('OpenAI API error for news fetch:', error.message);
+      throw error;
     }
 
-    const content = response.data.choices[0].message.content.trim();
+    if (!content) {
+      throw new Error('AI provider returned an empty response');
+    }
     
     let newsItems = [];
     try {
@@ -142,7 +147,7 @@ Always prioritize accuracy, exam relevance, and actionable insights for competit
       keyPoints: Array.isArray(item.keyPoints) ? item.keyPoints : [],
       tags: Array.isArray(item.tags) ? item.tags : [],
       exam: examType,
-      source: item.source || 'Perplexity',
+        source: item.source || 'OpenAI',
       ...item
     }));
 
@@ -164,11 +169,11 @@ Always prioritize accuracy, exam relevance, and actionable insights for competit
       let errorMessage = 'An error occurred while fetching news.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your Perplexity API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your Perplexity account to continue using this feature.';
+        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }
