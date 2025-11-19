@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   try {
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'perplexity';
+    const preferredProvider = preferences.provider || 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
     const { subject, topic, type = 'formula' } = req.body;
@@ -141,7 +142,8 @@ Format as JSON:
         {
           model: preferredModel,
           preferredProvider,
-          excludeProviders: excludedProviders
+          excludeProviders: excludedProviders,
+          openAIModel: preferredOpenAIModel
         }
       );
 

@@ -86,11 +86,20 @@ export default async function handler(req, res) {
     
     const systemPrompt = `You are an expert test creator for ${examType} competitive exams. Your task is to create high-quality mock test questions that:
 
+CRITICAL REQUIREMENTS:
+1. **EXAM-RELEVANT**: Every question MUST be directly relevant to ${examType} syllabus and exam pattern. Questions should test knowledge that actually appears in ${examType} exams.
+2. **PRECISE & CURRENT**: Questions must be precise, unambiguous, and aligned with the LATEST ${examType} syllabus (as of 2024-2025). Include recent developments, current affairs, and updated policies where relevant.
+3. **SYLLABUS ALIGNMENT**: Strictly follow the official ${examType} syllabus. For UPSC: GS-1, GS-2, GS-3, GS-4, Prelims pattern. For PCS: State-specific syllabus. For SSC: General awareness and aptitude.
+4. **VERIFIABLE INFORMATION**: ONLY use verifiable facts, dates, and information. NEVER make up facts or statistics.
+5. **PROPER SUBJECT TAGGING**: Tag each question with correct subject (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS paper (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+
+QUALITY STANDARDS:
 1. Match ${examType} exam pattern and difficulty level exactly
 2. Cover ${examType}-specific topics and syllabus comprehensively
 3. Include proper explanations aligned with ${examType} standards
 4. Follow ${examType} marking scheme and negative marking rules
 5. Test conceptual understanding as per ${examType} requirements
+6. Questions should be clear, unambiguous, and free from errors
 
 **${examType} Exam-Specific Requirements:**
 ${isMains ? `
@@ -118,7 +127,8 @@ ${isMains ? `
 
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'perplexity';
+    const preferredProvider = preferences.provider || 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
     const userPrompt = `Create a mock test for ${examType} ${paperType || 'Prelims'}${subject ? ` - ${subject}` : ''} in English.
@@ -193,10 +203,27 @@ ${examType === 'SSC' ? '- Focus on reasoning, quantitative aptitude, general awa
 `}
 
 Generate exactly ${totalQuestions} questions. Ensure questions are:
-1. Appropriate for ${examType} exam level and difficulty
-2. Covering ${examType}-specific syllabus and topics
-3. Following ${examType} question pattern and style
-4. Valid and well-structured with clear answers`;
+1. **EXAM-RELEVANT**: Directly aligned with ${examType} syllabus and exam pattern
+2. **PRECISE & CURRENT**: Based on latest syllabus (2024-2025), recent developments, and current affairs
+3. **VERIFIABLE**: Only use factual, verifiable information - no made-up facts
+4. **PROPERLY TAGGED**: Each question must have correct subject and GS paper tags
+5. Appropriate for ${examType} exam level and difficulty
+6. Covering ${examType}-specific syllabus and topics comprehensively
+7. Following ${examType} question pattern and style exactly
+8. Valid and well-structured with clear, detailed explanations
+
+**For MCQ Questions (Prelims):**
+- Each question must have exactly 4 options (A, B, C, D)
+- Options should be plausible and test conceptual understanding
+- Correct answer must be unambiguous
+- Explanation should be detailed, explaining why the correct answer is right and why others are wrong
+- Include relevant facts, dates, and context in explanations
+
+**For Subjective Questions (Mains):**
+- Questions should test analytical and writing skills
+- Should require structured answers with multiple dimensions
+- Explanation should list key points that should be covered in the answer
+- Include expected answer framework (Introduction, Main Body, Conclusion)`;
 
     // Fetch PYQ questions if requested
     let pyqQuestions = [];
@@ -290,7 +317,8 @@ Format as JSON array:
               {
                 model: preferredModel,
                 preferredProvider,
-                excludeProviders: excludedProviders
+                excludeProviders: excludedProviders,
+                openAIModel: preferredOpenAIModel
               }
             );
 
@@ -355,7 +383,8 @@ Format as JSON array:
       {
         model: preferredModel,
         preferredProvider,
-        excludeProviders: excludedProviders
+        excludeProviders: excludedProviders,
+        openAIModel: preferredOpenAIModel
       }
     );
     const aiResponse = aiResult?.content || '';
