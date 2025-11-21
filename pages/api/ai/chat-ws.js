@@ -10,7 +10,7 @@ import User from '@/models/User';
 import { Server } from 'socket.io';
 import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
-import { callAIWithFallback, runClaudeFallbackForPerplexity } from '@/lib/ai-providers';
+import { callAIWithFallback } from '@/lib/ai-providers';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 
 let io = null;
@@ -393,7 +393,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                   fallbackTokenBudget,
                   0.5,
                   {
-                    preferredProvider: 'claude',
+                    preferredProvider: 'perplexity',
                     excludeProviders: ['openai'],
                     model: selectedModel,
                     useLongContextModel: fallbackTokenBudget >= 12000,
@@ -492,20 +492,25 @@ Write like you're having a natural conversation with a knowledgeable friend who 
 
               try {
                 const fallbackMaxTokens = tokenBudget || 16000;
-                const useLongContextModel = fallbackMaxTokens >= 12000;
-                const fallbackContent = await runClaudeFallbackForPerplexity(apiError, {
-                  messages: messagesForAPI,
-                  model: selectedModel,
-                  maxTokens: fallbackMaxTokens,
-                  temperature: 0.5,
-                  useLongContextModel
-                });
+                const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
+                const fallbackResult = await callAIWithFallback(
+                  conversationMessagesForAI,
+                  finalSystemContent,
+                  Math.min(fallbackMaxTokens, 8000),
+                  0.5,
+                  {
+                    preferredProvider: 'perplexity',
+                    model: selectedModel,
+                    openAIModel: resolvedOpenAIModel
+                  }
+                );
 
-                if (fallbackContent && fallbackContent.trim().length > 0) {
+                const fallbackContent = fallbackResult?.content?.trim();
+                if (fallbackContent && fallbackContent.length > 0) {
                   let cleanedResponse = cleanAIResponse(fallbackContent);
-                    let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fallbackContent.trim();
+                  let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fallbackContent;
 
-                  if (validResponse && validResponse.length > 0) {
+                  if (validResponse && validResponse.trim().length > 0) {
                     responseCache.set(cacheKey, {
                       response: validResponse,
                       timestamp: Date.now()
@@ -525,7 +530,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                   }
                 }
               } catch (fallbackError) {
-                console.error('Claude fallback after Perplexity 400 failed:', fallbackError.message);
+                console.error('Fallback after Perplexity 400 failed:', fallbackError.message);
               }
             } else {
               console.error('Perplexity API error (WS):', apiError.response?.status, apiError.message);

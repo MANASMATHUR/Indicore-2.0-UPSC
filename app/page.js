@@ -29,15 +29,20 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   const handleGetStarted = () => {
-    if (session) {
-      router.push('/chat');
-    } else {
-      router.push('/chat');
+    if (status === 'loading') {
+      return;
     }
+
+    if (status === 'authenticated' && session) {
+      router.push('/chat');
+      return;
+    }
+
+    router.push(`/login?redirect=${encodeURIComponent('/chat')}`);
   };
 
   return (
@@ -49,19 +54,14 @@ export default function Home() {
               <Logo variant="light" showText={true} size="default" />
             </Link>
             <div className="flex items-center space-x-4">
-              {session ? (
-                <Link href="/chat">
-                  <Button variant="primary" size="md">
-                    Go to Chat
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/chat">
-                  <Button variant="primary" size="md">
-                    Get Started
-                  </Button>
-                </Link>
-              )}
+              <Button 
+                variant="primary" 
+                size="md" 
+                onClick={handleGetStarted}
+                disabled={status === 'loading'}
+              >
+                {status === 'authenticated' ? 'Go to Chat' : 'Get Started'}
+              </Button>
             </div>
           </div>
         </div>
@@ -88,6 +88,7 @@ export default function Home() {
                 variant="primary" 
                 size="lg" 
                 onClick={handleGetStarted}
+                disabled={status === 'loading'}
                 className="text-lg px-8 py-6"
               >
                 Start Preparing Now

@@ -761,8 +761,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           Math.min(maxTokens, 8000),
           pyqPrompt ? 0.2 : 0.7,
           {
-            preferredProvider: 'claude',
-            excludeProviders: ['perplexity'],
+            preferredProvider: 'perplexity',
             model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
             useLongContextModel: true,
             openAIModel: resolvedOpenAIModel
@@ -915,7 +914,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             fallbackMaxTokens,
             pyqPrompt ? 0.2 : 0.7,
             {
-              preferredProvider: 'claude',
+              preferredProvider: 'perplexity',
               excludeProviders: ['openai'],
               model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
               useLongContextModel: requiresLargeContextProvider,
@@ -1025,7 +1024,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       }
       
       if (apiError.response?.status === 400 && !requiresLargeContextProvider) {
-        console.log('Falling back to Claude due to Perplexity 400 error');
+        console.log('Retrying with Perplexity fallback due to 400 error');
         try {
           const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
           const fallbackMaxTokens = maxTokens ? Math.min(maxTokens, 8000) : 16000;
@@ -1035,8 +1034,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             fallbackMaxTokens,
             pyqPrompt ? 0.2 : 0.7,
             {
-              preferredProvider: 'claude',
-              excludeProviders: ['perplexity'],
+              preferredProvider: 'perplexity',
               model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
                 useLongContextModel: requiresLargeContextProvider,
                 openAIModel: resolvedOpenAIModel
@@ -1069,7 +1067,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             }
           }
         } catch (fallbackError) {
-          console.error('Claude fallback also failed:', fallbackError.message);
+          console.error('Perplexity fallback also failed:', fallbackError.message);
         }
       }
       

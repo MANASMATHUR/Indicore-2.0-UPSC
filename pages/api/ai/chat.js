@@ -757,7 +757,7 @@ Requirements:
     if (requiresLargeContextProvider && !useOpenAI) {
       providerOptions.excludeProviders = ['perplexity'];
     } else if (useOpenAI) {
-      providerOptions.excludeProviders = ['perplexity', 'claude'];
+      providerOptions.excludeProviders = ['perplexity'];
     }
 
     const aiResult = await callAIWithFallback(

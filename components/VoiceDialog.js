@@ -3,182 +3,121 @@
 import { useState, useEffect, useRef } from 'react';
 import errorHandler from '@/lib/errorHandler';
 import { validateInput } from '@/lib/validation';
-import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingStates';
+import { useLoadingState, StatusIndicator } from '@/lib/loadingStates';
+import azureSpeechRecognition from '@/lib/azureSpeechRecognition';
 
 export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [recognitionError, setRecognitionError] = useState('');
-  const recognitionRef = useRef(null);
-  const animationRef = useRef(null);
-  const shouldKeepListeningRef = useRef(false);
+  const [isAzureReady, setIsAzureReady] = useState(false);
+  const [recognitionProvider, setRecognitionProvider] = useState('browser');
   
   const voiceLoading = useLoadingState();
   const processingLoading = useLoadingState();
+  const displayedTranscript = interimTranscript
+    ? `${transcript}${transcript ? ' ' : ''}[interim]${interimTranscript}`
+    : transcript;
 
   useEffect(() => {
-    if (isOpen) {
-      // Check browser support
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (!SpeechRecognition) {
-        setRecognitionError('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
-        return;
-      }
-
-      // Check if microphone is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setRecognitionError('Microphone access not available. Please use a modern browser with microphone support.');
-        return;
-      }
-
-      // Initialize recognition
+    let isMounted = true;
+    const ensureAzure = async () => {
       try {
-        recognitionRef.current = new SpeechRecognition();
-        const recognition = recognitionRef.current;
-        
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = getLanguageCode(language);
-        recognition.maxAlternatives = 3;
-        
-        recognition.onstart = () => {
-          setIsListening(true);
-          setRecognitionError('');
-          startAudioLevelAnimation();
-          shouldKeepListeningRef.current = true;
-        };
-
-        recognition.onresult = (event) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            const transcriptPart = result[0].transcript;
-            
-            if (result.isFinal) {
-              finalTranscript += transcriptPart + ' ';
-            } else {
-              interimTranscript += transcriptPart;
-            }
-          }
-
-          setTranscript(prev => {
-            const cleanPrev = prev.replace(/\s*\[interim\].*$/g, '').trim();
-            const newFinal = cleanPrev + (cleanPrev ? ' ' : '') + finalTranscript.trim();
-            return newFinal + (interimTranscript ? ` [interim]${interimTranscript}` : '');
-          });
-        };
-
-        recognition.onerror = (event) => {
-          setIsListening(false);
-          stopAudioLevelAnimation();
-          
-          // Stop media stream if it exists
-          if (recognition._mediaStream) {
-            recognition._mediaStream.getTracks().forEach(track => track.stop());
-            recognition._mediaStream = null;
-          }
-          
-          switch (event.error) {
-            case 'no-speech':
-              setRecognitionError('No speech detected. Please try speaking again.');
-              break;
-            case 'audio-capture':
-              setRecognitionError('Microphone not accessible. Please check your microphone permissions and ensure it\'s not being used by another application.');
-              break;
-            case 'not-allowed':
-              setRecognitionError('Microphone access denied. Please allow microphone access in your browser settings and try again.');
-              break;
-            case 'network':
-              setRecognitionError('Network error. Please check your internet connection and try again.');
-              break;
-            case 'aborted':
-              // Don't show error for manual aborts
-              break;
-            case 'language-not-supported':
-              setRecognitionError(`Language "${getLanguageCode(language)}" not supported for speech recognition. Please try a different language.`);
-              break;
-            default:
-              setRecognitionError(`Speech recognition error: ${event.error}. Please try again.`);
-          }
-        };
-
-        recognition.onend = () => {
-          // If user wants to keep listening, restart automatically
-          // (Web Speech API sometimes stops after silence)
-          if (shouldKeepListeningRef.current && recognition.state === 'stopped') {
-            try {
-              // Small delay before restarting to avoid rapid restarts
-              setTimeout(() => {
-                if (shouldKeepListeningRef.current && recognition.state === 'stopped') {
-                  recognition.start();
-                }
-              }, 100);
-            } catch (error) {
-              // If restart fails, stop listening
-              setIsListening(false);
-              stopAudioLevelAnimation();
-              shouldKeepListeningRef.current = false;
-            }
-          } else {
-            setIsListening(false);
-            stopAudioLevelAnimation();
-            
-            // Stop media stream if it exists
-            if (recognition._mediaStream) {
-              recognition._mediaStream.getTracks().forEach(track => track.stop());
-              recognition._mediaStream = null;
-            }
-          }
-        };
-
-        recognition.onnomatch = () => {
-          // No speech was recognized - this is normal, don't show error
-        };
-
-      } catch (error) {
-        console.error('Error initializing speech recognition:', error);
-        setRecognitionError('Failed to initialize speech recognition. Please refresh the page and try again.');
-      }
-    } else {
-      // Cleanup when dialog closes
-      if (recognitionRef.current) {
-        try {
-          if (recognitionRef.current.state !== 'stopped') {
-            recognitionRef.current.stop();
-          }
-          recognitionRef.current.abort();
-        } catch (error) {
-          console.error('Error cleaning up recognition:', error);
+        const available = await azureSpeechRecognition.initialize();
+        if (isMounted) {
+          setIsAzureReady(available);
+          setRecognitionProvider(available ? 'azure' : 'browser');
         }
-        recognitionRef.current = null;
+      } catch {
+        if (isMounted) {
+          setIsAzureReady(false);
+          setRecognitionProvider('browser');
+        }
       }
-      setIsListening(false);
-      stopAudioLevelAnimation();
-      setTranscript('');
-      setRecognitionError('');
-      shouldKeepListeningRef.current = false;
-    }
-  }, [isOpen, language]);
-
-  const startAudioLevelAnimation = () => {
-    const animate = () => {
-      setAudioLevel(Math.random() * 100);
-      animationRef.current = requestAnimationFrame(animate);
     };
-    animate();
-  };
+    ensureAzure();
+    return () => {
+      isMounted = false;
+      azureSpeechRecognition.cleanup();
+    };
+  }, []);
 
-  const stopAudioLevelAnimation = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
+  useEffect(() => {
+    const handleTranscriptUpdate = (finalText = '', interimText = '') => {
+      setTranscript(finalText.trim());
+      setInterimTranscript(interimText);
+    };
+
+    const handleError = (error) => {
+      const message = error?.message || 'Speech recognition error. Please try again.';
+      setRecognitionError(message);
+    };
+
+    const handleListeningStateChange = (listening) => {
+      setIsListening(listening);
+      if (!listening) {
+        setAudioLevel(0);
+      }
+    };
+
+    azureSpeechRecognition.onTranscriptUpdate = handleTranscriptUpdate;
+    azureSpeechRecognition.onError = handleError;
+    azureSpeechRecognition.onListeningStateChange = handleListeningStateChange;
+
+    return () => {
+      if (azureSpeechRecognition.onTranscriptUpdate === handleTranscriptUpdate) {
+        azureSpeechRecognition.onTranscriptUpdate = null;
+      }
+      if (azureSpeechRecognition.onError === handleError) {
+        azureSpeechRecognition.onError = null;
+      }
+      if (azureSpeechRecognition.onListeningStateChange === handleListeningStateChange) {
+        azureSpeechRecognition.onListeningStateChange = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isListening) {
       setAudioLevel(0);
+      return;
     }
-  };
+
+    let animationFrame;
+    const updateLevel = () => {
+      setAudioLevel(azureSpeechRecognition.getAudioLevel());
+      animationFrame = requestAnimationFrame(updateLevel);
+    };
+
+    updateLevel();
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isListening]);
+
+  const voiceLoadingResetRef = useRef(voiceLoading.reset);
+
+  useEffect(() => {
+    voiceLoadingResetRef.current = voiceLoading.reset;
+  }, [voiceLoading.reset]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      azureSpeechRecognition.stopRecognition();
+      setIsListening(false);
+      setTranscript('');
+      setInterimTranscript('');
+      setRecognitionError('');
+      setAudioLevel(0);
+      voiceLoadingResetRef.current?.();
+    }
+  }, [isOpen]);
 
   const getLanguageCode = (lang) => {
     const languageMap = {
@@ -200,78 +139,44 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   };
 
   const startListening = async () => {
-    if (!recognitionRef.current) {
-      setRecognitionError('Speech recognition not initialized. Please close and reopen the dialog.');
+    if (isListening) {
+      setRecognitionError('Speech recognition is already running.');
       return;
     }
 
     try {
       setTranscript('');
+      setInterimTranscript('');
       setRecognitionError('');
-      
-      // Check browser support
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setRecognitionError('Microphone access not available. Please use a modern browser.');
-        return;
-      }
+      voiceLoading.setLoading('Initializing microphone...', 10);
 
-      // Request microphone permission first
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          } 
-        });
-        
-        // Store stream reference for cleanup
-        if (recognitionRef.current) {
-          recognitionRef.current._mediaStream = stream;
-        }
-      } catch (error) {
-        console.error('Microphone permission error:', error);
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          setRecognitionError('Microphone access denied. Please allow microphone access in your browser settings and try again.');
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          setRecognitionError('No microphone found. Please connect a microphone and try again.');
-        } else {
-          setRecognitionError(`Microphone error: ${error.message || 'Unknown error'}. Please check your microphone and try again.`);
-        }
-        return;
-      }
-      
-      // Start recognition
-      if (recognitionRef.current.state === 'idle' || recognitionRef.current.state === 'stopped') {
-        recognitionRef.current.start();
-      } else {
-        setRecognitionError('Speech recognition is already running.');
-      }
+      await azureSpeechRecognition.startRecognition(language);
+
+      const provider = azureSpeechRecognition.isAzureAvailable ? 'azure' : 'browser';
+      setRecognitionProvider(provider);
+      voiceLoading.setSuccess(
+        provider === 'azure'
+          ? 'Azure speech recognition active'
+          : 'Browser speech recognition active'
+      );
     } catch (error) {
       console.error('Error starting speech recognition:', error);
-      setRecognitionError(`Failed to start speech recognition: ${error.message || 'Unknown error'}. Please try again.`);
+      const message = error?.message || 'Failed to start speech recognition. Please try again.';
+      setRecognitionError(message);
+      voiceLoading.setError(message);
     }
   };
 
   const stopListening = () => {
-    shouldKeepListeningRef.current = false; // Signal that user wants to stop
-    
-    if (recognitionRef.current) {
-      try {
-        if (recognitionRef.current.state !== 'stopped') {
-          recognitionRef.current.stop();
-        }
-        setIsListening(false);
-        stopAudioLevelAnimation();
-        
-        // Stop media stream if it exists
-        if (recognitionRef.current._mediaStream) {
-          recognitionRef.current._mediaStream.getTracks().forEach(track => track.stop());
-          recognitionRef.current._mediaStream = null;
-        }
-      } catch (error) {
-        console.error('Error stopping speech recognition:', error);
-      }
+    try {
+      azureSpeechRecognition.stopRecognition();
+      voiceLoading.setSuccess('Voice capture stopped');
+    } catch (error) {
+      console.error('Error stopping speech recognition:', error);
+    } finally {
+      setIsListening(false);
+      setInterimTranscript('');
+      setAudioLevel(0);
     }
   };
 
@@ -280,7 +185,7 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
 
     try {
       // Clean transcript to remove interim results
-      const cleanTranscript = transcript.replace(/\s*\[interim\].*$/g, '').trim();
+      const cleanTranscript = transcript.trim();
       
       if (!cleanTranscript) {
         setRecognitionError('No final transcript available. Please try speaking again.');
@@ -307,6 +212,7 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
       processingLoading.setSuccess('Voice message sent');
       
       setTranscript('');
+      setInterimTranscript('');
       onClose();
       
     } catch (err) {
@@ -331,44 +237,12 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
   };
 
   const handleClose = () => {
-    shouldKeepListeningRef.current = false; // Signal that user wants to stop
-    
     stopListening();
     setTranscript('');
+    setInterimTranscript('');
     setRecognitionError('');
-    
-    if (recognitionRef.current) {
-      try {
-        if (recognitionRef.current.state !== 'stopped') {
-          recognitionRef.current.stop();
-        }
-        recognitionRef.current.abort();
-        
-        // Stop media stream if it exists
-        if (recognitionRef.current._mediaStream) {
-          recognitionRef.current._mediaStream.getTracks().forEach(track => track.stop());
-          recognitionRef.current._mediaStream = null;
-        }
-      } catch (error) {
-        console.error('Error aborting recognition:', error);
-      }
-      recognitionRef.current = null;
-    }
-    
     onClose();
   };
-
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (error) {
-          console.error('Error cleaning up recognition:', error);
-        }
-      }
-    };
-  }, []);
 
   if (!isOpen) return null;
 
@@ -448,7 +322,7 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
 
         <div className="w-full mb-6">
           <textarea
-            value={transcript}
+            value={displayedTranscript}
             placeholder="Your speech will appear here..."
             className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 min-h-[100px] resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
             readOnly
@@ -528,6 +402,10 @@ export default function VoiceDialog({ isOpen, onClose, onSendMessage, language }
           </div>
           <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
             Language: {getLanguageCode(language).toUpperCase()}
+          </span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
+            Engine: {recognitionProvider === 'azure' ? 'Azure Speech-to-Text' : 'Browser Speech Recognition'}
+            {!isAzureReady && recognitionProvider !== 'azure' ? ' (Azure unavailable)' : ''}
           </span>
         </div>
       </div>

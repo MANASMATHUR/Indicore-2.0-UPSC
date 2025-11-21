@@ -16,7 +16,8 @@ import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference, translateText } from '@/lib/translationUtils';
 
 export default function InterviewPrepPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [examType, setExamType] = useState('UPSC');
   const [questionType, setQuestionType] = useState('personality');
   const [questions, setQuestions] = useState([]);
@@ -258,19 +259,20 @@ export default function InterviewPrepPage() {
     }
   };
 
-  const router = useRouter();
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      const currentPath =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/interview-prep';
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    }
+  }, [status, session, router]);
 
-  if (!session) {
+  if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center px-4">
-        <Card className="p-6 max-w-md text-center border-2 border-red-100">
-          <MessageSquare className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-          <p className="text-gray-600 mb-6">Please login to access Interview Preparation.</p>
-          <Button variant="primary" onClick={() => router.push('/chat')}>
-            Go to Login
-          </Button>
-        </Card>
+        <LoadingSpinner message="Redirecting you to login..." />
       </div>
     );
   }

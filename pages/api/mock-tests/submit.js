@@ -28,6 +28,19 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Test not found' });
     }
 
+    const answersArray = Array.isArray(answers) ? answers : [];
+    const answersMap = new Map();
+    answersArray.forEach((answer, idx) => {
+      const questionIndex = typeof answer?.questionIndex === 'number' ? answer.questionIndex : idx;
+      if (typeof questionIndex === 'number') {
+        answersMap.set(questionIndex, {
+          ...answer,
+          selectedAnswer: answer?.selectedAnswer ?? null,
+          textAnswer: answer?.textAnswer ?? null
+        });
+      }
+    });
+
     let correctAnswers = 0;
     let wrongAnswers = 0;
     let unattempted = 0;
@@ -37,7 +50,7 @@ export default async function handler(req, res) {
     const topicWise = {};
 
     test.questions.forEach((question, index) => {
-      const userAnswer = Array.isArray(answers) ? answers[index] : null;
+      const userAnswer = answersMap.get(index) || null;
       const isSubjective = question.questionType === 'subjective';
       const isUnattempted = !userAnswer || (!userAnswer.selectedAnswer && !userAnswer.textAnswer);
       const isCorrect = !isSubjective && userAnswer && userAnswer.selectedAnswer === question.correctAnswer;
@@ -109,11 +122,13 @@ export default async function handler(req, res) {
       
       answerDetails.push({
         questionId: question._id || question.id || index,
+        questionIndex: index,
         questionType: question.questionType || 'mcq',
         selectedAnswer: userAnswer?.selectedAnswer || null,
         textAnswer: userAnswer?.textAnswer || null,
         isCorrect: isSubjective ? null : isCorrect, // null for subjective (needs evaluation)
         timeSpent: userAnswer?.timeSpent || 0,
+        correctAnswer: isSubjective ? null : (question.correctAnswer || null),
         marksObtained: isSubjective 
           ? (isUnattempted ? 0 : (question.marks || 10)) // Full marks for subjective (or evaluate later)
           : (isCorrect ? (question.marks || 1) : (!isUnattempted ? -(question.negativeMarks || 0.33) : 0))

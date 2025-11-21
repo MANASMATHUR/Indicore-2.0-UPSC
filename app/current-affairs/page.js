@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/Badge';
 import { 
-  BookOpen, 
   ArrowLeft, 
   Newspaper,
   Calendar,
@@ -22,6 +21,7 @@ import {
   Tag
 } from 'lucide-react';
 import { Skeleton, SkeletonLine } from '@/components/ui/Skeleton';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const categories = [
   'National Affairs',
@@ -39,7 +39,7 @@ const categories = [
 const examTypes = ['UPSC', 'PCS', 'MPSC', 'TNPSC', 'BPSC', 'UPPSC', 'SSC'];
 
 export default function CurrentAffairsPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedExam, setSelectedExam] = useState('UPSC');
@@ -164,19 +164,20 @@ export default function CurrentAffairsPage() {
     loadTrending();
   }, [loadTrending]);
 
-  if (!session) {
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      const currentPath =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/current-affairs';
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    }
+  }, [status, session, router]);
+
+  if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center px-4">
-        <Card className="max-w-md text-center">
-          <CardContent className="p-8">
-            <BookOpen className="h-12 w-12 text-red-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-            <p className="text-gray-600 mb-6">Please login to access the Current Affairs tool.</p>
-            <Button variant="primary" onClick={() => router.push('/chat')}>
-              Go to Login
-            </Button>
-          </CardContent>
-        </Card>
+        <LoadingSpinner message="Redirecting you to login..." />
       </div>
     );
   }

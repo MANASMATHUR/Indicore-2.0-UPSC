@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import EssayEnhancement from '@/components/EssayEnhancement';
 import { 
-  BookOpen, 
   ArrowLeft, 
   FileText, 
   Sparkles,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference } from '@/lib/translationUtils';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const essayTopics = [
   { letter: 'A', topics: ['Agriculture & Rural Development', 'Administrative Reforms', 'Arts & Culture', 'Awards & Honours', 'Accountability in Governance'] },
@@ -49,7 +49,7 @@ const essayTopics = [
 ];
 
 export default function EssayBuilderPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
   const [isEnhancementOpen, setIsEnhancementOpen] = useState(false);
@@ -91,19 +91,20 @@ export default function EssayBuilderPage() {
     }
   };
 
-  if (!session) {
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      const currentPath =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/essay-builder';
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    }
+  }, [status, session, router]);
+
+  if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center px-4">
-        <Card className="max-w-md text-center">
-          <CardContent className="p-8">
-            <BookOpen className="h-12 w-12 text-red-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-            <p className="text-gray-600 mb-6">Please login to access the Essay Builder tool.</p>
-            <Button variant="primary" onClick={() => router.push('/chat')}>
-              Go to Login
-            </Button>
-          </CardContent>
-        </Card>
+        <LoadingSpinner message="Redirecting you to login..." />
       </div>
     );
   }

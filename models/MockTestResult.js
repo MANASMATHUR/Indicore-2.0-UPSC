@@ -2,9 +2,11 @@ import mongoose from 'mongoose';
 
 const answerSchema = new mongoose.Schema({
   questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  questionIndex: { type: Number },
   questionType: { type: String, enum: ['mcq', 'subjective'], default: 'mcq' },
   selectedAnswer: String,
   textAnswer: String,
+  correctAnswer: String,
   isCorrect: Boolean,
   timeSpent: Number, // in seconds
   marksObtained: Number

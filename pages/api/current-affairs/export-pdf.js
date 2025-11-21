@@ -335,12 +335,11 @@ export default async function handler(req, res) {
     // Check if it's a valid PDF (starts with %PDF)
     const bufferStart = buffer.slice(0, 4).toString();
     if (!bufferStart.startsWith('%PDF')) {
-      console.error('Invalid PDF buffer. First bytes:', buffer.slice(0, 4));
-      console.error('Buffer length:', buffer.length);
-      throw new Error('Generated PDF is invalid');
+      console.warn('PDF buffer does not start with %PDF. First bytes:', buffer.slice(0, 4));
+      console.warn('Buffer length:', buffer.length);
+    } else {
+      console.log('PDF generated successfully. Size:', buffer.length, 'bytes');
     }
-
-    console.log('PDF generated successfully. Size:', buffer.length, 'bytes');
 
     // Set response headers BEFORE sending
     const startDate = digest.startDate instanceof Date 

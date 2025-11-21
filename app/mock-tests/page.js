@@ -14,7 +14,8 @@ import { getLanguagePreference, saveLanguagePreference, translateText } from '@/
 import { Skeleton, SkeletonLine } from '@/components/ui/Skeleton';
 
 export default function MockTestsPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [view, setView] = useState('list'); // 'list', 'create', 'test', 'results'
   const [tests, setTests] = useState([]);
   const [currentTest, setCurrentTest] = useState(null);
@@ -166,27 +167,40 @@ export default function MockTestsPage() {
     }
   };
 
+  const buildAnswerPayload = () => {
+    if (!currentTest?.questions?.length) {
+      return [];
+    }
+
+    return currentTest.questions.map((question, index) => {
+      const recordedAnswer = answers[index];
+      const isSubjective = (question?.questionType || 'mcq') === 'subjective';
+      const cleanedText = typeof recordedAnswer === 'string' ? recordedAnswer.trim() : '';
+
+      return {
+        questionIndex: index,
+        questionType: question?.questionType || 'mcq',
+        selectedAnswer: !isSubjective ? (recordedAnswer || null) : null,
+        textAnswer: isSubjective ? (cleanedText || null) : null,
+        timeSpent: 60
+      };
+    });
+  };
+
   const handleSubmitTest = async () => {
     if (!currentTest) return;
 
     setLoading(true);
     try {
       const startedAt = new Date(Date.now() - (currentTest.duration * 60 - timeRemaining) * 1000);
+      const formattedAnswers = buildAnswerPayload();
       
       const response = await fetch('/api/mock-tests/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           testId: currentTest._id || currentTest.id,
-          answers: Object.entries(answers).map(([index, answer]) => {
-            const question = currentTest.questions[parseInt(index)];
-            return {
-              questionType: question?.questionType || 'mcq',
-              selectedAnswer: answer,
-              textAnswer: question?.questionType === 'subjective' ? answer : null,
-              timeSpent: 60 // Average time per question
-            };
-          }),
+          answers: formattedAnswers,
           timeSpent: (currentTest.duration * 60 - timeRemaining),
           startedAt: startedAt.toISOString()
         })
@@ -219,19 +233,31 @@ export default function MockTestsPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const router = useRouter();
+  const handleOptionToggle = (questionIndex, option) => {
+    setAnswers(prev => {
+      if (option === null || prev[questionIndex] === option) {
+        const updated = { ...prev };
+        delete updated[questionIndex];
+        return updated;
+        }
+      return { ...prev, [questionIndex]: option };
+    });
+  };
 
-  if (!session) {
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      const currentPath =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/mock-tests';
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    }
+  }, [status, session, router]);
+
+  if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center px-4">
-        <Card className="p-6 max-w-md text-center border-2 border-red-100">
-          <FileText className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-          <p className="text-gray-600 mb-6">Please login to access Mock Tests.</p>
-          <Button variant="primary" onClick={() => router.push('/chat')}>
-            Go to Login
-          </Button>
-        </Card>
+        <LoadingSpinner message="Redirecting you to login..." />
       </div>
     );
   }
@@ -586,11 +612,13 @@ export default function MockTestsPage() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {question.options && question.options.map((option, optIndex) => (
+                          {question.options && question.options.map((option, optIndex) => {
+                            const isSelected = answers[index] === option;
+                            return (
                             <label
                               key={optIndex}
                               className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                                answers[index] === option 
+                                isSelected 
                                   ? 'border-red-500 bg-red-50 dark:bg-red-900/20 shadow-md' 
                                   : 'border-gray-200 hover:border-red-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                               }`}
@@ -599,26 +627,22 @@ export default function MockTestsPage() {
                                 type="radio"
                                 name={`question-${index}`}
                                 value={option}
-                                checked={answers[index] === option}
-                                onChange={() => {
-                                  setAnswers(prev => {
-                                    // Allow unselecting by clicking the same option again
-                                    if (prev[index] === option) {
-                                      const updated = { ...prev };
-                                      delete updated[index];
-                                      return updated;
-                                    }
-                                    return { ...prev, [index]: option };
-                                  });
+                                checked={isSelected}
+                                onChange={() => handleOptionToggle(index, option)}
+                                onClick={(event) => {
+                                  if (isSelected) {
+                                    event.preventDefault();
+                                    handleOptionToggle(index, null);
+                                  }
                                 }}
                                 className="mr-3 w-5 h-5 text-red-600"
                               />
                               <span className="text-gray-700 dark:text-gray-300 flex-1">{option}</span>
-                              {answers[index] === option && (
+                              {isSelected && (
                                 <CheckCircle2 className="h-5 w-5 text-red-600" />
                               )}
                             </label>
-                          ))}
+                          )})}
                         </div>
                       )}
                     </CardContent>

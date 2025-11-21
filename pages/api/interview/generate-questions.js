@@ -75,7 +75,7 @@ Format as JSON array:
         {
           model: preferredModel,
           preferredProvider: 'openai', // Force OpenAI
-          excludeProviders: ['perplexity', 'claude'], // Exclude other providers
+          excludeProviders: ['perplexity'], // Exclude Perplexity for this call
           openAIModel: preferredOpenAIModel
         }
       );

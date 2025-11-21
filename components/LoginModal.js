@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import Logo from '@/components/Logo';
 
-export default function LoginModal() {
+export default function LoginModal({ redirectPath = '/chat' }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      await signIn('google', { callbackUrl: '/' });
+      await signIn('google', { callbackUrl: redirectPath });
     } catch (error) {
     } finally {
       setIsLoading(false);

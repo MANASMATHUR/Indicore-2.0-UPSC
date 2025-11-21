@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -8,7 +8,6 @@ import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import VocabularyBuilder from '@/components/VocabularyBuilder';
 import { 
-  BookOpen, 
   ArrowLeft, 
   BookMarked,
   Sparkles,
@@ -18,24 +17,28 @@ import {
 } from 'lucide-react';
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference } from '@/lib/translationUtils';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 export default function VocabularyBuilderPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
 
-  if (!session) {
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      const currentPath =
+        typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/vocabulary-builder';
+      router.replace(`/login?redirect=${encodeURIComponent(currentPath)}`);
+    }
+  }, [status, session, router]);
+
+  if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center px-4">
-        <Card className="p-6 max-w-md text-center">
-          <BookOpen className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Login Required</h2>
-          <p className="text-gray-600 mb-6">Please login to access the Vocabulary Builder tool.</p>
-          <Button variant="primary" onClick={() => router.push('/chat')}>
-            Go to Login
-          </Button>
-        </Card>
+        <LoadingSpinner message="Redirecting you to login..." />
       </div>
     );
   }

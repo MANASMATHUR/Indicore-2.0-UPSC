@@ -28,11 +28,6 @@ const MODEL_PRESETS = [
   { id: 'openai:o1-mini', label: 'OpenAI • o1 Mini — affordable guided reasoning', provider: 'openai', openAIModel: 'o1-mini' },
   { id: 'openai:o1-pro', label: 'OpenAI • o1 Pro — enterprise reasoning', provider: 'openai', openAIModel: 'o1-pro' },
   { id: 'openai:o1-32k', label: 'OpenAI • o1 32K — long context reasoning', provider: 'openai', openAIModel: 'o1-32k' },
-  { id: 'claude:sonar-pro', label: 'Claude • 3.5 Sonnet — rich balanced answers', provider: 'claude', model: 'sonar-pro' },
-  { id: 'claude:sonar', label: 'Claude • 3 Haiku — ultra-fast', provider: 'claude', model: 'sonar' },
-  { id: 'claude:sonar-reasoning', label: 'Claude • 3 Sonnet — reasoning mode', provider: 'claude', model: 'sonar-reasoning' },
-  { id: 'claude:sonar-reasoning-pro', label: 'Claude • 3 Opus — deep reasoning', provider: 'claude', model: 'sonar-reasoning-pro' },
-  { id: 'claude:sonar-deep-research', label: 'Claude • 3.5 Sonnet — deep research', provider: 'claude', model: 'sonar-deep-research' },
   { id: 'perplexity:sonar-pro', label: 'Perplexity • Sonar Pro — research style', provider: 'perplexity', model: 'sonar-pro' }
 ];
 
