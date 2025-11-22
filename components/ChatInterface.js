@@ -45,6 +45,10 @@ export default function ChatInterface({ user }) {
   const [isLowBandwidth, setIsLowBandwidth] = useState(false);
   const renameTargetIdRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const streamingBufferRef = useRef('');
+  const streamingFlushTimeoutRef = useRef(null);
+  const streamingIdleTimeoutRef = useRef(null);
+  const streamingRetryingRef = useRef(false);
   
   // WebSocket connection for lowest latency
   const { socket, isConnected, sendMessage: sendWebSocketMessage } = useWebSocket();
@@ -72,6 +76,52 @@ export default function ChatInterface({ user }) {
     }, 100);
     return () => clearTimeout(timeoutId);
   }, [messages]);
+
+  const clearStreamingTimers = useCallback(() => {
+    if (streamingFlushTimeoutRef.current) {
+      clearTimeout(streamingFlushTimeoutRef.current);
+      streamingFlushTimeoutRef.current = null;
+    }
+    if (streamingIdleTimeoutRef.current) {
+      clearTimeout(streamingIdleTimeoutRef.current);
+      streamingIdleTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetStreamingState = useCallback(() => {
+    clearStreamingTimers();
+    streamingBufferRef.current = '';
+    streamingRetryingRef.current = false;
+    setStreamingMessage('');
+  }, [clearStreamingTimers]);
+
+  const appendStreamingChunk = useCallback((chunk) => {
+    if (!chunk || typeof chunk !== 'string') return;
+    streamingBufferRef.current += chunk;
+
+    if (streamingFlushTimeoutRef.current) {
+      clearTimeout(streamingFlushTimeoutRef.current);
+    }
+    streamingFlushTimeoutRef.current = setTimeout(() => {
+      setStreamingMessage(streamingBufferRef.current);
+      streamingFlushTimeoutRef.current = null;
+    }, 120);
+
+    if (streamingIdleTimeoutRef.current) {
+      clearTimeout(streamingIdleTimeoutRef.current);
+    }
+    streamingIdleTimeoutRef.current = setTimeout(() => {
+      if (!streamingBufferRef.current) {
+        setStreamingMessage(prev => prev || 'Still writing...');
+      }
+    }, 2000);
+  }, [setStreamingMessage]);
+
+  useEffect(() => {
+    return () => {
+      clearStreamingTimers();
+    };
+  }, [clearStreamingTimers]);
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
@@ -159,8 +209,40 @@ export default function ChatInterface({ user }) {
     await addAIMessage(chatId, message, settings.language);
   }, [currentChatId, createNewChat, addAIMessage, settings.language]);
 
-  const handleStreamingResponse = useCallback(async (message, messageLanguage, chatId, isVoiceInput) => {
+  const extractChunkText = useCallback((payload) => {
+    if (!payload) return '';
+    if (typeof payload === 'string') return payload;
+    if (Array.isArray(payload)) {
+      return payload
+        .filter(item => typeof item === 'string')
+        .join(' ');
+    }
+    const directFields = ['content', 'response', 'message', 'text', 'answer'];
+    for (const field of directFields) {
+      if (typeof payload[field] === 'string' && payload[field].trim().length > 0) {
+        return payload[field];
+      }
+    }
+    if (payload.data && typeof payload.data === 'object') {
+      const nestedFields = ['content', 'response', 'message', 'text', 'answer'];
+      for (const field of nestedFields) {
+        if (typeof payload.data[field] === 'string' && payload.data[field].trim().length > 0) {
+          return payload.data[field];
+        }
+      }
+    }
+    if (Array.isArray(payload.segments)) {
+      return payload.segments
+        .filter(segment => typeof segment === 'string')
+        .join(' ');
+    }
+    return '';
+  }, []);
+
+  const STREAMING_FALLBACK_MESSAGE = "I couldn't load the full answer because of a connection hiccup. Please ask again or rephrase and I'll try once more.";
+  const handleStreamingResponse = useCallback(async (message, messageLanguage, chatId, isVoiceInput, retryAttempt = 0) => {
     try {
+      resetStreamingState();
       let speechLanguage = messageLanguage;
       if (isVoiceInput) {
         const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
@@ -210,7 +292,7 @@ export default function ChatInterface({ user }) {
           }, {
             onChunk: (chunk, accumulated) => {
               fullResponse = accumulated;
-              setStreamingMessage(fullResponse);
+              appendStreamingChunk(chunk);
             }
           });
 
@@ -223,6 +305,7 @@ export default function ChatInterface({ user }) {
             await addAIMessage(chatId, finalResponse, messageLanguage);
             setStreamingMessage('');
             if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
+            resetStreamingState();
             return;
           }
         } catch (wsError) {
@@ -290,11 +373,11 @@ export default function ChatInterface({ user }) {
                   const parsed = JSON.parse(data);
                   if (parsed.content) {
                     fullResponse += parsed.content;
-                    setStreamingMessage(fullResponse);
+                    appendStreamingChunk(parsed.content);
                   } else if (parsed.choices?.[0]?.delta?.content) {
                     const content = parsed.choices[0].delta.content;
                     fullResponse += content;
-                    setStreamingMessage(fullResponse);
+                    appendStreamingChunk(content);
                   } else if (parsed.error) {
                     throw new Error(parsed.error.message || parsed.error);
                   }
@@ -315,13 +398,11 @@ export default function ChatInterface({ user }) {
             if (data !== '[DONE]') {
               try {
                 const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  setStreamingMessage(fullResponse);
-                } else if (parsed.choices?.[0]?.delta?.content) {
-                  fullResponse += parsed.choices[0].delta.content;
-                  setStreamingMessage(fullResponse);
-                }
+            const chunkText = extractChunkText(parsed) || parsed.choices?.[0]?.delta?.content;
+            if (typeof chunkText === 'string' && chunkText.length > 0) {
+              fullResponse += chunkText;
+              appendStreamingChunk(chunkText);
+            }
               } catch (e) {
               }
             }
@@ -331,12 +412,8 @@ export default function ChatInterface({ user }) {
         clearTimeout(timeoutId);
         
         // Validate response before saving
-        if (!fullResponse || fullResponse.trim().length < 10) {
-          throw new Error('Empty or invalid response received. Please try again.');
-        }
-        
         // Clean the final response before saving (server already cleans, but double-check client-side)
-        let finalResponse = fullResponse.trim();
+        let finalResponse = (fullResponse || '').trim();
         // Remove any remaining garbled patterns
         finalResponse = finalResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         finalResponse = finalResponse.replace(/\b(PCSC|PCS|UPSC|SSC)\s+exams?\s+need\s+help[^.]*\./gi, '');
@@ -344,15 +421,21 @@ export default function ChatInterface({ user }) {
         finalResponse = finalResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
         finalResponse = finalResponse.trim();
         
-        // Final validation
-        if (finalResponse.length < 10) {
-          throw new Error('Response too short after cleaning. Please try rephrasing your question.');
+        // Final validation / fallback
+        if (finalResponse.length < 20) {
+          if (retryAttempt < 1) {
+            streamingRetryingRef.current = true;
+            showToast('Response looked incomplete, retrying once more...', { type: 'warning' });
+            return await handleStreamingResponse(message, messageLanguage, chatId, isVoiceInput, retryAttempt + 1);
+          }
+          finalResponse = STREAMING_FALLBACK_MESSAGE;
         }
         
         await addAIMessage(chatId, finalResponse, messageLanguage);
         setStreamingMessage('');
 
         if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
+        resetStreamingState();
 
       } catch (error) {
         clearTimeout(timeoutId);
@@ -365,6 +448,7 @@ export default function ChatInterface({ user }) {
       chatLoading.setError('Failed to stream response. Please try again.');
       setIsLoading(false);
       setStreamingMessage('');
+      resetStreamingState();
       
       const errorResult = errorHandler.handleChatError(error, {
         type: 'streaming_error',
@@ -380,7 +464,7 @@ export default function ChatInterface({ user }) {
         user: user.email
       }, 'error');
     }
-  }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, settings.provider, settings.openAIModel, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading]);
+  }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, settings.provider, settings.openAIModel, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading, useWebSocketConnection, isConnected, socket, isLowBandwidth, sendWebSocketMessage, extractChunkText, appendStreamingChunk, resetStreamingState]);
 
   const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
     // Detect if user is asking for translation in voice input
@@ -429,7 +513,7 @@ export default function ChatInterface({ user }) {
 
       chatLoading.setLoading('Processing your message...', 0);
       setIsLoading(true);
-      setStreamingMessage('');
+      resetStreamingState();
 
       let chatId = currentChatId;
 
@@ -478,7 +562,7 @@ export default function ChatInterface({ user }) {
 
       if (useStreaming) {
         const chatIdForStream = chatId ? (typeof chatId === 'string' ? chatId : String(chatId)) : null;
-        await handleStreamingResponse(sanitizedMessage, messageLanguage, chatIdForStream, isVoiceInput);
+        await handleStreamingResponse(sanitizedMessage, messageLanguage, chatIdForStream, isVoiceInput, 0);
       } else {
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
@@ -553,7 +637,7 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
     }
-  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, settings.provider, settings.openAIModel, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse]);
+  }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, settings.provider, settings.openAIModel, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse, resetStreamingState]);
 
   const handleChatSelect = useCallback(async (chatId) => {
     setCurrentChatId(chatId);

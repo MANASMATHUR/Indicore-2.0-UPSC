@@ -84,6 +84,7 @@ export default async function handler(req, res) {
 
   try {
     const { message, chatId, model, systemPrompt, language, provider, openAIModel } = req.body;
+    const STREAMING_FALLBACK_MESSAGE = "I couldn't generate a full answer this time, but I'm still here—please rephrase or ask again so I can try once more.";
     const pyqContextKey = `${session.user.email}:${chatId || 'stream'}`;
     const providerPreference = (provider || 'openai').toLowerCase();
     const normalizedOpenAIModel = typeof openAIModel === 'string' && openAIModel.trim().length > 0
@@ -783,19 +784,13 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
       let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
       if (!fullResponse || fullResponse.length < 10) {
-        res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
+        fullResponse = STREAMING_FALLBACK_MESSAGE;
       }
 
       let cleanedResponse = cleanAIResponse(fullResponse);
       let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fullResponse;
       if (!validResponse || validResponse.length < 10) {
-        res.write(`data: ${JSON.stringify({ error: 'Response validation failed. Please try rephrasing your question.', final: true })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
+        validResponse = STREAMING_FALLBACK_MESSAGE;
       }
 
       responseCache.set(cacheKey, {
@@ -951,7 +946,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           console.error('OpenAI fallback failed:', fallbackError.message);
         }
 
-        res.write(`data: ${JSON.stringify({ error: errorMessage || 'OpenAI is busy right now. Please try again shortly.', final: true })}\n\n`);
+        res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
         return;
@@ -1072,8 +1067,8 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       }
       
       res.write(`data: ${JSON.stringify({
-        error: errorMessage || 'All AI providers are busy right now. Please wait a moment and try again.',
-        final: true
+        content: STREAMING_FALLBACK_MESSAGE,
+        fallback: true
       })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
@@ -1097,11 +1092,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               clearInterval(keepAlive);
               
               if (!fullResponse || fullResponse.trim().length < 10) {
-                res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
-                res.write('data: [DONE]\n\n');
-                res.end();
-                resolve();
-                return;
+                fullResponse = STREAMING_FALLBACK_MESSAGE;
               }
 
               let cleanedResponse = cleanAIResponse(fullResponse);
@@ -1149,7 +1140,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                   timestamp: Date.now()
                 });
               } else {
-                res.write(`data: ${JSON.stringify({ error: 'Response validation failed. Please try rephrasing your question.', final: true })}\n\n`);
+                res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
                 res.write('data: [DONE]\n\n');
                 res.end();
                 resolve();
@@ -1212,7 +1203,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         
         if (!fullResponse || fullResponse.trim().length < 10) {
           if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ error: 'Empty response received. Please try again.', final: true })}\n\n`);
+            res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
           }
