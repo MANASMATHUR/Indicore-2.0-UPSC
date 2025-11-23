@@ -311,6 +311,18 @@ export default async function handler(req, res) {
 
     let finalSystemPrompt = systemPrompt || `You are Indicore, your intelligent exam preparation companion—think of me as ChatGPT, but specialized for UPSC, PCS, and SSC exam preparation. I'm here to help you succeed, whether you need explanations, practice questions, answer writing guidance, or just someone to discuss exam topics with. I can also help with general questions, but I always keep exam relevance in mind.
 
+RESPONSE QUALITY STANDARDS - CRITICAL:
+- Provide comprehensive, well-researched answers that match or exceed ChatGPT's quality
+- Be thorough but concise—cover all important aspects without unnecessary verbosity
+- Use clear, logical structure: introduction → main points → examples → conclusion
+- Include relevant facts, data, dates, and sources when available
+- Connect concepts to real-world applications and current affairs
+- Anticipate follow-up questions and address related topics proactively
+- When solving PYQ questions, provide complete, exam-ready answers with proper structure
+- For Mains questions, structure answers with Introduction, Body (with sub-points), and Conclusion
+- For Prelims questions, provide clear explanations with key facts highlighted
+- Always verify information accuracy—never guess or make up facts
+
 MY PERSONALITY & APPROACH:
 - I'm conversational, friendly, and genuinely interested in helping you succeed. Think of me as a knowledgeable friend who's been through these exams and wants to share everything I know.
 - I adapt to your style—if you're casual, I'll be casual. If you're formal, I'll match that. If you're stressed, I'll be supportive and encouraging.
@@ -445,15 +457,28 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       return;
     }
 
+    // Check for solve requests first (before checking for new PYQ queries)
+    // This prevents "solve the pyqs you just gave me" from being treated as a new PYQ search
+    // Check for solve requests early to prevent them from being treated as new PYQ queries
+    // We need to check context before the Promise.all to avoid unnecessary PYQ searches
+    const rawHistoryForSolve = await historyPromise;
+    const conversationHistoryForSolve = contextOptimizer.compressContext(rawHistoryForSolve);
+    const cachedPyqContextForSolve = chatId ? getPyqContext(pyqContextKey) : null;
+    const historyPyqContextForSolve = extractPyqContextFromHistory(conversationHistoryForSolve);
+    const previousPyqContextForSolve = cachedPyqContextForSolve || historyPyqContextForSolve;
+    const PYQ_SOLVE_REGEX_EARLY = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
+    const isSolveRequestEarly = previousPyqContextForSolve && PYQ_SOLVE_REGEX_EARLY.test(message.trim());
+    
     const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
     const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(message);
     const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
-    const isPyqQuery = hasPyqKeyword || hasPyqIntent || hasSubjectPyq;
+    // Only treat as new PYQ query if it's NOT a solve request
+    const isPyqQuery = !isSolveRequestEarly && (hasPyqKeyword || hasPyqIntent || hasSubjectPyq);
     
     const needsContext = !isPyqQuery && message.length > 10;
 
-    const [rawHistory, contextualData, pyqDb] = await Promise.all([
-      historyPromise,
+    // Reuse the history we already fetched for solve detection
+    const [contextualData, pyqDb] = await Promise.all([
       needsContext ? Promise.resolve({
         contextualEnhancement: contextualLayer.generateContextualPrompt(message),
         examContext: examKnowledge.generateContextualPrompt(message)
@@ -461,18 +486,32 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       isPyqQuery ? tryPyqFromDb(message) : Promise.resolve(null)
     ]);
 
-    const conversationHistory = contextOptimizer.compressContext(rawHistory);
-    const cachedPyqContext = chatId ? getPyqContext(pyqContextKey) : null;
+    // Use the history we already processed
+    const conversationHistory = conversationHistoryForSolve;
+    const cachedPyqContext = cachedPyqContextForSolve;
 
     if (isPyqQuery) {
       if (pyqDb && pyqDb.trim().length > 50) {
-        let cleanedPyq = pyqDb.trim();
+        // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
+        let cleanedPyq = pyqDb;
         
+        // Remove citation patterns and UI artifacts but preserve newlines
         cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
         cleanedPyq = cleanedPyq.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?=\s*[a-z])/g, '');
-        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n\n');
+        cleanedPyq = cleanedPyq.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
+        cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
+        // Only normalize excessive blank lines (4+ to 2), preserve structure
+        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
+        
+        // Trim only leading/trailing whitespace, preserve internal newlines
         cleanedPyq = cleanedPyq.trim();
+        
+        // Ensure we still have newlines after cleaning
+        if (!cleanedPyq.includes('\n') && pyqDb.includes('\n')) {
+          console.warn('WARNING: Cleaning removed all newlines, using original');
+          cleanedPyq = pyqDb;
+        }
         const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
@@ -624,8 +663,10 @@ COMPLETENESS REQUIREMENTS:
 Remember: Your goal is to present questions clearly and completely. If no questions are found, state that clearly. If questions are found, format them properly and ensure the response is complete and well-structured.`;
     }
 
-    const historyPyqContext = extractPyqContextFromHistory(conversationHistory);
-    const previousPyqContext = cachedPyqContext || historyPyqContext;
+    // Use the context we already extracted earlier (avoid duplicate extraction)
+    const previousPyqContext = previousPyqContextForSolve;
+    const isSolveRequest = isSolveRequestEarly;
+    
     const isFollowUpQuestion = /^(give|show|get|fetch|find|search|more|another|additional|next|other|different)\s+(more|questions|pyqs|previous year|questions|pyq)/i.test(message) || 
                                /^(more|another|additional|next|other|different|continue|keep going|show more|give more)/i.test(message.trim()) ||
                                /^(more|another|additional|next|other|different)\s+(of|from|those|them|these|questions|pyqs?)/i.test(message.trim());
@@ -640,13 +681,27 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       const followUpQuery = previousPyqContext.originalQuery || message;
       const pyqDb = await tryPyqFromDb(followUpQuery, contextWithOffset);
       if (pyqDb && pyqDb.trim().length > 50) {
-        let cleanedPyq = pyqDb.trim();
+        // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
+        // Consistent with main PYQ handler above
+        let cleanedPyq = pyqDb;
         
+        // Remove citation patterns and UI artifacts but preserve newlines
         cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
         cleanedPyq = cleanedPyq.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?=\s*[a-z])/g, '');
-        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n\n');
+        cleanedPyq = cleanedPyq.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
+        cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
+        // Normalize excessive blank lines (4+ to 2) - consistent with main handler
+        cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
+        
+        // Trim only leading/trailing whitespace, preserve internal newlines
         cleanedPyq = cleanedPyq.trim();
+        
+        // Ensure we still have newlines after cleaning
+        if (!cleanedPyq.includes('\n') && pyqDb.includes('\n')) {
+          console.warn('WARNING: Cleaning removed all newlines, using original');
+          cleanedPyq = pyqDb;
+        }
         
         const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
         for (const chunk of chunks) {
@@ -682,12 +737,49 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       }
     }
     
-    const optimizedHistory = contextOptimizer.compressContext(conversationHistory);
+    // If solving questions, fetch the PYQs again to include in context
+    let pyqContextForSolving = null;
+    if (isSolveRequest && previousPyqContext) {
+      try {
+        // Use the original query from context, not the current message
+        const solvePyqResult = await tryPyqFromDb(previousPyqContext.originalQuery, previousPyqContext);
+        if (solvePyqResult) {
+          pyqContextForSolving = solvePyqResult;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch PYQs for solving:', error.message);
+      }
+      
+      // If context fetch failed, we can't proceed with solve request
+      // Return an error response instead of sending confusing message to AI
+      if (!pyqContextForSolving) {
+        const errorMessage = 'I apologize, but I couldn\'t retrieve the questions you asked about earlier. Please ask for the questions again, or provide the specific questions you\'d like me to solve.';
+        const chunks = errorMessage.match(/.{1,100}/g) || [errorMessage];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+        }
+        res.write(`data: ${JSON.stringify({ final: true })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        return;
+      }
+    }
+    
+    // conversationHistory is already compressed (from line 465), don't compress again
+    const optimizedHistory = conversationHistory;
     const hasContext = optimizedHistory.length > 0;
     const isFollowUp = /^(continue|more|another|further|elaborate|expand)/i.test(message.trim()) || optimizedHistory.length > 0;
 
-    const pyqPrompt = buildPyqPrompt(message, previousPyqContext);
+    // Only build PYQ listing prompt if this is NOT a solve request
+    // Solve requests should get answer/solution instructions, not listing instructions
+    const pyqPrompt = !isSolveRequest ? buildPyqPrompt(message, previousPyqContext) : null;
     let systemContent = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, hasContext, isFollowUp);
+    
+    // If solving questions, enhance the user message with PYQ context
+    // Note: pyqContextForSolving is guaranteed to be non-null here because we return early if it's null
+    let userMessage = message;
+    if (isSolveRequest) {
+      userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
+    }
     
     if (pyqPrompt) {
       systemContent += pyqPrompt;
@@ -721,8 +813,10 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     }
     
     // Always add user message (ensure it's not empty)
-    if (message && message.trim().length > 0) {
-      messagesForAPI.push({ role: 'user', content: message.trim() });
+    // Use userMessage if solving questions (includes PYQ context), otherwise use original message
+    const finalUserMessage = userMessage || message;
+    if (finalUserMessage && finalUserMessage.trim().length > 0) {
+      messagesForAPI.push({ role: 'user', content: finalUserMessage.trim() });
     } else {
       res.write(`data: ${JSON.stringify({ error: 'Message cannot be empty', final: true })}\n\n`);
       res.write('data: [DONE]\n\n');
