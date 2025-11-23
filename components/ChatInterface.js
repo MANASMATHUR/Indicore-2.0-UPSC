@@ -421,14 +421,26 @@ export default function ChatInterface({ user }) {
         finalResponse = finalResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
         finalResponse = finalResponse.trim();
         
-        // Final validation / fallback
-        if (finalResponse.length < 20) {
-          if (retryAttempt < 1) {
+        // Final validation / fallback - be lenient for short prompts
+        // Match server-side logic: very short prompts (1-5 chars) can have responses as short as 5 chars
+        const questionLength = message ? message.trim().length : 0;
+        const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 20));
+        
+        if (finalResponse.length < minAcceptableLength) {
+          // Only retry if response is truly too short and we haven't retried yet
+          if (retryAttempt < 1 && finalResponse.length < 5) {
             streamingRetryingRef.current = true;
             showToast('Response looked incomplete, retrying once more...', { type: 'warning' });
             return await handleStreamingResponse(message, messageLanguage, chatId, isVoiceInput, retryAttempt + 1);
           }
-          finalResponse = STREAMING_FALLBACK_MESSAGE;
+          // For very short prompts, accept shorter responses if they look complete
+          if (questionLength <= 5 && finalResponse.length >= 3 && /[.!?]?$/.test(finalResponse.trim())) {
+            // Accept very short responses for very short prompts (like "hi" -> "Hi!")
+            // Server already validated, so trust it
+          } else if (finalResponse.length < 5) {
+            // Only use fallback if response is extremely short (< 5 chars)
+            finalResponse = STREAMING_FALLBACK_MESSAGE;
+          }
         }
         
         await addAIMessage(chatId, finalResponse, messageLanguage);
