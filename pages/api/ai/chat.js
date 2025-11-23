@@ -843,28 +843,33 @@ Requirements:
     }
     
     const cleanedResponse = cleanAIResponse(rawResponse);
-    // Use more lenient validation - allow shorter responses for simple questions
-    const minLength = message && message.trim().length < 50 ? 15 : 30;
+    // Use very lenient validation - allow shorter responses for simple questions
+    const questionLength = message ? message.trim().length : 0;
+    // For very short prompts (1-5 chars like "hi"), accept responses as short as 5 chars
+    const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
     let validResponse = validateAndCleanResponse(cleanedResponse, minLength);
     
-    // If validation failed but we have substantial content, try to salvage it
-    if (!validResponse && rawResponse.trim().length >= 20) {
+    // If validation failed but we have any content, try to salvage it
+    // For very short prompts, be extremely lenient
+    const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+    if (!validResponse && rawResponse.trim().length >= minSalvageLength) {
       if (!isGarbledResponse(rawResponse)) {
         let salvaged = rawResponse.trim();
         salvaged = salvaged.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         salvaged = salvaged.replace(/From\s+result[^.!?\n]*/gi, '');
         salvaged = salvaged.replace(/[ \t]+/g, ' ');
         
-        if (!/[.!?]$/.test(salvaged) && salvaged.length > 20) {
+        if (!/[.!?]$/.test(salvaged) && salvaged.length > minSalvageLength) {
           salvaged += '.';
         }
         
-        // Re-validate with lower threshold
-        validResponse = validateAndCleanResponse(salvaged, 15) || salvaged;
+        // Re-validate with very low threshold for short questions
+        validResponse = validateAndCleanResponse(salvaged, minSalvageLength) || salvaged;
       }
     }
     
-    if (!validResponse || validResponse.length < 15) {
+    const minFallbackLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+    if (!validResponse || validResponse.length < minFallbackLength) {
       console.error(`[Chat] Invalid response. Length: ${rawResponse?.length || 0}, Valid: ${!!validResponse}, Message: "${message?.substring(0, 50)}..."`);
       return res.status(500).json({
         error: 'Unable to generate a valid response. Please try rephrasing your question.',
