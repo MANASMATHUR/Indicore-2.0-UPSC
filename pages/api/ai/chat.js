@@ -159,10 +159,19 @@ function isResponseComplete(response) {
 
 const PYQ_FOLLOW_UP_REGEX = /^(?:more|another|additional|next|other|different|continue|keep going|show more|give me more|list more|fetch more|next set|next one|next ones)\b/i;
 const PYQ_FOLLOW_UP_COMMAND_REGEX = /(?:give|show|get|fetch|list|bring)\s+(?:me\s+)?(?:some\s+)?more\b/i;
+// Detect requests to solve/answer questions from previous PYQ context
+// Match patterns like "solve them", "solve these", "answer these questions", etc.
+// Also match standalone "solve" or "answer" when there's PYQ context (user likely referring to previous questions)
+const PYQ_SOLVE_REGEX = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
 
 function isPyqFollowUpMessage(message) {
   const normalized = message.trim().toLowerCase();
   return PYQ_FOLLOW_UP_REGEX.test(normalized) || PYQ_FOLLOW_UP_COMMAND_REGEX.test(normalized);
+}
+
+function isPyqSolveRequest(message) {
+  const normalized = message.trim().toLowerCase();
+  return PYQ_SOLVE_REGEX.test(normalized);
 }
 
 function extractPyqContextFromHistory(history, language) {
@@ -352,6 +361,18 @@ async function chatHandler(req, res) {
     const isPyqFollowUp = previousPyqContext && isPyqFollowUpMessage(message);
 
     let finalSystemPrompt = systemPrompt || `You are Indicore, your intelligent exam preparation companion—think of me as ChatGPT, but specialized for UPSC, PCS, and SSC exam preparation. I'm here to help you succeed, whether you need explanations, practice questions, answer writing guidance, or just someone to discuss exam topics with.
+
+RESPONSE QUALITY STANDARDS - CRITICAL:
+- Provide comprehensive, well-researched answers that match or exceed ChatGPT's quality
+- Be thorough but concise—cover all important aspects without unnecessary verbosity
+- Use clear, logical structure: introduction → main points → examples → conclusion
+- Include relevant facts, data, dates, and sources when available
+- Connect concepts to real-world applications and current affairs
+- Anticipate follow-up questions and address related topics proactively
+- When solving PYQ questions, provide complete, exam-ready answers with proper structure
+- For Mains questions, structure answers with Introduction, Body (with sub-points), and Conclusion
+- For Prelims questions, provide clear explanations with key facts highlighted
+- Always verify information accuracy—never guess or make up facts
 
 MY PERSONALITY & APPROACH:
 - I'm conversational, friendly, and genuinely interested in helping you succeed. Think of me as a knowledgeable friend who's been through these exams and wants to share everything I know.
@@ -641,13 +662,52 @@ Requirements:
       }
       return null;
     }
-    const pyqDb = await tryPyqFromDb(message, isPyqFollowUp ? previousPyqContext : null);
-    if (pyqDb) {
-      const cleanedPyq = cleanAIResponse(pyqDb);
-      const validPyq = validateAndCleanResponse(cleanedPyq, 20);
+    // Check if user wants to solve questions from previous PYQ context
+    // This must be checked BEFORE regular PYQ queries to avoid treating "solve the pyqs" as a new query
+    const isSolveRequest = previousPyqContext && isPyqSolveRequest(message);
+    
+    // If solving questions, fetch the PYQs again to include in context
+    let pyqContextForSolving = null;
+    if (isSolveRequest && previousPyqContext) {
+      try {
+        // Use the original query from context, not the current message
+        const solvePyqResult = await tryPyqFromDb(previousPyqContext.originalQuery, previousPyqContext);
+        if (solvePyqResult) {
+          pyqContextForSolving = solvePyqResult;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch PYQs for solving:', error.message);
+      }
       
-      if (validPyq) {
-        return res.status(200).json({ response: validPyq, source: 'pyq-db' });
+      // If context fetch failed, we can't proceed with solve request
+      // Return an error response instead of sending confusing message to AI
+      if (!pyqContextForSolving) {
+        return res.status(200).json({ 
+          response: 'I apologize, but I couldn\'t retrieve the questions you asked about earlier. Please ask for the questions again, or provide the specific questions you\'d like me to solve.',
+          source: 'error'
+        });
+      }
+    }
+    
+    // Only check for new PYQ queries if this is NOT a solve request
+    // This prevents "solve the pyqs you just gave me" from being treated as a new PYQ search
+    const pyqDb = !isSolveRequest ? await tryPyqFromDb(message, isPyqFollowUp ? previousPyqContext : null) : null;
+    if (pyqDb) {
+      // For PYQ responses, minimal cleaning to preserve formatting structure
+      // Only remove obvious artifacts, preserve all newlines and structure
+      let cleanedPyq = pyqDb;
+      // Remove citation patterns and UI artifacts but preserve structure
+      cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+      cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
+      cleanedPyq = cleanedPyq.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?=\s*[a-z])/g, '');
+      cleanedPyq = cleanedPyq.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
+      cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
+      // Normalize excessive blank lines (4+ to 2) - consistent with chat-stream.js
+      cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
+      
+      // Validate length but don't use cleanAIResponse which might strip newlines
+      if (cleanedPyq && cleanedPyq.trim().length >= 20) {
+        return res.status(200).json({ response: cleanedPyq.trim(), source: 'pyq-db' });
       }
     }
 
@@ -723,8 +783,15 @@ Requirements:
       }
     }
     
+    // If solving questions, add PYQ context to the user message
+    // Note: pyqContextForSolving is guaranteed to be non-null here because we return early if it's null
+    let userMessage = message;
+    if (isSolveRequest) {
+      userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
+    }
+    
     // Ensure message is valid before adding
-    if (!message || message.trim().length === 0) {
+    if (!userMessage || userMessage.trim().length === 0) {
       return res.status(400).json({ 
         error: 'Message cannot be empty',
         code: 'INVALID_MESSAGE',
@@ -732,7 +799,7 @@ Requirements:
       });
     }
     
-    messagesForAPI.push({ role: 'user', content: message.trim() });
+    messagesForAPI.push({ role: 'user', content: userMessage.trim() });
 
     // Final validation: ensure we have at least one user message
     if (messagesForAPI.filter(m => m.role === 'user').length === 0) {
