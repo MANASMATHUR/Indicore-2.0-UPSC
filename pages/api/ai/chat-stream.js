@@ -1171,6 +1171,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     }
 
     let fullResponse = '';
+    let streamError = null;
     
     await new Promise((resolve) => {
       const keepAlive = setInterval(() => {
@@ -1185,29 +1186,37 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             if (data === '[DONE]') {
               clearInterval(keepAlive);
               
+              // Log if response is too short for debugging
               if (!fullResponse || fullResponse.trim().length < 10) {
-                fullResponse = STREAMING_FALLBACK_MESSAGE;
+                console.warn(`[Stream] Empty/short response received. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
+                // Don't immediately use fallback - try to process what we have
               }
 
-              let cleanedResponse = cleanAIResponse(fullResponse);
-              let isValid = validateAndCleanResponse(cleanedResponse, 30);
+              let cleanedResponse = cleanAIResponse(fullResponse || '');
+              // Use more lenient validation - allow shorter responses for simple questions
+              const minLength = message && message.trim().length < 50 ? 15 : 30;
+              let isValid = validateAndCleanResponse(cleanedResponse, minLength);
               
-              if (!isValid && fullResponse.trim().length > 50) {
+              // If validation failed but we have substantial content, try to salvage it
+              if (!isValid && fullResponse && fullResponse.trim().length >= 20) {
                 if (!isGarbledResponse(fullResponse)) {
                   cleanedResponse = fullResponse.trim();
                   cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                   cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
                   cleanedResponse = cleanedResponse.replace(/[ \t]+/g, ' ');
                   
-                  if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                  if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 20) {
                     cleanedResponse += '.';
                   }
                   
-                  isValid = cleanedResponse;
+                  // Re-validate with lower threshold
+                  isValid = validateAndCleanResponse(cleanedResponse, 15) || cleanedResponse;
                 }
               }
               
-              if (isValid && isValid.length > 30) {
+              // Accept response if it's valid and meets minimum length
+              const minAcceptableLength = message && message.trim().length < 50 ? 15 : 30;
+              if (isValid && isValid.length >= minAcceptableLength) {
                 responseCache.set(cacheKey, {
                   response: isValid,
                   timestamp: Date.now()
@@ -1221,40 +1230,51 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                     }
                   }
                 }
-              } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+              } else if (fullResponse && fullResponse.trim().length >= 20 && !isGarbledResponse(fullResponse)) {
+                // Try to use response even if validation failed but it's substantial
                 cleanedResponse = fullResponse.trim();
                 cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                 cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
                 cleanedResponse = cleanedResponse.replace(/[ \t]+/g, ' ');
-                if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 20) {
                   cleanedResponse += '.';
                 }
-                responseCache.set(cacheKey, {
-                  response: cleanedResponse,
-                  timestamp: Date.now()
-                });
-              } else {
-                res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-                res.write('data: [DONE]\n\n');
-                res.end();
+                // Use it if it's reasonable
+                if (cleanedResponse.length >= 20) {
+                  isValid = cleanedResponse;
+                  responseCache.set(cacheKey, {
+                    response: cleanedResponse,
+                    timestamp: Date.now()
+                  });
+                }
+              }
+              
+              // Only use fallback if we truly have nothing usable
+              if (!isValid || isValid.length < 15) {
+                console.error(`[Stream] Response too short or invalid. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, Message: "${message?.substring(0, 50)}..."`);
+                if (!res.writableEnded) {
+                  res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+                  res.write('data: [DONE]\n\n');
+                  res.end();
+                }
                 resolve();
                 return;
               }
 
-              const finalMemoryText = (isValid && isValid.length > 30)
-                ? isValid
-                : cleanedResponse || fullResponse.trim();
+              const finalMemoryText = isValid;
               if (finalMemoryText) {
                 persistMemory(finalMemoryText).catch(err => {
                   console.warn('Failed to persist conversation memory (stream):', err.message);
                 });
               }
               
-              res.write('data: [DONE]\n\n');
-              if (typeof res.flush === 'function') {
-                res.flush();
+              if (!res.writableEnded) {
+                res.write('data: [DONE]\n\n');
+                if (typeof res.flush === 'function') {
+                  res.flush();
+                }
+                res.end();
               }
-              res.end();
               resolve();
               return;
             }
@@ -1274,28 +1294,47 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 
                 if (content.trim().length > 0) {
                   fullResponse += content;
-                  res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                  if (typeof res.flush === 'function') {
-                    res.flush();
+                  if (!res.writableEnded) {
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                    if (typeof res.flush === 'function') {
+                      res.flush();
+                    }
                   }
                 }
               }
               if (parsed.error) {
-                throw new Error(parsed.error.message || 'API error');
+                streamError = new Error(parsed.error.message || 'API error');
+                throw streamError;
               }
             } catch (e) {
               if (e.message && !e.message.includes('JSON')) {
-                console.error('Stream parsing error:', e.message);
+                console.error('[Stream] Parsing error:', e.message);
+                streamError = e;
               }
             }
           }
         }
       });
+      
+      // Add error handler for stream
+      response.data.on('error', (error) => {
+        clearInterval(keepAlive);
+        streamError = error;
+        console.error('[Stream] Stream error:', error.message);
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true, error: error.message })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+        }
+        resolve();
+      });
 
       response.data.on('end', () => {
         clearInterval(keepAlive);
         
+        // Log if response is too short for debugging
         if (!fullResponse || fullResponse.trim().length < 10) {
+          console.warn(`[Stream] Stream ended with empty/short response. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
           if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
             res.write('data: [DONE]\n\n');
@@ -1306,38 +1345,60 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         }
 
         let cleanedResponse = cleanAIResponse(fullResponse);
-        let isValid = validateAndCleanResponse(cleanedResponse, 30);
+        // Use more lenient validation - allow shorter responses for simple questions
+        const minLength = message && message.trim().length < 50 ? 15 : 30;
+        let isValid = validateAndCleanResponse(cleanedResponse, minLength);
         
-        if (!isValid && fullResponse.trim().length > 50) {
+        // If validation failed but we have substantial content, try to salvage it
+        if (!isValid && fullResponse.trim().length >= 20) {
           if (!isGarbledResponse(fullResponse)) {
             cleanedResponse = fullResponse.trim();
             cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
             cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
             
-            if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+            if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 20) {
               cleanedResponse += '.';
             }
             
-            isValid = cleanedResponse;
+            // Re-validate with lower threshold
+            isValid = validateAndCleanResponse(cleanedResponse, 15) || cleanedResponse;
           }
         }
         
-        if (isValid && isValid.length > 30) {
+        const minAcceptableLength = message && message.trim().length < 50 ? 15 : 30;
+        if (isValid && isValid.length >= minAcceptableLength) {
           responseCache.set(cacheKey, {
             response: isValid,
             timestamp: Date.now()
           });
-        } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+        } else if (fullResponse.trim().length >= 20 && !isGarbledResponse(fullResponse)) {
+          // Try to use response even if validation failed but it's substantial
           cleanedResponse = fullResponse.trim();
           cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
           cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-          if (!/[.!?]$/.test(cleanedResponse)) {
+          if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 20) {
             cleanedResponse += '.';
           }
-          responseCache.set(cacheKey, {
-            response: cleanedResponse,
-            timestamp: Date.now()
-          });
+          // Use it if it's reasonable
+          if (cleanedResponse.length >= 20) {
+            isValid = cleanedResponse;
+            responseCache.set(cacheKey, {
+              response: cleanedResponse,
+              timestamp: Date.now()
+            });
+          }
+        }
+        
+        // If still no valid response, send fallback
+        if (!isValid || isValid.length < 15) {
+          console.error(`[Stream] Stream ended with invalid response. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, Message: "${message?.substring(0, 50)}..."`);
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+          resolve();
+          return;
         }
         
         if (!res.writableEnded) {
@@ -1448,4 +1509,5 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     res.end();
   }
 }
+
 

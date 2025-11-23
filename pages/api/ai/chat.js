@@ -9,7 +9,7 @@ import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import User from '@/models/User';
 import pyqService from '@/lib/pyqService';
-import { cleanAIResponse, validateAndCleanResponse } from '@/lib/responseCleaner';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
@@ -838,13 +838,34 @@ Requirements:
     const rawResponse = aiResult?.content;
     
     if (!rawResponse || rawResponse.trim().length === 0) {
+      console.error(`[Chat] Empty response from AI provider. Message: "${message?.substring(0, 50)}..."`);
       throw new Error('Empty response from AI provider');
     }
     
     const cleanedResponse = cleanAIResponse(rawResponse);
-    const validResponse = validateAndCleanResponse(cleanedResponse, 30);
+    // Use more lenient validation - allow shorter responses for simple questions
+    const minLength = message && message.trim().length < 50 ? 15 : 30;
+    let validResponse = validateAndCleanResponse(cleanedResponse, minLength);
     
-    if (!validResponse) {
+    // If validation failed but we have substantial content, try to salvage it
+    if (!validResponse && rawResponse.trim().length >= 20) {
+      if (!isGarbledResponse(rawResponse)) {
+        let salvaged = rawResponse.trim();
+        salvaged = salvaged.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+        salvaged = salvaged.replace(/From\s+result[^.!?\n]*/gi, '');
+        salvaged = salvaged.replace(/[ \t]+/g, ' ');
+        
+        if (!/[.!?]$/.test(salvaged) && salvaged.length > 20) {
+          salvaged += '.';
+        }
+        
+        // Re-validate with lower threshold
+        validResponse = validateAndCleanResponse(salvaged, 15) || salvaged;
+      }
+    }
+    
+    if (!validResponse || validResponse.length < 15) {
+      console.error(`[Chat] Invalid response. Length: ${rawResponse?.length || 0}, Valid: ${!!validResponse}, Message: "${message?.substring(0, 50)}..."`);
       return res.status(500).json({
         error: 'Unable to generate a valid response. Please try rephrasing your question.',
         code: 'INVALID_RESPONSE',
