@@ -1222,6 +1222,16 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               // Accept response if it's valid and meets minimum length (very lenient for short questions)
               // For very short prompts like "hi", accept responses as short as 5 chars
               const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+              
+              // If validation returned null but we have content, try to use it anyway if it's reasonable
+              if (!isValid && fullResponse && fullResponse.trim().length >= minSalvageLength) {
+                // Try one more time with even more lenient validation
+                const veryLenientCleaned = fullResponse.trim().replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').replace(/\s+/g, ' ').trim();
+                if (veryLenientCleaned.length >= minSalvageLength && !isGarbledResponse(veryLenientCleaned)) {
+                  isValid = veryLenientCleaned;
+                }
+              }
+              
               if (isValid && isValid.length >= minAcceptableLength) {
                 responseCache.set(cacheKey, {
                   response: isValid,
