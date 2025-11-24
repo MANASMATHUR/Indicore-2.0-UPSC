@@ -422,25 +422,37 @@ export default function ChatInterface({ user }) {
         finalResponse = finalResponse.trim();
         
         // Final validation / fallback - be lenient for short prompts
-        // Match server-side logic: very short prompts (1-5 chars) can have responses as short as 5 chars
+        // Match server-side logic: very short prompts (1-5 chars) can have responses as short as 3-5 chars
         const questionLength = message ? message.trim().length : 0;
-        const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 20));
+        // Use same thresholds as server-side for consistency
+        const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+        const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10); // Even more lenient fallback threshold
         
-        if (finalResponse.length < minAcceptableLength) {
+        // Server already validated the response, so trust it unless it's truly unusable
+        // Only reject if response is extremely short and doesn't meet even the fallback threshold
+        if (finalResponse.length < minFallbackLength) {
           // Only retry if response is truly too short and we haven't retried yet
-          if (retryAttempt < 1 && finalResponse.length < 5) {
+          // Retry based on response quality, not question length
+          // For very short questions (≤5 chars), even short responses might be acceptable, so be more lenient
+          // For longer questions, retry if response is below fallback threshold (which we already know it is)
+          const shouldRetry = retryAttempt < 1 && (
+            questionLength <= 5 
+              ? finalResponse.length < 3  // For very short questions, only retry if response is extremely short (< 3 chars)
+              : true  // For longer questions, always retry if response is below fallback threshold
+          );
+          
+          if (shouldRetry) {
             streamingRetryingRef.current = true;
             showToast('Response looked incomplete, retrying once more...', { type: 'warning' });
             return await handleStreamingResponse(message, messageLanguage, chatId, isVoiceInput, retryAttempt + 1);
           }
-          // For very short prompts, accept shorter responses if they look complete
-          if (questionLength <= 5 && finalResponse.length >= 3 && /[.!?]?$/.test(finalResponse.trim())) {
-            // Accept very short responses for very short prompts (like "hi" -> "Hi!")
-            // Server already validated, so trust it
-          } else if (finalResponse.length < 5) {
-            // Only use fallback if response is extremely short (< 5 chars)
-            finalResponse = STREAMING_FALLBACK_MESSAGE;
-          }
+          // After retry is exhausted, use fallback if response is still below minFallbackLength
+          // This ensures responses between 3 and minFallbackLength chars get the fallback message
+          finalResponse = STREAMING_FALLBACK_MESSAGE;
+        } else if (finalResponse.length < minAcceptableLength) {
+          // Response is shorter than ideal but meets fallback threshold
+          // Server already validated it, so trust it - don't reject
+          // This handles cases where responses are slightly short but still valid
         }
         
         await addAIMessage(chatId, finalResponse, messageLanguage);
