@@ -8,7 +8,7 @@ import PYQ from '@/models/PYQ';
 import Chat from '@/models/Chat';
 import User from '@/models/User';
 import { Server } from 'socket.io';
-import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse, GARBLED_PATTERNS } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
@@ -401,12 +401,17 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                   }
                 );
 
+                // Use dynamic validation based on question length
+                const questionLength = message ? message.trim().length : 0;
+                const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+                const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+                
                 let fallbackResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
-                if (fallbackResponse && fallbackResponse.length >= 10) {
+                if (fallbackResponse && fallbackResponse.length >= minFallbackLength) {
                   fallbackResponse = cleanAIResponse(fallbackResponse);
-                  fallbackResponse = validateAndCleanResponse(fallbackResponse, 30) || fallbackResponse;
+                  fallbackResponse = validateAndCleanResponse(fallbackResponse, minLength) || fallbackResponse;
 
-                  if (fallbackResponse && fallbackResponse.length >= 10) {
+                  if (fallbackResponse && fallbackResponse.length >= minFallbackLength) {
                     responseCache.set(cacheKey, {
                       response: fallbackResponse,
                       timestamp: Date.now()
@@ -505,12 +510,17 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                   }
                 );
 
+                // Use dynamic validation based on question length
+                const questionLength = message ? message.trim().length : 0;
+                const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+                const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+                
                 const fallbackContent = fallbackResult?.content?.trim();
-                if (fallbackContent && fallbackContent.length > 0) {
+                if (fallbackContent && fallbackContent.length >= minFallbackLength) {
                   let cleanedResponse = cleanAIResponse(fallbackContent);
-                  let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fallbackContent;
+                  let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fallbackContent;
 
-                  if (validResponse && validResponse.trim().length > 0) {
+                  if (validResponse && validResponse.trim().length >= minFallbackLength) {
                     responseCache.set(cacheKey, {
                       response: validResponse,
                       timestamp: Date.now()
@@ -558,21 +568,33 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 if (!data || data === '[DONE]') {
                   // Stream complete - process final response in background
                   setImmediate(async () => {
+                    // Use dynamic validation based on question length (matching other endpoints)
+                    // Use outer-scope 'message' variable, not 'data.message' (data is now a string from SSE stream)
+                    const questionLength = message ? message.trim().length : 0;
+                    const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+                    const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+                    
                     let cleanedResponse = cleanAIResponse(fullResponse);
-                    let isValid = validateAndCleanResponse(cleanedResponse, 30);
+                    let isValid = validateAndCleanResponse(cleanedResponse, minLength);
                     let memoryCandidate = '';
                     
-                    if (!isValid && fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+                    // If validation failed but we have content, try to salvage it
+                    // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
+                    const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(fullResponse));
+                    if (!isValid && fullResponse.trim().length >= minSalvageLength && !hasGarbledPatterns) {
                         cleanedResponse = fullResponse.trim();
                         cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                         cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-                        if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > 50) {
+                        if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
                           cleanedResponse += '.';
                       }
-                      isValid = cleanedResponse;
+                      // Re-validate with lower threshold
+                      isValid = validateAndCleanResponse(cleanedResponse, minSalvageLength) || cleanedResponse;
                     }
                     
-                    if (isValid && isValid.length > 30) {
+                    // Accept if valid and meets minimum length
+                    const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+                    if (isValid && isValid.length >= minAcceptableLength) {
                       responseCache.set(cacheKey, {
                         response: isValid,
                         timestamp: Date.now()
@@ -590,18 +612,23 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                           }
                         });
                       }
-                    } else if (fullResponse.trim().length > 50 && !isGarbledResponse(fullResponse)) {
+                    } else if (fullResponse.trim().length >= minSalvageLength && !isGarbledResponse(fullResponse)) {
+                      // Try to use response even if validation failed but it has some content
                       cleanedResponse = fullResponse.trim();
                       cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                       cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-                      if (!/[.!?]$/.test(cleanedResponse)) {
+                      if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
                         cleanedResponse += '.';
                       }
-                      responseCache.set(cacheKey, {
-                        response: cleanedResponse,
-                        timestamp: Date.now()
-                      });
-                      memoryCandidate = cleanedResponse;
+                      // Use it if it's reasonable (very lenient for short questions)
+                      const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
+                      if (cleanedResponse.length >= minUseLength) {
+                        responseCache.set(cacheKey, {
+                          response: cleanedResponse,
+                          timestamp: Date.now()
+                        });
+                        memoryCandidate = cleanedResponse;
+                      }
                     }
 
                     if (memoryCandidate) {
