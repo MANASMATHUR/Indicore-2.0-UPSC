@@ -8,7 +8,7 @@ import Chat from '@/models/Chat';
 import User from '@/models/User';
 import pyqService from '@/lib/pyqService';
 import axios from 'axios';
-import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse, GARBLED_PATTERNS } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, extractConversationFacts } from '@/lib/userProfileExtractor';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
@@ -876,14 +876,19 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         return;
       }
 
+      // Use dynamic validation based on question length
+      const questionLength = message ? message.trim().length : 0;
+      const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+      const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+      
       let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
-      if (!fullResponse || fullResponse.length < 10) {
+      if (!fullResponse || fullResponse.length < minFallbackLength) {
         fullResponse = STREAMING_FALLBACK_MESSAGE;
       }
 
       let cleanedResponse = cleanAIResponse(fullResponse);
-      let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fullResponse;
-      if (!validResponse || validResponse.length < 10) {
+      let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fullResponse;
+      if (!validResponse || validResponse.length < minFallbackLength) {
         validResponse = STREAMING_FALLBACK_MESSAGE;
       }
 
@@ -1011,12 +1016,17 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             }
           );
 
+          // Use dynamic validation based on question length
+          const questionLength = message ? message.trim().length : 0;
+          const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+          const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+          
           let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
-          if (fullResponse && fullResponse.length >= 10) {
+          if (fullResponse && fullResponse.length >= minFallbackLength) {
             let cleanedResponse = cleanAIResponse(fullResponse);
-            let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fullResponse;
+            let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fullResponse;
 
-            if (validResponse && validResponse.length >= 10) {
+            if (validResponse && validResponse.length >= minFallbackLength) {
               await persistMemory(validResponse);
               const chunkSize = 400;
               for (let i = 0; i < validResponse.length; i += chunkSize) {
@@ -1130,12 +1140,17 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             }
           );
           
+          // Use dynamic validation based on question length
+          const questionLength = message ? message.trim().length : 0;
+          const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+          const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+          
           let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
-          if (fullResponse && fullResponse.length >= 10) {
+          if (fullResponse && fullResponse.length >= minFallbackLength) {
             let cleanedResponse = cleanAIResponse(fullResponse);
-            let validResponse = validateAndCleanResponse(cleanedResponse, 30) || fullResponse;
+            let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fullResponse;
             
-            if (validResponse && validResponse.length >= 10) {
+            if (validResponse && validResponse.length >= minFallbackLength) {
                 await persistMemory(validResponse);
               const chunkSize = 400;
               for (let i = 0; i < validResponse.length; i += chunkSize) {
@@ -1351,32 +1366,40 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       response.data.on('end', () => {
         clearInterval(keepAlive);
         
-        // Log if response is too short for debugging
-        if (!fullResponse || fullResponse.trim().length < 10) {
+        // Calculate question length and thresholds first
+        const questionLength = message ? message.trim().length : 0;
+        const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+        const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+        const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10); // Even more lenient
+        
+        // Log if response is too short for debugging, but don't immediately reject
+        if (!fullResponse || fullResponse.trim().length < minFallbackLength) {
           console.warn(`[Stream] Stream ended with empty/short response. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
-          if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
+          // Only send fallback if we truly have nothing
+          if (!fullResponse || fullResponse.trim().length === 0) {
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+              res.write('data: [DONE]\n\n');
+              res.end();
+            }
+            resolve();
+            return;
           }
-          resolve();
-          return;
+          // If we have some content, continue to validation
         }
 
-        let cleanedResponse = cleanAIResponse(fullResponse);
-        // Use very lenient validation - allow shorter responses for simple questions
-        const questionLength = message ? message.trim().length : 0;
-        // For very short prompts (1-5 chars like "hi"), accept responses as short as 5 chars
-        const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+        let cleanedResponse = cleanAIResponse(fullResponse || '');
         let isValid = validateAndCleanResponse(cleanedResponse, minLength);
         
         // If validation failed but we have any content, try to salvage it
         // For very short prompts, be extremely lenient
-        const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
-        if (!isValid && fullResponse.trim().length >= minSalvageLength) {
-          if (!isGarbledResponse(fullResponse)) {
+        // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
+        if (!isValid && fullResponse && fullResponse.trim().length >= minSalvageLength) {
+          const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(fullResponse));
+          if (!hasGarbledPatterns) {
             cleanedResponse = fullResponse.trim();
             cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+            cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
             cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
             
             if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
@@ -1388,13 +1411,37 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
         }
         
+        // If still not valid, try one more aggressive salvage attempt
+        // Note: fullResponse could be < minFallbackLength here (from line 1376), so check length first
+        if (!isValid && fullResponse && fullResponse.trim().length > 0) {
+          const veryLenientCleaned = fullResponse.trim()
+            .replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '')
+            .replace(/From\s+result[^.!?\n]*/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
+          const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(veryLenientCleaned));
+          if (veryLenientCleaned.length >= minFallbackLength && !hasGarbledPatterns) {
+            // Add punctuation if missing
+            const finalCleaned = !/[.!?]$/.test(veryLenientCleaned) && veryLenientCleaned.length > minFallbackLength
+              ? veryLenientCleaned + '.'
+              : veryLenientCleaned;
+            
+            // Accept if it meets minimum length and isn't garbled
+            if (finalCleaned.length >= minFallbackLength) {
+              isValid = finalCleaned;
+            }
+          }
+        }
+        
         const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
         if (isValid && isValid.length >= minAcceptableLength) {
           responseCache.set(cacheKey, {
             response: isValid,
             timestamp: Date.now()
           });
-        } else if (fullResponse.trim().length >= minSalvageLength && !isGarbledResponse(fullResponse)) {
+        } else if (fullResponse && fullResponse.trim().length >= minSalvageLength && !isGarbledResponse(fullResponse)) {
           // Try to use response even if validation failed but it has some content
           cleanedResponse = fullResponse.trim();
           cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
@@ -1414,10 +1461,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         }
         
         // If still no valid response, send fallback (very lenient threshold)
-        // For very short prompts like "hi", accept responses as short as 5 chars
-        const minFallbackLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+        // For very short prompts like "hi", accept responses as short as 3-5 chars
         if (!isValid || isValid.length < minFallbackLength) {
-          console.error(`[Stream] Stream ended with invalid response. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, Message: "${message?.substring(0, 50)}..."`);
+          console.error(`[Stream] Stream ended with invalid response. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, ValidLength: ${isValid?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
           if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
             res.write('data: [DONE]\n\n');
