@@ -9,7 +9,7 @@ import connectToDatabase from '@/lib/mongodb';
 import Chat from '@/models/Chat';
 import User from '@/models/User';
 import pyqService from '@/lib/pyqService';
-import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse } from '@/lib/responseCleaner';
+import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse, GARBLED_PATTERNS } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWorthyInfo, isSaveConfirmation } from '@/lib/userProfileExtractor';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
@@ -853,7 +853,9 @@ Requirements:
     // For very short prompts, be extremely lenient
     const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
     if (!validResponse && rawResponse.trim().length >= minSalvageLength) {
-      if (!isGarbledResponse(rawResponse)) {
+      // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
+      const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(rawResponse));
+      if (!hasGarbledPatterns) {
         let salvaged = rawResponse.trim();
         salvaged = salvaged.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         salvaged = salvaged.replace(/From\s+result[^.!?\n]*/gi, '');
@@ -868,9 +870,31 @@ Requirements:
       }
     }
     
-    const minFallbackLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
+    // If still not valid, try one more aggressive salvage attempt
+    if (!validResponse && rawResponse && rawResponse.trim().length >= minSalvageLength) {
+      const veryLenientCleaned = rawResponse.trim()
+        .replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '')
+        .replace(/From\s+result[^.!?\n]*/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      if (veryLenientCleaned.length >= minSalvageLength && !isGarbledResponse(veryLenientCleaned)) {
+        // Add punctuation if missing
+        const finalCleaned = !/[.!?]$/.test(veryLenientCleaned) && veryLenientCleaned.length > minSalvageLength
+          ? veryLenientCleaned + '.'
+          : veryLenientCleaned;
+        
+        // Accept if it meets minimum length and isn't garbled
+        if (finalCleaned.length >= minSalvageLength) {
+          validResponse = finalCleaned;
+        }
+      }
+    }
+    
+    // Use even more lenient fallback threshold (matching chat-stream.js)
+    const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
     if (!validResponse || validResponse.length < minFallbackLength) {
-      console.error(`[Chat] Invalid response. Length: ${rawResponse?.length || 0}, Valid: ${!!validResponse}, Message: "${message?.substring(0, 50)}..."`);
+      console.error(`[Chat] Invalid response. Length: ${rawResponse?.length || 0}, Valid: ${!!validResponse}, ValidLength: ${validResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
       return res.status(500).json({
         error: 'Unable to generate a valid response. Please try rephrasing your question.',
         code: 'INVALID_RESPONSE',
