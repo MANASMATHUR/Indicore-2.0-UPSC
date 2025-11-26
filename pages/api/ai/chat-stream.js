@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       res.setHeader('X-Accel-Buffering', 'no');
       if (res.flushHeaders) res.flushHeaders();
       
-      const chunks = cached.response.match(/.{1,50}/g) || [cached.response];
+      const chunks = cached.response.match(/[\s\S]{1,50}/g) || [cached.response];
       for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
         if (typeof res.flush === 'function') res.flush();
@@ -193,7 +193,7 @@ export default async function handler(req, res) {
           const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
           
           if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
-            const chunks = translated.match(/.{1,100}/g) || [translated];
+            const chunks = translated.match(/[\s\S]{1,100}/g) || [translated];
             for (const chunk of chunks) {
               res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
               if (typeof res.flush === 'function') {
@@ -219,7 +219,7 @@ export default async function handler(req, res) {
       if (presetAnswer) {
         const cleanedPreset = cleanAIResponse(presetAnswer);
         const finalPreset = validateAndCleanResponse(cleanedPreset, 30) || cleanedPreset || presetAnswer;
-        const chunks = finalPreset.match(/.{1,100}/g) || [finalPreset];
+        const chunks = finalPreset.match(/[\s\S]{1,100}/g) || [finalPreset];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -447,7 +447,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     const quickResponse = contextualLayer.getQuickResponse(message);
     if (quickResponse && !quickResponse.requiresAI && contextOptimizer.shouldUseLLM(message) === false) {
       const responseText = quickResponse.response || quickResponse.quickResponse || '';
-      const chunks = responseText.match(/.{1,100}/g) || [responseText];
+      const chunks = responseText.match(/[\s\S]{1,100}/g) || [responseText];
       for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
         if (typeof res.flush === 'function') res.flush();
@@ -468,7 +468,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     const previousPyqContextForSolve = cachedPyqContextForSolve || historyPyqContextForSolve;
     const PYQ_SOLVE_REGEX_EARLY = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
     const isSolveRequestEarly = previousPyqContextForSolve && PYQ_SOLVE_REGEX_EARLY.test(message.trim());
-    
+
     const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
     const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(message);
     const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
@@ -512,7 +512,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           console.warn('WARNING: Cleaning removed all newlines, using original');
           cleanedPyq = pyqDb;
         }
-        const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
+        const chunks = cleanedPyq.match(/[\s\S]{1,100}/g) || [cleanedPyq];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -528,7 +528,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       } else {
         const parsed = pyqService.parseQuery(message, language);
         const noResultsMessage = `## Previous Year Questions (${parsed.examCode || 'UPSC'})\n\n**Topic:** ${parsed.theme || 'General'}\n\nNo questions were found in the database for the given criteria.\n\n### Suggestions:\n\n- Try a different topic or subject\n- Check if the spelling is correct\n- Try a broader search term\n- Use formats like "PYQ on economics" or "history pyqs"`;
-        const chunks = noResultsMessage.match(/.{1,100}/g) || [noResultsMessage];
+        const chunks = noResultsMessage.match(/[\s\S]{1,100}/g) || [noResultsMessage];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -703,7 +703,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           cleanedPyq = pyqDb;
         }
         
-        const chunks = cleanedPyq.match(/.{1,100}/g) || [cleanedPyq];
+        const chunks = cleanedPyq.match(/[\s\S]{1,100}/g) || [cleanedPyq];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -721,7 +721,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           clearPyqContext(pyqContextKey);
         }
         const noResultsMessage = `## Previous Year Questions (${previousPyqContext.examCode || 'UPSC'})\n\n**Topic:** ${previousPyqContext.theme || 'General'}\n\nNo additional questions were found in the database.\n\nYou've reached the end of the available questions for this topic.\n\n### Try:\n\n- A different topic or subject\n- A different year range\n- A broader search term`;
-        const chunks = noResultsMessage.match(/.{1,100}/g) || [noResultsMessage];
+        const chunks = noResultsMessage.match(/[\s\S]{1,100}/g) || [noResultsMessage];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
           if (typeof res.flush === 'function') {
@@ -754,7 +754,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       // Return an error response instead of sending confusing message to AI
       if (!pyqContextForSolving) {
         const errorMessage = 'I apologize, but I couldn\'t retrieve the questions you asked about earlier. Please ask for the questions again, or provide the specific questions you\'d like me to solve.';
-        const chunks = errorMessage.match(/.{1,100}/g) || [errorMessage];
+        const chunks = errorMessage.match(/[\s\S]{1,100}/g) || [errorMessage];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
         }
@@ -880,7 +880,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       const questionLength = message ? message.trim().length : 0;
       const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
       const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-      
+
       let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
       if (!fullResponse || fullResponse.length < minFallbackLength) {
         fullResponse = STREAMING_FALLBACK_MESSAGE;
@@ -1020,7 +1020,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           const questionLength = message ? message.trim().length : 0;
           const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
           const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-          
+
           let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
           if (fullResponse && fullResponse.length >= minFallbackLength) {
             let cleanedResponse = cleanAIResponse(fullResponse);
@@ -1274,10 +1274,10 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
                 if (cleanedResponse.length >= minUseLength) {
                   isValid = cleanedResponse;
-                  responseCache.set(cacheKey, {
-                    response: cleanedResponse,
-                    timestamp: Date.now()
-                  });
+                responseCache.set(cacheKey, {
+                  response: cleanedResponse,
+                  timestamp: Date.now()
+                });
                 }
               }
               
@@ -1287,9 +1287,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               if (!isValid || isValid.length < minFallbackLength) {
                 console.error(`[Stream] Response too short or invalid. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, Message: "${message?.substring(0, 50)}..."`);
                 if (!res.writableEnded) {
-                  res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-                  res.write('data: [DONE]\n\n');
-                  res.end();
+                res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
                 }
                 resolve();
                 return;
@@ -1303,11 +1303,11 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               }
               
               if (!res.writableEnded) {
-                res.write('data: [DONE]\n\n');
-                if (typeof res.flush === 'function') {
-                  res.flush();
-                }
-                res.end();
+              res.write('data: [DONE]\n\n');
+              if (typeof res.flush === 'function') {
+                res.flush();
+              }
+              res.end();
               }
               resolve();
               return;
@@ -1329,9 +1329,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 if (content.trim().length > 0) {
                   fullResponse += content;
                   if (!res.writableEnded) {
-                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                    if (typeof res.flush === 'function') {
-                      res.flush();
+                  res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                  if (typeof res.flush === 'function') {
+                    res.flush();
                     }
                   }
                 }
@@ -1377,14 +1377,14 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           console.warn(`[Stream] Stream ended with empty/short response. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
           // Only send fallback if we truly have nothing
           if (!fullResponse || fullResponse.trim().length === 0) {
-            if (!res.writableEnded) {
-              res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-              res.write('data: [DONE]\n\n');
-              res.end();
-            }
-            resolve();
-            return;
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
           }
+          resolve();
+          return;
+        }
           // If we have some content, continue to validation
         }
 
@@ -1441,22 +1441,28 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             response: isValid,
             timestamp: Date.now()
           });
-        } else if (fullResponse && fullResponse.trim().length >= minSalvageLength && !isGarbledResponse(fullResponse)) {
-          // Try to use response even if validation failed but it has some content
+        } else if (fullResponse && fullResponse.trim().length >= minSalvageLength) {
+          const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(fullResponse));
+          if (!hasGarbledPatterns) {
+            // Try to use response even if validation failed but it has some content
           cleanedResponse = fullResponse.trim();
           cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
           cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-          if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
+            if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
             cleanedResponse += '.';
           }
-          // Use it if it's reasonable (very lenient for short questions)
-          const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
-          if (cleanedResponse.length >= minUseLength) {
-            isValid = cleanedResponse;
-            responseCache.set(cacheKey, {
-              response: cleanedResponse,
-              timestamp: Date.now()
-            });
+
+            if (/[A-Za-zÀ-ÖØ-öø-ÿ0-9]/.test(cleanedResponse)) {
+              const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
+              const fallbackValidated = validateAndCleanResponse(cleanedResponse, minUseLength);
+              if (fallbackValidated) {
+                isValid = fallbackValidated;
+          responseCache.set(cacheKey, {
+                  response: fallbackValidated,
+            timestamp: Date.now()
+          });
+        }
+            }
           }
         }
         
