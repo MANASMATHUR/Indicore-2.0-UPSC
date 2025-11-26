@@ -33,6 +33,21 @@ const PyqSchema = new mongoose.Schema({
     trim: true,
     minlength: 10
   },
+  options: {
+    type: [
+      {
+        label: { type: String, trim: true },
+        text: { type: String, trim: true }
+      }
+    ],
+    default: [],
+    validate: {
+      validator: function (arr) {
+        return Array.isArray(arr) && arr.every(opt => opt.label && opt.text);
+      },
+      message: 'Each option must include label and text'
+    }
+  },
   answer: {
     type: String,
     trim: true,
