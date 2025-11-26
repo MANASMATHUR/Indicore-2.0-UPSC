@@ -405,7 +405,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 const questionLength = message ? message.trim().length : 0;
                 const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
                 const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-                
+
                 let fallbackResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
                 if (fallbackResponse && fallbackResponse.length >= minFallbackLength) {
                   fallbackResponse = cleanAIResponse(fallbackResponse);
@@ -514,7 +514,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 const questionLength = message ? message.trim().length : 0;
                 const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
                 const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-                
+
                 const fallbackContent = fallbackResult?.content?.trim();
                 if (fallbackContent && fallbackContent.length >= minFallbackLength) {
                   let cleanedResponse = cleanAIResponse(fallbackContent);
@@ -623,11 +623,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                       // Use it if it's reasonable (very lenient for short questions)
                       const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
                       if (cleanedResponse.length >= minUseLength) {
-                        responseCache.set(cacheKey, {
-                          response: cleanedResponse,
-                          timestamp: Date.now()
-                        });
-                        memoryCandidate = cleanedResponse;
+                      responseCache.set(cacheKey, {
+                        response: cleanedResponse,
+                        timestamp: Date.now()
+                      });
+                      memoryCandidate = cleanedResponse;
                       }
                     }
 

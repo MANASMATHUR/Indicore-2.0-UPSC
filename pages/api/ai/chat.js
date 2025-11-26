@@ -878,15 +878,16 @@ Requirements:
         .replace(/\s+/g, ' ')
         .trim();
       
-      if (veryLenientCleaned.length >= minSalvageLength && !isGarbledResponse(veryLenientCleaned)) {
+      const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(veryLenientCleaned));
+      if (!hasGarbledPatterns && /[A-Za-zÀ-ÖØ-öø-ÿ0-9]/.test(veryLenientCleaned)) {
         // Add punctuation if missing
         const finalCleaned = !/[.!?]$/.test(veryLenientCleaned) && veryLenientCleaned.length > minSalvageLength
           ? veryLenientCleaned + '.'
           : veryLenientCleaned;
         
-        // Accept if it meets minimum length and isn't garbled
-        if (finalCleaned.length >= minSalvageLength) {
-          validResponse = finalCleaned;
+        const revalidated = validateAndCleanResponse(finalCleaned, minSalvageLength);
+        if (revalidated) {
+          validResponse = revalidated;
         }
       }
     }
