@@ -157,9 +157,41 @@ AZURE_TRANSLATOR_KEY=your-azure-translator-key
 AZURE_TRANSLATOR_REGION=your-azure-region
 # Alternative: AZURE_TRANSLATOR_SUBSCRIPTION_KEY and AZURE_TRANSLATOR_LOCATION
 GOOGLE_TRANSLATE_API_KEY=your-google-translate-key
+
+# Contact Form Email Configuration
+CONTACT_EMAIL=your-email@example.com  # Email address to receive contact form submissions
+# SMTP Configuration (for sending emails)
+SMTP_HOST=smtp.gmail.com  # SMTP server host
+SMTP_PORT=587  # SMTP port (587 for TLS, 465 for SSL)
+SMTP_SECURE=false  # true for SSL (port 465), false for TLS (port 587)
+SMTP_USER=your-email@gmail.com  # Your email address
+SMTP_PASSWORD=your-app-password  # Your email password or app-specific password
+SMTP_FROM=your-email@gmail.com  # From email address (optional, defaults to SMTP_USER)
 ```
 
 **Note**: All APIs are configured to use FREE TIER limits. See `FREE_TIER_SETUP.md` for detailed setup instructions.
+
+### Contact Form Email Setup
+
+The contact form requires SMTP configuration to send emails. Here's how to set it up:
+
+1. **Gmail Setup** (Recommended for testing):
+   - Enable 2-Factor Authentication on your Google account
+   - Generate an App Password: Google Account → Security → 2-Step Verification → App passwords
+   - Use the app password as `SMTP_PASSWORD`
+
+2. **Other Email Providers**:
+   - **Outlook/Hotmail**: Use `smtp-mail.outlook.com` with port 587
+   - **Yahoo**: Use `smtp.mail.yahoo.com` with port 587
+   - **Custom SMTP**: Configure according to your provider's settings
+
+3. **Environment Variables**:
+   - `CONTACT_EMAIL`: The email address where you want to receive contact form submissions
+   - `SMTP_USER`: Your email address used for authentication
+   - `SMTP_PASSWORD`: Your email password or app-specific password
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`: SMTP server configuration
+
+**Note**: If SMTP is not configured, the form will still work but emails won't be sent. The submission will be logged to the console in development mode.
 
 ## 📊 Performance
 
