@@ -11,25 +11,25 @@ import { translateText } from '@/pages/api/ai/translate';
 function parseDate(dateString) {
   if (!dateString) return new Date();
   if (dateString instanceof Date) return dateString;
-  
+
   // Try ISO format first
   const isoDate = new Date(dateString);
   if (!isNaN(isoDate.getTime())) return isoDate;
-  
+
   // Try DD-MM-YYYY format
   const ddmmyyyy = dateString.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
-  
+
   // Try YYYY-MM-DD format
   const yyyymmdd = dateString.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (yyyymmdd) {
     const [, year, month, day] = yyyymmdd;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
-  
+
   // Fallback to current date if parsing fails
   console.warn(`Could not parse date: ${dateString}, using current date`);
   return new Date();
@@ -40,7 +40,7 @@ function parseDate(dateString) {
  */
 function processDigestData(data) {
   if (!data) return data;
-  
+
   // Process newsItems
   if (data.newsItems && Array.isArray(data.newsItems)) {
     data.newsItems = data.newsItems.map(item => ({
@@ -48,20 +48,79 @@ function processDigestData(data) {
       date: item.date ? parseDate(item.date) : new Date()
     }));
   }
-  
+
   // Process categories
   if (data.categories && Array.isArray(data.categories)) {
     data.categories = data.categories.map(category => ({
       ...category,
       items: category.items && Array.isArray(category.items)
         ? category.items.map(item => ({
-            ...item,
-            date: item.date ? parseDate(item.date) : new Date()
-          }))
+          ...item,
+          date: item.date ? parseDate(item.date) : new Date()
+        }))
         : []
     }));
   }
-  
+
+  return data;
+}
+
+/**
+ * Sanitize digest data to ensure enum values are valid
+ */
+function sanitizeDigestData(data) {
+  if (!data) return data;
+
+  const validRelevance = ['high', 'medium', 'low'];
+  const validDifficulty = ['easy', 'medium', 'hard'];
+  const validUrgency = ['immediate', 'upcoming', 'monitor'];
+
+  const sanitizeItem = (item) => {
+    if (item.relevance) {
+      const rel = item.relevance.toLowerCase();
+      if (rel === 'moderate') item.relevance = 'medium';
+      else if (!validRelevance.includes(rel)) item.relevance = 'medium';
+      else item.relevance = rel;
+    }
+    return item;
+  };
+
+  // Sanitize newsItems
+  if (data.newsItems && Array.isArray(data.newsItems)) {
+    data.newsItems = data.newsItems.map(sanitizeItem);
+  }
+
+  // Sanitize categories
+  if (data.categories && Array.isArray(data.categories)) {
+    data.categories.forEach(cat => {
+      if (cat.items && Array.isArray(cat.items)) {
+        cat.items = cat.items.map(sanitizeItem);
+      }
+    });
+  }
+
+  // Sanitize practiceQuestions
+  if (data.practiceQuestions && Array.isArray(data.practiceQuestions)) {
+    data.practiceQuestions.forEach(q => {
+      if (q.difficulty) {
+        const diff = q.difficulty.toLowerCase();
+        if (!validDifficulty.includes(diff)) q.difficulty = 'medium';
+        else q.difficulty = diff;
+      }
+    });
+  }
+
+  // Sanitize trendWatch
+  if (data.trendWatch && Array.isArray(data.trendWatch)) {
+    data.trendWatch.forEach(t => {
+      if (t.urgency) {
+        const urg = t.urgency.toLowerCase();
+        if (!validUrgency.includes(urg)) t.urgency = 'monitor';
+        else t.urgency = urg;
+      }
+    });
+  }
+
   return data;
 }
 
@@ -70,9 +129,9 @@ function processDigestData(data) {
  */
 async function translateDigestContent(data, targetLanguage) {
   if (!data || targetLanguage === 'en') return data;
-  
+
   const translated = { ...data };
-  
+
   // Translate title
   if (data.title) {
     try {
@@ -81,7 +140,7 @@ async function translateDigestContent(data, targetLanguage) {
       console.warn('Failed to translate title:', e.message);
     }
   }
-  
+
   // Translate summary
   if (data.summary) {
     try {
@@ -90,7 +149,7 @@ async function translateDigestContent(data, targetLanguage) {
       console.warn('Failed to translate summary:', e.message);
     }
   }
-  
+
   // Translate key highlights
   if (data.keyHighlights && Array.isArray(data.keyHighlights)) {
     translated.keyHighlights = await Promise.all(
@@ -104,7 +163,7 @@ async function translateDigestContent(data, targetLanguage) {
       })
     );
   }
-  
+
   // Translate news items
   if (data.newsItems && Array.isArray(data.newsItems)) {
     translated.newsItems = await Promise.all(
@@ -141,7 +200,7 @@ async function translateDigestContent(data, targetLanguage) {
       })
     );
   }
-  
+
   // Translate categories
   if (data.categories && Array.isArray(data.categories)) {
     translated.categories = await Promise.all(
@@ -252,7 +311,7 @@ async function translateDigestContent(data, targetLanguage) {
       })
     );
   }
-  
+
   // Translate exam relevance
   if (data.examRelevance) {
     translated.examRelevance = {};
@@ -270,7 +329,7 @@ async function translateDigestContent(data, targetLanguage) {
       }
     }
   }
-  
+
   return translated;
 }
 
@@ -328,8 +387,11 @@ export default async function handler(req, res) {
     } = req.body;
 
     const preferences = session.user?.preferences || {};
-    const preferredModel = preferences.model || 'sonar-pro';
-    const preferredProvider = preferences.provider || 'openai';
+    // For current affairs digest, prefer Perplexity for real-time web search capabilities if available
+    // Otherwise fall back to OpenAI
+    const hasPerplexity = !!process.env.PERPLEXITY_API_KEY;
+    const preferredProvider = hasPerplexity ? 'perplexity' : 'openai';
+    const preferredModel = hasPerplexity ? 'sonar-pro' : (preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini');
     const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
     const excludedProviders = preferences.excludedProviders || [];
 
@@ -387,22 +449,87 @@ export default async function handler(req, res) {
     const systemPrompt = `You are an expert current affairs analyst specializing in competitive exam preparation (UPSC, PCS, SSC). Your task is to create comprehensive current affairs digests that are:
 
 CRITICAL REQUIREMENTS:
-1. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify.
-2. **EXAM-RELEVANT**: Focus exclusively on topics likely to appear in competitive exams. Every item must have clear exam relevance.
-3. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
-4. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
-5. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
-6. **CONCISE**: Clear summaries with key points
-7. **ACTIONABLE**: Include exam relevance indicators, subject tags, GS paper references, and a short exam-focused note.
+1. **USE REAL-TIME DATA**: When real-time news data is provided, you MUST use it as the primary source. DO NOT rely on your training data cutoff. Today's date is ${new Date().toISOString().split('T')[0]}.
+2. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify from the provided news data or reliable sources.
+3. **CURRENT DATES**: All dates must be current (${new Date().toISOString().split('T')[0]} or recent). If you cannot provide current information, clearly state that verification is needed.
+4. **EXAM-RELEVANT**: Focus exclusively on topics likely to appear in competitive exams. Every item must have clear exam relevance.
+5. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+6. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
+7. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
+8. **CONCISE**: Clear summaries with key points
+9. **ACTIONABLE**: Include exam relevance indicators, subject tags, GS paper references, and a short exam-focused note.
 
-Always highlight continuity with previous developments where relevant.`;
+IMPORTANT: If real-time news data is provided in the user's message, prioritize that data over any information from your training. Always use the most recent dates and information available.`;
 
-    const userPrompt = `Create a ${period} current affairs digest for ${langName} readers covering ${start.toDateString()} to ${end.toDateString()}.
+    // First, fetch real-time news to ensure we have latest information
+    let realNewsData = [];
+    try {
+      console.log('Fetching real-time news for digest...');
+      // Use Perplexity or OpenAI with web search for real-time news
+      const dateRangeDays = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
+      const newsQuery = `Get latest current affairs and news relevant for UPSC exam preparation from the last ${dateRangeDays} days. Focus on: ${requestedCategories.join(', ')}. Provide actual current dates and sources. Today's date is ${new Date().toISOString().split('T')[0]}.`;
+
+      // Try to get real-time news using Perplexity (which has web search) or OpenAI
+      const newsSystemPrompt = `You are a current affairs news aggregator. Fetch and provide REAL-TIME news from the last ${dateRangeDays} days relevant for competitive exams. Today is ${new Date().toISOString().split('T')[0]}. Include actual dates, sources, and current information. Format as JSON array with: title, summary, category, date (YYYY-MM-DD), source, relevance, keyPoints, tags.`;
+
+      try {
+        const newsAIResult = await callAIWithFallback(
+          [{ role: 'user', content: newsQuery }],
+          newsSystemPrompt,
+          2000,
+          0.7,
+          {
+            model: preferredModel,
+            preferredProvider: preferredProvider, // Use dynamic provider
+            excludeProviders: [],
+            openAIModel: preferredOpenAIModel
+          }
+        );
+
+        const newsContent = newsAIResult?.content || '';
+        if (newsContent) {
+          try {
+            const jsonMatch = newsContent.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              // Ensure it's an array
+              if (Array.isArray(parsed)) {
+                realNewsData = parsed;
+                console.log(`Fetched ${realNewsData.length} real-time news items`);
+              } else {
+                console.warn('Parsed news data is not an array');
+              }
+            }
+          } catch (parseError) {
+            console.warn('Could not parse news data:', parseError.message);
+          }
+        }
+      } catch (newsError) {
+        console.warn('Error fetching real-time news via AI:', newsError.message);
+      }
+    } catch (error) {
+      console.warn('Error in news fetching process:', error.message);
+      // Continue with AI generation as fallback
+    }
+
+    // Build context from real news
+    const realNewsContext = Array.isArray(realNewsData) && realNewsData.length > 0
+      ? `\n\nIMPORTANT: Use the following REAL-TIME NEWS DATA (fetched on ${new Date().toISOString().split('T')[0]}) as the PRIMARY SOURCE for this digest:\n\n${JSON.stringify(realNewsData.slice(0, 20), null, 2)}\n\nBase your digest on this real-time data. Include actual dates, sources, and facts from this data. DO NOT use outdated information from your training data.`
+      : `\n\nCRITICAL: You MUST provide CURRENT and REAL-TIME information. Today's date is ${new Date().toISOString().split('T')[0]}. Do NOT use information from your training data cutoff. Focus on recent developments that would be relevant for competitive exams. If you cannot provide current information, clearly state that the information may need verification.`;
+
+    const userPrompt = `Create a ${period} current affairs digest for ${langName} readers covering ${start.toDateString()} to ${end.toDateString()}.${realNewsContext}
 
 ${categoryInstruction}
 ${focusInstruction}
 ${practiceInstruction}
 ${trendInstruction}
+
+IMPORTANT: 
+- Use ONLY the real-time news data provided above
+- Include actual dates from the news data
+- Reference actual sources mentioned in the news
+- Today's date is ${new Date().toISOString().split('T')[0]} - ensure all dates are current
+- If real news data is provided, prioritize it over any training data
 
 Structure the response as JSON:
 {
@@ -458,6 +585,7 @@ Structure the response as JSON:
 
     let parsedData;
     try {
+      // Use Perplexity for real-time web search to get latest news
       const aiResult = await callAIWithFallback(
         [{ role: 'user', content: userPrompt }],
         systemPrompt,
@@ -465,8 +593,9 @@ Structure the response as JSON:
         0.6,
         {
           model: preferredModel,
-          preferredProvider,
-          excludeProviders: excludedProviders,
+          preferredProvider: preferredProvider, // Use dynamic provider based on availability
+
+          excludeProviders: [], // Allow fallback if Perplexity fails
           openAIModel: preferredOpenAIModel
         }
       );
@@ -503,7 +632,8 @@ Structure the response as JSON:
     }
 
     const processedData = processDigestData(parsedData);
-    let finalData = processedData || parsedData;
+    const sanitizedData = sanitizeDigestData(processedData);
+    let finalData = sanitizedData || parsedData;
 
     if (language && language !== 'en') {
       try {
