@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -10,7 +10,7 @@
     padding: 0;
     box-sizing: border-box;
   }
-  
+
   html {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
@@ -24,48 +24,44 @@
     font-size: 16px;
     line-height: 1.6;
   }
-  
+
   @media (min-width: 768px) {
     html {
       font-size: 17px;
     }
   }
-  
-  body {
-    @apply bg-gradient-to-br from-white via-orange-50/20 to-white min-h-screen antialiased;
-    height: 100vh;
-    background-attachment: fixed;
-    margin: 0;
-    padding: 0;
-    overflow-x: hidden;
-    position: relative;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Outfit', sans-serif;
+    letter-spacing: -0.02em;
   }
 
+  body {
+    @apply bg-background text-foreground min-h-screen antialiased selection:bg-primary/20 selection:text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Premium Background Pattern */
   body::before {
     content: '';
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-      radial-gradient(circle at 15% 50%, rgba(239, 68, 68, 0.04) 0%, transparent 50%),
-      radial-gradient(circle at 85% 80%, rgba(249, 115, 22, 0.03) 0%, transparent 50%),
-      radial-gradient(circle at 50% 20%, rgba(220, 38, 38, 0.03) 0%, transparent 50%);
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 15% 50%, hsla(var(--primary) / 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 85% 30%, hsla(var(--secondary) / 0.1) 0%, transparent 50%);
     pointer-events: none;
-    z-index: 0;
-  }
-
-  .dark body {
-    @apply bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950;
-    background-attachment: fixed;
+    z-index: -1;
   }
 
   .dark body::before {
-    background: 
-      radial-gradient(circle at 15% 50%, rgba(239, 68, 68, 0.06) 0%, transparent 50%),
-      radial-gradient(circle at 85% 80%, rgba(249, 115, 22, 0.05) 0%, transparent 50%),
-      radial-gradient(circle at 50% 20%, rgba(220, 38, 38, 0.04) 0%, transparent 50%);
+    background-image:
+      radial-gradient(circle at 15% 50%, hsla(var(--primary) / 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 85% 30%, hsla(var(--secondary) / 0.1) 0%, transparent 50%);
   }
 
   .dark ::-webkit-scrollbar {
@@ -83,56 +79,61 @@
   .dark ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-600;
   }
-  
+
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --foreground: 345 5% 10%;
+    /* Softer black */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 345 5% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 84% 60%;
+    --popover-foreground: 345 5% 10%;
+    --primary: 343 85% 50%;
+    /* Vibrant Pink/Red */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 95% 53%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 84% 60%;
-    --accent-foreground: 0 0% 100%;
+    --secondary: 215 25% 95%;
+    /* Cool gray */
+    --secondary-foreground: 215 25% 10%;
+    --muted: 215 25% 95%;
+    --muted-foreground: 215 15% 45%;
+    --accent: 343 85% 96%;
+    --accent-foreground: 343 85% 50%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 84% 60%;
-    --chart-1: 12 76% 61%;
+    --border: 215 20% 90%;
+    --input: 215 20% 90%;
+    --ring: 343 85% 50%;
+    --radius: 1rem;
+    /* More rounded */
+    --chart-1: 343 85% 50%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.75rem;
   }
-  
+
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 84% 60%;
+    --background: 220 40% 5%;
+    /* Deep rich blue/black */
+    --foreground: 210 20% 98%;
+    --card: 220 35% 8%;
+    --card-foreground: 210 20% 98%;
+    --popover: 220 35% 8%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 343 85% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 95% 53%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 84% 60%;
-    --accent-foreground: 0 0% 100%;
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 25% 15%;
+    --muted-foreground: 215 15% 65%;
+    --accent: 343 85% 15%;
+    --accent-foreground: 343 85% 60%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 84% 60%;
-    --chart-1: 220 70% 50%;
+    --border: 215 20% 15%;
+    --input: 215 20% 15%;
+    --ring: 343 85% 60%;
+    --chart-1: 343 85% 60%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
@@ -165,45 +166,46 @@
     .chat-container-sidebar-open {
       margin-left: 0;
     }
-    
+
     .message-content {
       @apply px-3 py-2.5 text-sm;
       max-width: calc(100% - 1rem);
       margin-left: auto;
       margin-right: auto;
     }
-    
+
     .messages {
       -webkit-overflow-scrolling: touch;
       overflow-x: hidden;
     }
   }
-  
+
   @media (max-width: 480px) {
     .message-content {
       @apply px-3 py-2 text-sm;
       border-radius: 1.5rem;
     }
-    
+
     body {
       overflow-x: hidden;
       position: relative;
       -webkit-overflow-scrolling: touch;
     }
-    
+
     * {
       -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
     }
-    
-    button, a {
+
+    button,
+    a {
       touch-action: manipulation;
       -webkit-touch-callout: none;
     }
-    
+
     .input-container {
       padding: 0.75rem;
     }
-    
+
     .chat-input-form {
       gap: 0.5rem;
     }
@@ -212,16 +214,16 @@
   .dark .chat-container {
     @apply bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 backdrop-blur-sm;
   }
-  
+
   .message {
     @apply w-full mb-3;
     animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  
+
   .message.user {
     @apply justify-end;
   }
-  
+
   .message-content {
     @apply px-4 py-3 sm:px-6 sm:py-4 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words max-w-3xl rounded-3xl shadow-lg transition-all duration-300;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -237,7 +239,7 @@
     overflow-wrap: break-word;
     -webkit-overflow-scrolling: touch;
   }
-  
+
   .message.user .message-content {
     @apply bg-gradient-to-br from-red-600 via-orange-600 to-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300;
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -258,13 +260,13 @@
   .dark .message.user .message-content:hover {
     box-shadow: 0 12px 40px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
   }
-  
+
   .message.assistant .message-content {
     @apply text-gray-900 border transition-all duration-300;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.98));
     border-color: rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 
+    box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.06),
       0 0 0 1px rgba(0, 0, 0, 0.03),
       0 2px 4px rgba(0, 0, 0, 0.04);
@@ -275,7 +277,7 @@
     background: rgba(255, 255, 255, 1);
     border-color: rgba(0, 0, 0, 0.15);
     transform: translateY(-1px);
-    box-shadow: 
+    box-shadow:
       0 6px 20px rgba(0, 0, 0, 0.08),
       0 0 0 1px rgba(0, 0, 0, 0.04),
       0 2px 8px rgba(0, 0, 0, 0.05);
@@ -286,7 +288,7 @@
     background: linear-gradient(135deg, rgba(30, 30, 30, 0.95), rgba(40, 40, 40, 0.95));
     border-color: rgba(100, 100, 100, 0.3);
     backdrop-filter: blur(20px) saturate(180%);
-    box-shadow: 
+    box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(255, 255, 255, 0.05),
       0 2px 4px rgba(0, 0, 0, 0.3);
@@ -297,15 +299,15 @@
     background: linear-gradient(135deg, rgba(40, 40, 40, 0.98), rgba(50, 50, 50, 0.98));
     border-color: rgba(150, 150, 150, 0.4);
   }
-  
+
   .dark .message.assistant .message-content * {
     color: rgb(255 255 255) !important;
   }
-  
+
   .dark .message.assistant .message-content p {
     color: rgb(255 255 255) !important;
   }
-  
+
   .dark .message.assistant .message-content strong,
   .dark .message.assistant .message-content h1,
   .dark .message.assistant .message-content h2,
@@ -316,12 +318,12 @@
   }
 
   .dark .message.assistant .message-content:hover {
-    box-shadow: 
+    box-shadow:
       0 6px 20px rgba(0, 0, 0, 0.5),
       0 0 0 1px rgba(255, 255, 255, 0.08),
       0 2px 8px rgba(0, 0, 0, 0.4);
   }
-  
+
   .sidebar {
     position: fixed !important;
     left: 0 !important;
@@ -362,11 +364,11 @@
     border-right-color: rgba(100, 100, 100, 0.3);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   }
-  
+
   .sidebar-closed {
     transform: translateX(-100%) !important;
   }
-  
+
   .sidebar-open {
     transform: translateX(0) !important;
   }
@@ -381,12 +383,12 @@
     visibility: hidden;
     opacity: 0;
   }
-  
+
   .sidebar-backdrop.opacity-100 {
     visibility: visible;
     opacity: 1;
   }
-  
+
   .chat-item {
     padding: 12px;
     cursor: pointer;
@@ -418,19 +420,19 @@
     color: #e2e8f0;
     background: rgba(30, 30, 30, 0.8);
   }
-  
+
   .chat-item:hover {
     background: rgba(248, 250, 252, 0.9);
     border-color: rgba(239, 68, 68, 0.3);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
   }
-  
+
   .dark .chat-item:hover {
     background: rgba(40, 40, 40, 0.9);
     border-color: rgba(239, 68, 68, 0.4);
   }
-  
+
   .chat-item.active {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1));
     color: #dc2626;
@@ -444,7 +446,7 @@
     border-color: rgba(239, 68, 68, 0.4);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
   }
-  
+
   .input-container {
     @apply p-3 sm:p-6 bg-gradient-to-r from-white/90 via-orange-50/50 to-white/90 border-t border-gray-200/60 flex justify-center items-center shadow-lg w-full backdrop-blur-xl;
   }
@@ -487,31 +489,33 @@
       @apply gap-2;
     }
 
-    .message.assistant > div:first-child {
+    .message.assistant>div:first-child {
       @apply w-6 h-6 text-xs;
     }
 
-    .message.user > div:last-child {
+    .message.user>div:last-child {
       @apply w-6 h-6 text-xs;
     }
-    
+
     .mic-button {
       min-width: 44px;
       min-height: 44px;
     }
-    
+
     .input-container {
       padding: 12px;
     }
   }
 
   @media (max-width: 768px) {
-    button, .button {
+
+    button,
+    .button {
       min-height: 44px;
       min-width: 44px;
     }
   }
-  
+
   .message-input {
     @apply flex-1 px-5 py-4 border border-gray-300/60 rounded-xl text-sm outline-none transition-all duration-200 bg-white/95 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 shadow-sm hover:shadow-md backdrop-blur-sm;
   }
@@ -519,7 +523,7 @@
   .dark .message-input {
     @apply bg-gray-800/70 border-gray-600/50 text-gray-100 placeholder:text-gray-400 focus:border-red-400 focus:ring-red-400/20 shadow-lg hover:shadow-xl backdrop-blur-sm;
   }
-  
+
   .send-button {
     @apply bg-gradient-to-r from-red-600 to-orange-600 text-white border-none p-4 rounded-xl cursor-pointer transition-all duration-300 hover:from-red-700 hover:to-orange-700 hover:shadow-xl hover:shadow-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:scale-105 active:scale-95 relative overflow-hidden;
   }
@@ -550,11 +554,11 @@
   .dark .send-button {
     @apply bg-gradient-to-r from-red-700 to-orange-700 hover:from-red-800 hover:to-orange-800 shadow-lg hover:shadow-red-500/40;
   }
-  
+
   .chat-input-form {
     @apply flex gap-4 items-center w-full max-w-4xl mx-auto justify-center px-6;
   }
-  
+
   .settings-panel {
     @apply fixed top-0 right-0 w-96 h-full bg-gradient-to-b from-white/95 to-gray-50/95 z-50 p-6 overflow-y-auto transform translate-x-full transition-all duration-300 ease-out border-l border-gray-200/60 backdrop-blur-xl shadow-2xl;
     will-change: transform;
@@ -563,7 +567,7 @@
   .dark .settings-panel {
     @apply bg-gradient-to-b from-gray-950/95 to-gray-900/95 border-gray-700/50 shadow-2xl backdrop-blur-xl;
   }
-  
+
   .settings-panel.active {
     @apply translate-x-0;
   }
@@ -571,12 +575,12 @@
   .settings-panel:not(.active) {
     pointer-events: none;
   }
-  
+
   .voice-dialog {
     @apply fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm;
     animation: fadeIn 0.3s ease-out;
   }
-  
+
   .voice-dialog-content {
     @apply bg-white dark:bg-gray-900 p-6 rounded-2xl w-full max-w-md mx-4 flex flex-col items-center border border-gray-200 dark:border-gray-700 shadow-2xl backdrop-blur-md;
     animation: slideInUp 0.4s ease-out;
@@ -586,7 +590,7 @@
   .dark .voice-dialog-content {
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
   }
-  
+
   .loading {
     @apply hidden text-center p-4 text-gray-500 text-sm bg-gray-50 border-t border-gray-200;
   }
@@ -594,15 +598,15 @@
   .dark .loading {
     @apply text-gray-400 bg-gray-800 border-gray-700;
   }
-  
+
   .loading.active {
     @apply block;
   }
-  
+
   .btn-primary {
     @apply bg-gradient-to-r from-red-600 to-orange-600 text-white px-4 py-2 rounded-lg hover:from-red-700 hover:to-orange-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg;
   }
-  
+
   .btn-secondary {
     @apply bg-white text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors duration-150 border border-gray-300 font-medium shadow-sm;
   }
@@ -610,7 +614,7 @@
   .dark .btn-secondary {
     @apply bg-gray-800 text-gray-300 border-gray-600 hover:bg-gray-700;
   }
-  
+
   .btn-danger {
     @apply bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-150 font-medium;
   }
@@ -628,133 +632,131 @@
   .animate-fade-in {
     animation: fadeIn 0.3s ease-out forwards;
   }
-  
+
   .animate-slide-in {
     animation: slideIn 0.3s ease-out forwards;
   }
-  
+
   .animate-pulse-slow {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   .animate-bounce-gentle {
     animation: bounceGentle 2s ease-in-out infinite;
   }
-  
+
   .animate-float {
     animation: float 3s ease-in-out infinite;
   }
-  
+
   .animate-glow {
     animation: glow 2s ease-in-out infinite alternate;
   }
-  
+
   .animate-shimmer {
     animation: shimmer 2s linear infinite;
   }
-  
+
   .animate-slide-in-up {
     animation: slideInUp 0.4s ease-out forwards;
   }
-  
+
   .animate-slide-in-down {
     animation: slideInDown 0.4s ease-out forwards;
   }
-  
+
   .animate-scale-in {
     animation: scaleIn 0.3s ease-out forwards;
   }
-  
+
   .animate-pulse-glow {
     animation: pulseGlow 2s ease-in-out infinite;
   }
-  
+
   .animate-gradient-shift {
     background-size: 200% 200%;
     animation: gradient-shift 3s ease infinite;
   }
-  
+
   .animate-card-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .animate-card-hover:hover {
     animation: card-hover 0.3s ease-out forwards;
   }
-  
+
   .animate-pulse-ring {
     animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   .animate-slide-in-left {
     animation: slide-in-left 0.5s ease-out forwards;
   }
-  
+
   .animate-slide-in-right {
     animation: slide-in-right 0.5s ease-out forwards;
   }
-  
+
   .animate-scale-bounce {
     animation: scale-bounce 2s ease-in-out infinite;
   }
-  
+
   .animate-rotate-gradient {
     background-size: 200% 200%;
     animation: rotate-gradient 4s ease infinite;
   }
-  
+
   .animate-shimmer-gradient {
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.2) 50%,
-      rgba(255, 255, 255, 0) 100%
-    );
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.2) 50%,
+        rgba(255, 255, 255, 0) 100%);
     background-size: 1000px 100%;
     animation: shimmer-gradient 3s infinite;
   }
-  
+
   .animate-fade-in-scale {
     animation: fade-in-scale 0.4s ease-out forwards;
   }
-  
+
   .animate-exam-badge-pulse {
     animation: exam-badge-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   .transition-smooth {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .transition-bounce {
     transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
-  
+
   .hover-lift {
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
   }
-  
+
   .hover-lift:hover {
     transform: translateY(-6px);
     box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
   }
-  
+
   .hover-glow {
     transition: box-shadow 0.3s ease;
   }
-  
+
   .hover-glow:hover {
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
   }
-  
+
   .hover-scale {
     transition: transform 0.3s ease;
   }
-  
+
   .hover-scale:hover {
     transform: scale(1.05);
   }
-  
+
   .sr-only {
     position: absolute;
     width: 1px;
@@ -770,26 +772,26 @@
   .gradient-primary {
     background: linear-gradient(135deg, hsl(0, 84%, 60%), hsl(24, 95%, 53%));
   }
-  
+
   .gradient-hero {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(249, 115, 22, 0.1));
   }
-  
+
   .text-gradient {
     background: linear-gradient(135deg, hsl(0, 84%, 60%), hsl(24, 95%, 53%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  
+
   .shadow-glow {
     box-shadow: 0 10px 40px rgba(239, 68, 68, 0.2);
   }
-  
+
   .shadow-card {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   }
-  
+
   .dark .shadow-card {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   }
@@ -799,6 +801,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -809,6 +812,7 @@
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -820,6 +824,7 @@
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -831,6 +836,7 @@
     transform: translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -842,6 +848,7 @@
     opacity: 0;
     transform: translateY(30px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -853,6 +860,7 @@
     opacity: 0;
     transform: translateY(-30px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -864,6 +872,7 @@
     opacity: 0;
     transform: scale(0.8);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -871,27 +880,36 @@
 }
 
 @keyframes pulseGlow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 5px rgba(239, 68, 68, 0.3);
   }
+
   50% {
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.5), 0 0 30px rgba(239, 68, 68, 0.3);
   }
 }
 
 @keyframes bounceGentle {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-4px);
   }
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-6px);
   }
@@ -901,6 +919,7 @@
   from {
     box-shadow: 0 0 5px rgba(239, 68, 68, 0.4);
   }
+
   to {
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.6), 0 0 30px rgba(239, 68, 68, 0.4);
   }
@@ -910,15 +929,19 @@
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
 @keyframes gradient-shift {
-  0%, 100% {
+
+  0%,
+  100% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
@@ -929,6 +952,7 @@
     transform: translateY(0) scale(1);
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
   }
+
   100% {
     transform: translateY(-8px) scale(1.02);
     box-shadow: 0 20px 40px rgba(239, 68, 68, 0.15);
@@ -940,6 +964,7 @@
     transform: scale(0.8);
     opacity: 1;
   }
+
   100% {
     transform: scale(2.4);
     opacity: 0;
@@ -951,6 +976,7 @@
     opacity: 0;
     transform: translateX(-30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -962,6 +988,7 @@
     opacity: 0;
     transform: translateX(30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -969,9 +996,12 @@
 }
 
 @keyframes scale-bounce {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.05);
   }
@@ -981,9 +1011,11 @@
   0% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0% 50%;
   }
@@ -993,6 +1025,7 @@
   0% {
     background-position: -1000px 0;
   }
+
   100% {
     background-position: 1000px 0;
   }
@@ -1003,6 +1036,7 @@
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -1010,9 +1044,12 @@
 }
 
 @keyframes exam-badge-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
   }
+
   50% {
     box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
   }
@@ -1062,58 +1099,61 @@
   .chat-container {
     @apply w-full h-full;
   }
-  
+
   .message {
     @apply max-w-[95%] mx-auto;
   }
-  
+
   .message-content {
     @apply max-w-full px-4 py-3 text-sm;
     font-size: 0.875rem;
     line-height: 1.5;
   }
-  
+
   .input-container {
     @apply px-4 py-4;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
-  
+
   .chat-input-form {
     @apply max-w-full px-2 gap-3;
     flex-wrap: wrap;
   }
-  
+
   .message-input {
     @apply px-4 py-3 text-sm;
     min-height: 44px;
   }
-  
+
   .send-button {
     @apply p-3;
     min-width: 44px;
     min-height: 44px;
   }
-  
+
   .mic-button {
     min-width: 44px;
     min-height: 44px;
   }
-  
+
   .settings-panel {
     @apply w-full;
   }
-  
+
   .voice-dialog-content {
     @apply mx-2 p-4;
     max-height: 90vh;
     overflow-y: auto;
   }
-  
-  button, .button, select, input {
+
+  button,
+  .button,
+  select,
+  input {
     min-height: 44px;
     min-width: 44px;
   }
-  
+
   .message {
     margin-bottom: 1.5rem;
   }
@@ -1123,15 +1163,15 @@
   .chat-container {
     @apply w-full h-full;
   }
-  
+
   .message {
     @apply max-w-[85%] mx-auto;
   }
-  
+
   .input-container {
     @apply px-6 py-5;
   }
-  
+
   .chat-input-form {
     @apply max-w-3xl px-4 gap-4;
   }
@@ -1141,15 +1181,15 @@
   .chat-container {
     @apply w-full h-full;
   }
-  
+
   .message {
     @apply max-w-[75%] mx-auto;
   }
-  
+
   .input-container {
     @apply px-8 py-6;
   }
-  
+
   .chat-input-form {
     @apply max-w-4xl px-6 gap-4;
   }
@@ -1159,7 +1199,7 @@
   .message-content {
     @apply hover:scale-100;
   }
-  
+
   .send-button {
     @apply hover:scale-100 active:scale-95;
   }
@@ -1169,23 +1209,23 @@
   .message-content {
     @apply border-2;
   }
-  
+
   .message.user .message-content {
     @apply border-red-300;
   }
-  
+
   .message.assistant .message-content {
     @apply border-gray-300;
   }
-  
+
   .send-button {
     @apply border-2 border-red-700;
   }
-  
+
   .mic-button {
     @apply border border-red-600;
   }
-  
+
   .voice-dialog-content {
     @apply border-2 border-gray-400;
   }
@@ -1222,24 +1262,30 @@
   top: 6px;
 }
 
-button, .btn {
+button,
+.btn {
   @apply transition-all duration-200;
 }
 
-button:active:not(:disabled), .btn:active:not(:disabled) {
+button:active:not(:disabled),
+.btn:active:not(:disabled) {
   transform: scale(0.97);
 }
 
-button:focus-visible, .btn:focus-visible {
+button:focus-visible,
+.btn:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
 
-button:disabled, .btn:disabled {
+button:disabled,
+.btn:disabled {
   @apply opacity-50 cursor-not-allowed;
 }
 
-input:focus, textarea:focus, select:focus {
+input:focus,
+textarea:focus,
+select:focus {
   @apply ring-2 ring-red-500 ring-offset-2 outline-none;
   transition: all 0.2s;
 }
@@ -1249,6 +1295,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -1256,14 +1303,14 @@ a {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  
+
   .message-content,
   .send-button,
   .chat-item,
   .settings-panel {
     @apply transition-none;
   }
-  
+
   .animate-fade-in,
   .animate-slide-in,
   .animate-bounce-gentle,
@@ -1279,9 +1326,12 @@ a {
 }
 
 @keyframes highlightPulse {
-  0%, 100% {
+
+  0%,
+  100% {
     background-color: transparent;
   }
+
   50% {
     background-color: rgba(255, 255, 0, 0.2);
   }
@@ -1291,8 +1341,8 @@ a {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
 }
-
