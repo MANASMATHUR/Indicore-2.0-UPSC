@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { Mic, MicOff, CheckCircle2, XCircle, MessageSquare, ArrowLeft, Sparkles, Loader2, TrendingUp, Award, AlertCircle, Volume2, VolumeX, Languages } from 'lucide-react';
+import { Mic, MicOff, CheckCircle2, XCircle, MessageSquare, ArrowLeft, Sparkles, Loader2, TrendingUp, Award, AlertCircle, Volume2, VolumeX, Languages, Upload } from 'lucide-react';
+import DAFUploadModal from '@/components/DAFUploadModal';
 import azureSpeechRecognition from '@/lib/azureSpeechRecognition';
 import speechService from '@/lib/speechService';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -36,6 +37,7 @@ export default function InterviewPrepPage() {
   const mediaStreamRef = useRef(null);
   const [selectedLanguage, setSelectedLanguage] = useState(getLanguagePreference());
   const [translatedQuestions, setTranslatedQuestions] = useState({});
+  const [showDAFUpload, setShowDAFUpload] = useState(false);
 
   useEffect(() => {
     // Initialize Azure Speech Recognition
@@ -291,11 +293,21 @@ export default function InterviewPrepPage() {
               <MessageSquare className="h-6 w-6 text-red-600" />
               <span className="text-xl font-bold text-gray-900">Interview Preparation</span>
             </div>
-            <Link href="/chat">
-              <Button variant="secondary" size="sm">
-                Go to Chat
+            <div className="flex gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => setShowDAFUpload(true)}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload DAF
               </Button>
-            </Link>
+              <Link href="/chat">
+                <Button variant="secondary" size="sm">
+                  Go to Chat
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -650,6 +662,12 @@ export default function InterviewPrepPage() {
         )}
         </div>
       </section>
+
+      {/* DAF Upload Modal */}
+      <DAFUploadModal 
+        isOpen={showDAFUpload} 
+        onClose={() => setShowDAFUpload(false)} 
+      />
     </div>
   );
 }
