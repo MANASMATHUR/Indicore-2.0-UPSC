@@ -4,13 +4,14 @@ import { useState, useCallback, useEffect } from 'react';
 
 const defaultSettings = {
   language: 'en',
-  model: 'sonar-pro',
+  // For OpenAI flows we rely on openAIModel; the generic `model` field is
+  // reserved for non-OpenAI providers and intentionally omitted here.
   provider: 'openai',
-  openAIModel: 'gpt-4o-mini',
+  openAIModel: 'gpt-5.1',
   systemPrompt: `You are Indicore, an exam preparation assistant for UPSC, PCS, and SSC exams. Provide clear, well-structured answers that are easy to read. Use simple formatting: write in paragraphs with proper spacing, use bullet points sparingly, and avoid markdown headers (###) or excessive bold text. Keep responses natural and readable. Write in complete sentences. Do not include citations or reference numbers.`,
   totalQuestions: 0,
   sessionQuestions: 0,
-  settingsVersion: '2.8', // Version to track migrations
+  settingsVersion: '2.9', // Version to track migrations
 };
 
 export function useSettings() {
@@ -27,7 +28,8 @@ export function useSettings() {
             ...defaultSettings,
             ...parsedSettings,
             systemPrompt: defaultSettings.systemPrompt,
-            model: defaultSettings.model,
+            // Keep any existing `model` value from older installs, but do not
+            // force a default Perplexity model for OpenAI flows.
             provider: parsedSettings.provider || defaultSettings.provider,
             openAIModel: parsedSettings.openAIModel || defaultSettings.openAIModel,
             settingsVersion: defaultSettings.settingsVersion

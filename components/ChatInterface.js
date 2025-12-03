@@ -8,6 +8,7 @@ import ChatMessages from './chat/ChatMessages';
 import StreamingChatMessages from './chat/StreamingChatMessages';
 import ChatInput from './chat/ChatInput';
 import ChatSearch from './chat/ChatSearch';
+import FlashcardViewer from './chat/FlashcardViewer';
 import SettingsPanel from './settings/SettingsPanel';
 import VoiceDialog from './VoiceDialog';
 import RenameChatModal from './RenameChatModal';
@@ -33,6 +34,8 @@ export default function ChatInterface({ user }) {
   const [isVocabularyBuilderOpen, setIsVocabularyBuilderOpen] = useState(false);
   const [isMockEvaluationOpen, setIsMockEvaluationOpen] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [flashcards, setFlashcards] = useState([]);
+  const [isFlashcardViewerOpen, setIsFlashcardViewerOpen] = useState(false);
   const [renameInitial, setRenameInitial] = useState('');
   const [currentChatId, setCurrentChatId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,14 +52,14 @@ export default function ChatInterface({ user }) {
   const streamingFlushTimeoutRef = useRef(null);
   const streamingIdleTimeoutRef = useRef(null);
   const streamingRetryingRef = useRef(false);
-  
+
   // WebSocket connection for lowest latency
   const { socket, isConnected, sendMessage: sendWebSocketMessage } = useWebSocket();
 
   const { chats, messages, setMessages, loadChats, createNewChat, loadChat, sendMessage, addAIMessage, deleteChat, setChats, setCurrentChat } = useChat(user.email);
   const { settings, updateSettings, loadSettings } = useSettings();
   const { showToast } = useToast();
-  
+
   const chatLoading = useLoadingState();
   const speechLoading = useLoadingState();
   const translationLoading = useLoadingState();
@@ -64,7 +67,7 @@ export default function ChatInterface({ user }) {
   useEffect(() => {
     loadChats();
     loadSettings();
-    
+
     if (settings.useStreaming !== undefined) {
       setUseStreaming(settings.useStreaming);
     }
@@ -179,7 +182,7 @@ export default function ChatInterface({ user }) {
       }
 
       const speechLanguage = lang || settings.language || 'en';
-      
+
       await speechService.speak(validation.value, speechLanguage, {
         rate: 0.9,
         pitch: 1.0,
@@ -192,7 +195,7 @@ export default function ChatInterface({ user }) {
 
   const handleSendAssistantMessage = useCallback(async (message) => {
     if (!message.trim()) return;
-    
+
     let chatId = currentChatId;
     if (!chatId) {
       const newChat = await createNewChat();
@@ -201,11 +204,11 @@ export default function ChatInterface({ user }) {
         setCurrentChatId(chatId);
       }
     }
-    
+
     if (!chatId) {
       return;
     }
-    
+
     await addAIMessage(chatId, message, settings.language);
   }, [currentChatId, createNewChat, addAIMessage, settings.language]);
 
@@ -266,7 +269,7 @@ export default function ChatInterface({ user }) {
         const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
         return exactMatch || greetingOnly.test(trimmedMessage);
       });
-      
+
       if (isSimpleGreeting) {
         const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
         await addAIMessage(chatId, hardcodedResponse, messageLanguage);
@@ -301,7 +304,7 @@ export default function ChatInterface({ user }) {
             // Light client-side cleaning
             finalResponse = finalResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
             finalResponse = finalResponse.trim();
-            
+
             await addAIMessage(chatId, finalResponse, messageLanguage);
             setStreamingMessage('');
             if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
@@ -331,7 +334,8 @@ export default function ChatInterface({ user }) {
             systemPrompt: settings.systemPrompt,
             language: messageLanguage,
             enableCaching: settings.enableCaching,
-            quickResponses: settings.quickResponses
+            quickResponses: settings.quickResponses,
+            notesContext: window.currentNotesContext // Pass notes context if available
           }),
           signal: controller.signal
         });
@@ -361,13 +365,13 @@ export default function ChatInterface({ user }) {
 
           for (const line of lines) {
             if (!line.trim() || line.startsWith(':')) continue;
-            
+
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim();
               if (data === '[DONE]' || data === '[REGENERATING_INCOMPLETE_RESPONSE]') {
                 break;
               }
-              
+
               if (data && data !== '[DONE]') {
                 try {
                   const parsed = JSON.parse(data);
@@ -398,11 +402,11 @@ export default function ChatInterface({ user }) {
             if (data !== '[DONE]') {
               try {
                 const parsed = JSON.parse(data);
-            const chunkText = extractChunkText(parsed) || parsed.choices?.[0]?.delta?.content;
-            if (typeof chunkText === 'string' && chunkText.length > 0) {
-              fullResponse += chunkText;
-              appendStreamingChunk(chunkText);
-            }
+                const chunkText = extractChunkText(parsed) || parsed.choices?.[0]?.delta?.content;
+                if (typeof chunkText === 'string' && chunkText.length > 0) {
+                  fullResponse += chunkText;
+                  appendStreamingChunk(chunkText);
+                }
               } catch (e) {
               }
             }
@@ -410,7 +414,7 @@ export default function ChatInterface({ user }) {
         }
 
         clearTimeout(timeoutId);
-        
+
         // Validate response before saving
         // Clean the final response before saving (server already cleans, but double-check client-side)
         let finalResponse = (fullResponse || '').trim();
@@ -420,14 +424,14 @@ export default function ChatInterface({ user }) {
         finalResponse = finalResponse.replace(/\bI'?m\s+to\s+support[^.]*\./gi, '');
         finalResponse = finalResponse.replace(/\bLet\s+me\s+know\s+I\s+can\s+you\s+today/gi, '');
         finalResponse = finalResponse.trim();
-        
+
         // Final validation / fallback - be lenient for short prompts
         // Match server-side logic: very short prompts (1-5 chars) can have responses as short as 3-5 chars
         const questionLength = message ? message.trim().length : 0;
         // Use same thresholds as server-side for consistency
         const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
         const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10); // Even more lenient fallback threshold
-        
+
         // Server already validated the response, so trust it unless it's truly unusable
         // Only reject if response is extremely short and doesn't meet even the fallback threshold
         if (finalResponse.length < minFallbackLength) {
@@ -436,11 +440,11 @@ export default function ChatInterface({ user }) {
           // For very short questions (≤5 chars), even short responses might be acceptable, so be more lenient
           // For longer questions, retry if response is below fallback threshold (which we already know it is)
           const shouldRetry = retryAttempt < 1 && (
-            questionLength <= 5 
+            questionLength <= 5
               ? finalResponse.length < 3  // For very short questions, only retry if response is extremely short (< 3 chars)
               : true  // For longer questions, always retry if response is below fallback threshold
           );
-          
+
           if (shouldRetry) {
             streamingRetryingRef.current = true;
             showToast('Response looked incomplete, retrying once more...', { type: 'warning' });
@@ -454,7 +458,7 @@ export default function ChatInterface({ user }) {
           // Server already validated it, so trust it - don't reject
           // This handles cases where responses are slightly short but still valid
         }
-        
+
         await addAIMessage(chatId, finalResponse, messageLanguage);
         setStreamingMessage('');
 
@@ -473,15 +477,15 @@ export default function ChatInterface({ user }) {
       setIsLoading(false);
       setStreamingMessage('');
       resetStreamingState();
-      
+
       const errorResult = errorHandler.handleChatError(error, {
         type: 'streaming_error',
         message: message.substring(0, 100),
         user: user.email
       });
-      
+
       showToast(errorResult.userMessage || 'An error occurred while generating the response.', { type: 'error' });
-      
+
       errorHandler.logError(error, {
         type: 'streaming_error',
         message: message.substring(0, 100),
@@ -490,7 +494,14 @@ export default function ChatInterface({ user }) {
     }
   }, [addAIMessage, settings.model, settings.systemPrompt, settings.enableCaching, settings.quickResponses, settings.provider, settings.openAIModel, chatLoading, showToast, user.email, speakResponse, setStreamingMessage, setIsLoading, useWebSocketConnection, isConnected, socket, isLowBandwidth, sendWebSocketMessage, extractChunkText, appendStreamingChunk, resetStreamingState]);
 
-  const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language) => {
+  const handleSendMessage = useCallback(async (message, isVoiceInput = false, messageLanguage = settings.language, context = null) => {
+    // Store context globally for streaming function to access (simplest way without refactoring everything)
+    if (context) {
+      window.currentNotesContext = context;
+    } else {
+      window.currentNotesContext = null;
+    }
+
     // Detect if user is asking for translation in voice input
     let speechLanguage = messageLanguage; // For speech output
     if (isVoiceInput) {
@@ -527,7 +538,7 @@ export default function ChatInterface({ user }) {
       }
 
       const sanitizedMessage = validation.value;
-      
+
       try {
         security.checkRateLimit(user.email, 30, 60000);
       } catch (rateLimitError) {
@@ -542,9 +553,9 @@ export default function ChatInterface({ user }) {
       let chatId = currentChatId;
 
       setMessages(prev => [...prev, { sender: 'user', text: sanitizedMessage, language: messageLanguage }]);
-      
+
       chatLoading.updateProgress(20, 'Sending message...');
-      
+
       const updatedChat = await sendMessage(chatId, sanitizedMessage, messageLanguage);
       if (updatedChat?._id) {
         const newChatId = typeof updatedChat._id === 'string' ? updatedChat._id : String(updatedChat._id);
@@ -564,16 +575,16 @@ export default function ChatInterface({ user }) {
         const greetingOnly = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s,;:!.]*$`, 'i');
         return exactMatch || greetingOnly.test(trimmedMessage);
       });
-      
-      if (isSimpleGreeting) {
+
+      if (isSimpleGreeting && !context) { // Don't use hardcoded response if there's context
         const hardcodedResponse = "Hi! I'm here to help you prepare for PCS, UPSC, and SSC exams. Ask me anything about topics, get study notes translated, practice answer writing, or search for previous year questions. What would you like to start with?";
-        
+
         chatLoading.updateProgress(80, 'Preparing response...');
         await addAIMessage(chatId, hardcodedResponse, messageLanguage);
-        
+
         chatLoading.updateProgress(100, 'Response ready!');
         chatLoading.setSuccess('Message sent successfully');
-        
+
         if (isVoiceInput) {
           speechLoading.setLoading('Speaking response...');
           await speakResponse(hardcodedResponse, speechLanguage);
@@ -590,7 +601,7 @@ export default function ChatInterface({ user }) {
       } else {
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-CSRF-Token': security.generateCSRFToken()
           },
@@ -601,9 +612,11 @@ export default function ChatInterface({ user }) {
             provider: settings.provider,
             openAIModel: settings.openAIModel,
             systemPrompt: settings.systemPrompt,
-            language: messageLanguage
+            language: messageLanguage,
+            notesContext: context // Pass context
           }),
         });
+
 
         if (!response.ok) {
           // Try to extract error message from response
@@ -616,15 +629,15 @@ export default function ChatInterface({ user }) {
           }
           throw new Error(errorMessage);
         }
-        
+
         const data = await response.json();
 
         chatLoading.updateProgress(90, 'Finalizing response...');
         await addAIMessage(chatId, data.response, messageLanguage);
-        
+
         chatLoading.updateProgress(100, 'Response ready!');
         chatLoading.setSuccess('Message sent successfully');
-        
+
         if (isVoiceInput) {
           speechLoading.setLoading('Speaking response...');
           await speakResponse(data.response, speechLanguage);
@@ -641,14 +654,14 @@ export default function ChatInterface({ user }) {
       });
 
       chatLoading.setError(errorResult.userMessage);
-      
+
       if (errorResult.requiresAuth) {
         showToast('Session expired. Please refresh and log in again.', { type: 'error' });
         setTimeout(() => window.location.reload(), 2000);
       } else {
         showToast(errorResult.userMessage, { type: 'error' });
       }
-      
+
       errorHandler.logError(error, {
         type: 'chat_error',
         message: message?.substring(0, 100),
@@ -656,7 +669,7 @@ export default function ChatInterface({ user }) {
         isVoiceInput,
         user: user.email
       }, 'error');
-      
+
     } finally {
       setIsLoading(false);
       setStreamingMessage('');
@@ -725,7 +738,7 @@ export default function ChatInterface({ user }) {
   const handleArchiveChat = useCallback(async (chatId) => {
     const chat = chats.find(c => c._id === chatId);
     if (!chat) return;
-    
+
     const newArchivedState = !chat.archived;
     try {
       const response = await fetch(`/api/chat/${chatId}/organize`, {
@@ -736,9 +749,9 @@ export default function ChatInterface({ user }) {
 
       if (response.ok) {
         const data = await response.json();
-        setChats(prevChats => 
-          prevChats.map(c => 
-            c._id === chatId 
+        setChats(prevChats =>
+          prevChats.map(c =>
+            c._id === chatId
               ? { ...c, archived: data.chat.archived }
               : c
           )
@@ -766,9 +779,9 @@ export default function ChatInterface({ user }) {
 
         if (response.ok) {
           const data = await response.json();
-          setChats(prevChats => 
-            prevChats.map(c => 
-              c._id === chatId 
+          setChats(prevChats =>
+            prevChats.map(c =>
+              c._id === chatId
                 ? { ...c, pinned: data.chat.pinned }
                 : c
             )
@@ -786,20 +799,20 @@ export default function ChatInterface({ user }) {
 
   const downloadChatAsPDF = async () => {
     if (!messages.length) return;
-    
+
     try {
       const jsPDF = (await import('jspdf')).default;
       const doc = new jsPDF();
-      
+
       let y = 20;
       const pageHeight = doc.internal.pageSize.height;
       const margin = 20;
-      
+
       // Add title
       doc.setFontSize(16);
       doc.text('Chat Export', margin, y);
       y += 20;
-      
+
       // Add messages
       doc.setFontSize(12);
       messages.forEach((message, index) => {
@@ -807,10 +820,10 @@ export default function ChatInterface({ user }) {
           doc.addPage();
           y = 20;
         }
-        
+
         const sender = message.sender === 'user' ? 'You' : 'AI';
         const rawText = message.text || message.content || '';
-        
+
         // Clean the text for PDF export
         const cleanText = rawText
           .replace(/\*\*(.*?)\*\*/g, '$1')           // Remove bold markdown
@@ -823,16 +836,16 @@ export default function ChatInterface({ user }) {
           .replace(/\n+/g, '\n')                     // Normalize newlines
           .replace(/\s+/g, ' ')                      // Replace multiple spaces with single space
           .trim();
-        
+
         doc.text(`${sender}:`, margin, y);
         y += 7;
-        
+
         // Split long text into multiple lines
         const lines = doc.splitTextToSize(cleanText, 170);
         doc.text(lines, margin + 10, y);
         y += lines.length * 5 + 10;
       });
-      
+
       doc.save(`chat-export-${new Date().toISOString().split('T')[0]}.pdf`);
       showToast('Chat exported as PDF', { type: 'success' });
     } catch (error) {
@@ -859,6 +872,66 @@ export default function ChatInterface({ user }) {
     handleSendMessage(evaluationMessage, false, language);
   };
 
+  const handleGenerateFlashcards = async (text) => {
+    if (!text || text.length < 50) {
+      showToast('Notes are too short to generate flashcards. Please provide more content.', { type: 'warning' });
+      return;
+    }
+
+    setIsLoading(true);
+    showToast('Generating flashcards from your notes...', { type: 'info' });
+
+    try {
+      const response = await fetch('/api/flashcards/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          model: settings.model,
+          provider: settings.provider,
+          openAIModel: settings.openAIModel
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate flashcards');
+      }
+
+      const data = await response.json();
+
+      if (data.flashcards && data.flashcards.length > 0) {
+        setFlashcards(data.flashcards);
+        setIsFlashcardViewerOpen(true);
+        showToast(`Generated ${data.flashcards.length} flashcards!`, { type: 'success' });
+      } else {
+        showToast('No flashcards could be generated from this content.', { type: 'warning' });
+      }
+    } catch (error) {
+      console.error('Flashcard generation error:', error);
+      showToast('Failed to generate flashcards. Please try again.', { type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFlashcardAddToChat = (flashcard) => {
+    const question = flashcard.question || flashcard.front;
+    const answer = flashcard.answer || flashcard.back;
+    const category = flashcard.category || 'General';
+
+    const message = `Please save this flashcard to my memory:
+
+**Category:** ${category}
+**Question:** ${question}
+**Answer:** ${answer}`;
+
+    handleSendMessage(message, false, settings.language);
+    setIsFlashcardViewerOpen(false);
+    showToast('Flashcard sent to chat', { type: 'success' });
+  };
+
   const handleRegenerate = useCallback(async (messageIndex) => {
     if (messageIndex <= 0) return;
     // Get the user message that preceded this AI response
@@ -877,14 +950,14 @@ export default function ChatInterface({ user }) {
   // Handle message actions
   const handleBookmarkMessage = useCallback(async (messageIndex, bookmarked) => {
     if (!currentChatId) return;
-    
+
     try {
       const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookmarked })
       });
-      
+
       if (response.ok) {
         const updatedMessages = [...messages];
         if (updatedMessages[messageIndex]) {
@@ -900,14 +973,14 @@ export default function ChatInterface({ user }) {
 
   const handleEditMessage = useCallback(async (messageIndex, newText) => {
     if (!currentChatId) return;
-    
+
     try {
       const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: newText })
       });
-      
+
       if (response.ok) {
         const updatedMessages = [...messages];
         if (updatedMessages[messageIndex]) {
@@ -923,12 +996,12 @@ export default function ChatInterface({ user }) {
 
   const handleDeleteMessage = useCallback(async (messageIndex) => {
     if (!currentChatId) return;
-    
+
     try {
       const response = await fetch(`/api/chat/${currentChatId}/message/${messageIndex}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
         const updatedMessages = messages.filter((_, idx) => idx !== messageIndex);
         setMessages(updatedMessages);
@@ -974,167 +1047,175 @@ export default function ChatInterface({ user }) {
 
   return (
     <ToastProvider>
-    <div className="min-h-screen bg-red-50 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-x-hidden">
-      {/* Skip link for accessibility */}
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
-      
-      {/* Sidebar - positioned outside the main container */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        chats={chats}
-        currentChatId={currentChatId}
-        onChatSelect={handleChatSelect}
-        onNewChat={handleNewChat}
-        onDeleteChat={async (id) => {
-          const ok = await deleteChat(id);
-          if (ok && currentChatId === id) {
-            setCurrentChatId(null);
-          }
-        }}
+      <div className="min-h-screen bg-red-50 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-x-hidden">
+        {/* Skip link for accessibility */}
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
+
+        {/* Sidebar - positioned outside the main container */}
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          chats={chats}
+          currentChatId={currentChatId}
+          onChatSelect={handleChatSelect}
+          onNewChat={handleNewChat}
+          onDeleteChat={async (id) => {
+            const ok = await deleteChat(id);
+            if (ok && currentChatId === id) {
+              setCurrentChatId(null);
+            }
+          }}
           onEditChat={handleEditChat}
           onPinChat={handlePinChat}
           onSearchChat={handleSearchChat}
           onArchiveChat={handleArchiveChat}
         />
 
-      <div 
-        className={`chat-container min-h-screen flex flex-col ${isSidebarOpen ? 'chat-container-sidebar-open' : 'chat-container-sidebar-closed'}`}
-      >
-        
-        
-        {/* Header */}
-        <Header
-          user={user}
-          onMenuClick={useCallback(() => setIsSidebarOpen(!isSidebarOpen), [isSidebarOpen])}
-          onSettingsClick={useCallback(() => {
-            setIsSettingsOpen(prev => !prev);
-          }, [])}
-          onLogout={handleLogout}
-          onExamUpload={useCallback(() => setIsExamUploadOpen(true), [])}
-          onEssayEnhancement={useCallback(() => setIsEssayEnhancementOpen(true), [])}
-          onVocabularyBuilder={useCallback(() => setIsVocabularyBuilderOpen(true), [])}
-          onMockEvaluation={useCallback(() => setIsMockEvaluationOpen(true), [])}
-          onDownloadPDF={downloadChatAsPDF}
-          onSearchClick={useCallback(() => setIsSearchOpen(prev => !prev), [])}
-          currentTheme={currentTheme}
-          onThemeChange={handleThemeChange}
-        />
+        <div
+          className={`chat-container min-h-screen flex flex-col ${isSidebarOpen ? 'chat-container-sidebar-open' : 'chat-container-sidebar-closed'}`}
+        >
 
-        {/* Chat Search */}
-        <ChatSearch
-          messages={messages}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          onSearchResultClick={(index) => {
-            const element = document.querySelector(`[data-message-index="${index}"]`);
-            if (element) {
-              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          }}
-          isOpen={isSearchOpen}
-          onClose={() => {
-            setIsSearchOpen(false);
-            setSearchQuery('');
-          }}
-        />
 
-        {/* Chat Messages */}
-        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages" style={{ marginTop: isSearchOpen ? '60px' : '0' }}>
-          {useStreaming ? (
-            <StreamingChatMessages 
-              messages={messages} 
-              isLoading={isLoading} 
-              messagesEndRef={messagesEndRef}
-              streamingMessage={streamingMessage}
-              onRegenerate={handleRegenerate}
-              onPromptClick={handlePromptClick}
-              searchQuery={searchQuery}
-              onBookmark={handleBookmarkMessage}
-              onEdit={handleEditMessage}
-              onDelete={handleDeleteMessage}
-            />
-          ) : (
-            <ChatMessages 
-              messages={messages} 
-              isLoading={isLoading} 
-              messagesEndRef={messagesEndRef}
-              onRegenerate={handleRegenerate}
-              onPromptClick={handlePromptClick}
-              searchQuery={searchQuery}
-              onBookmark={handleBookmarkMessage}
-              onEdit={handleEditMessage}
-              onDelete={handleDeleteMessage}
-            />
-          )}
-        </main>
-
-        {/* Chat Input */}
-        <div className="sticky bottom-0 z-10" role="region" aria-label="Chat input">
-          <ChatInput
-            onSendMessage={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
-            onVoiceClick={useCallback(() => setIsVoiceDialogOpen(true), [])}
-            onImageUpload={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
-            onSendAssistantMessage={handleSendAssistantMessage}
-            disabled={isLoading}
+          {/* Header */}
+          <Header
+            user={user}
+            onMenuClick={useCallback(() => setIsSidebarOpen(!isSidebarOpen), [isSidebarOpen])}
+            onSettingsClick={useCallback(() => {
+              setIsSettingsOpen(prev => !prev);
+            }, [])}
+            onLogout={handleLogout}
+            onExamUpload={useCallback(() => setIsExamUploadOpen(true), [])}
+            onEssayEnhancement={useCallback(() => setIsEssayEnhancementOpen(true), [])}
+            onVocabularyBuilder={useCallback(() => setIsVocabularyBuilderOpen(true), [])}
+            onMockEvaluation={useCallback(() => setIsMockEvaluationOpen(true), [])}
+            onDownloadPDF={downloadChatAsPDF}
+            onSearchClick={useCallback(() => setIsSearchOpen(prev => !prev), [])}
+            currentTheme={currentTheme}
+            onThemeChange={handleThemeChange}
           />
+
+          {/* Chat Search */}
+          <ChatSearch
+            messages={messages}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            onSearchResultClick={(index) => {
+              const element = document.querySelector(`[data-message-index="${index}"]`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }}
+            isOpen={isSearchOpen}
+            onClose={() => {
+              setIsSearchOpen(false);
+              setSearchQuery('');
+            }}
+          />
+
+          {/* Chat Messages */}
+          <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Chat messages" style={{ marginTop: isSearchOpen ? '60px' : '0' }}>
+            {useStreaming ? (
+              <StreamingChatMessages
+                messages={messages}
+                isLoading={isLoading}
+                messagesEndRef={messagesEndRef}
+                streamingMessage={streamingMessage}
+                onRegenerate={handleRegenerate}
+                onPromptClick={handlePromptClick}
+                searchQuery={searchQuery}
+                onBookmark={handleBookmarkMessage}
+                onEdit={handleEditMessage}
+                onDelete={handleDeleteMessage}
+              />
+            ) : (
+              <ChatMessages
+                messages={messages}
+                isLoading={isLoading}
+                messagesEndRef={messagesEndRef}
+                onRegenerate={handleRegenerate}
+                onPromptClick={handlePromptClick}
+                searchQuery={searchQuery}
+                onBookmark={handleBookmarkMessage}
+                onEdit={handleEditMessage}
+                onDelete={handleDeleteMessage}
+              />
+            )}
+          </main>
+
+          {/* Chat Input */}
+          <div className="sticky bottom-0 z-10" role="region" aria-label="Chat input">
+            <ChatInput
+              onSendMessage={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
+              onVoiceClick={useCallback(() => setIsVoiceDialogOpen(true), [])}
+              onImageUpload={useCallback((msg) => handleSendMessage(msg, false, settings.language), [handleSendMessage, settings.language])}
+              onSendAssistantMessage={handleSendAssistantMessage}
+              onGenerateFlashcards={handleGenerateFlashcards}
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Modals */}
+          <FlashcardViewer
+            isOpen={isFlashcardViewerOpen}
+            onClose={() => setIsFlashcardViewerOpen(false)}
+            flashcards={flashcards}
+            onAddToChat={handleFlashcardAddToChat}
+          />
+
+          <RenameChatModal
+            isOpen={isRenameOpen}
+            initialName={renameInitial}
+            onCancel={() => setIsRenameOpen(false)}
+            onConfirm={handleConfirmRename}
+          />
+
+          <SettingsPanel
+            isOpen={isSettingsOpen}
+            onClose={useCallback(() => {
+              setIsSettingsOpen(false);
+            }, [])}
+            settings={settings}
+            onUpdateSettings={updateSettings}
+          />
+
+          <VoiceDialog
+            isOpen={isVoiceDialogOpen}
+            onClose={useCallback(() => setIsVoiceDialogOpen(false), [])}
+            onSendMessage={useCallback(async (msg, speakLanguage) => {
+              const langToUse = speakLanguage || settings.language;
+              await handleSendMessage(msg, true, langToUse);
+            }, [handleSendMessage, settings.language])}
+            language={settings.language}
+          />
+
+          <ExamPaperUpload
+            isOpen={isExamUploadOpen}
+            onClose={useCallback(() => setIsExamUploadOpen(false), [])}
+            onEvaluate={handleExamEvaluation}
+          />
+
+          <EssayEnhancement
+            isOpen={isEssayEnhancementOpen}
+            onClose={useCallback(() => setIsEssayEnhancementOpen(false), [])}
+            onEnhance={handleEssayEnhancement}
+          />
+
+          <VocabularyBuilder
+            isOpen={isVocabularyBuilderOpen}
+            onClose={useCallback(() => setIsVocabularyBuilderOpen(false), [])}
+            onAddToChat={handleVocabularyAddition}
+          />
+
+          <MockEvaluation
+            isOpen={isMockEvaluationOpen}
+            onClose={useCallback(() => setIsMockEvaluationOpen(false), [])}
+            onEvaluate={handleMockEvaluation}
+          />
+
         </div>
-
-        {/* Modals */}
-        <RenameChatModal
-          isOpen={isRenameOpen}
-          initialName={renameInitial}
-          onCancel={() => setIsRenameOpen(false)}
-          onConfirm={handleConfirmRename}
-        />
-
-        <SettingsPanel
-          isOpen={isSettingsOpen}
-          onClose={useCallback(() => {
-            setIsSettingsOpen(false);
-          }, [])}
-          settings={settings}
-          onUpdateSettings={updateSettings}
-        />
-
-        <VoiceDialog
-          isOpen={isVoiceDialogOpen}
-          onClose={useCallback(() => setIsVoiceDialogOpen(false), [])}
-          onSendMessage={useCallback(async (msg, speakLanguage) => {
-            const langToUse = speakLanguage || settings.language;
-            await handleSendMessage(msg, true, langToUse);
-          }, [handleSendMessage, settings.language])}
-          language={settings.language}
-        />
-
-        <ExamPaperUpload
-          isOpen={isExamUploadOpen}
-          onClose={useCallback(() => setIsExamUploadOpen(false), [])}
-          onEvaluate={handleExamEvaluation}
-        />
-
-        <EssayEnhancement
-          isOpen={isEssayEnhancementOpen}
-          onClose={useCallback(() => setIsEssayEnhancementOpen(false), [])}
-          onEnhance={handleEssayEnhancement}
-        />
-
-        <VocabularyBuilder
-          isOpen={isVocabularyBuilderOpen}
-          onClose={useCallback(() => setIsVocabularyBuilderOpen(false), [])}
-          onAddToChat={handleVocabularyAddition}
-        />
-
-        <MockEvaluation
-          isOpen={isMockEvaluationOpen}
-          onClose={useCallback(() => setIsMockEvaluationOpen(false), [])}
-          onEvaluate={handleMockEvaluation}
-        />
-
       </div>
-    </div>
     </ToastProvider>
   );
 }

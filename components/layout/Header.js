@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '../ui/Button';
 import Logo from '@/components/Logo';
 import ThemeDropdown from '../ThemeDropdown';
+import ContactUsModal from '@/components/ContactUsModal';
 
 const Header = ({ 
   user, 
@@ -23,6 +24,7 @@ const Header = ({
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showExamSubmenu, setShowExamSubmenu] = useState(false);
   const [showWritingSubmenu, setShowWritingSubmenu] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const toolsMenuItems = [
     {
@@ -119,6 +121,19 @@ const Header = ({
       </div>
 
       <div className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 flex gap-1 sm:gap-2">
+        {/* Contact Us Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowContactModal(true)}
+          title="Contact Us"
+          className="text-red-600 hover:text-red-800 hover:bg-red-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
+        >
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </Button>
+
         {/* Search Button */}
         <Button
           variant="ghost"
@@ -318,6 +333,12 @@ const Header = ({
           )}
         </div>
       </div>
+
+      {/* Contact Us Modal */}
+      <ContactUsModal 
+        isOpen={showContactModal} 
+        onClose={() => setShowContactModal(false)} 
+      />
     </header>
   );
 };

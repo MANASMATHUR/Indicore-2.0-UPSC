@@ -11,6 +11,7 @@ import axios from 'axios';
 import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse, GARBLED_PATTERNS } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, extractConversationFacts } from '@/lib/userProfileExtractor';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
+import { updateUserPersonalization, generatePersonalizedPrompt } from '@/lib/personalizationService';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
 import { callAIWithFallback } from '@/lib/ai-providers';
 
@@ -28,6 +29,47 @@ const UNSAFE_PATTERNS = [
 ];
 
 const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
+
+// More flexible PYQ detection - checks for PYQ keywords OR subject + question words anywhere in message
+function isPyqQuery(message) {
+  if (!message || typeof message !== 'string') return false;
+  
+  const lowerMsg = message.toLowerCase();
+  
+  // Check for explicit PYQ keywords
+  const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
+  if (hasPyqKeyword) return true;
+  
+  // Check for subject keywords (excluding "statistical" to avoid false positives on general statistics questions)
+  // "statistical" is only matched in specific PYQ contexts below
+  const subjectPattern = /(?:eco|geo|hist|pol|sci|tech|env|economics|economy|geography|history|polity|politics|science|technology|environment)/i;
+  const hasSubject = subjectPattern.test(message);
+  
+  // Check for question-related words
+  const questionPattern = /(?:questions?|qs|pyq|pyqs|question\s+paper|question\s+papers)/i;
+  const hasQuestionWord = questionPattern.test(message);
+  
+  // If both subject and question words are present, it's likely a PYQ query
+  if (hasSubject && hasQuestionWord) return true;
+  
+  // Check for patterns like "topic wise pyqs", "theme wise pyqs", "questions from", "questions of"
+  // Include "statistical" only in specific PYQ contexts (e.g., "statistical questions from previous years")
+  const flexiblePattern = /(?:topic\s+wise|theme\s+wise|subject\s+wise|questions?\s+(?:from|of|on|about|related\s+to))/i;
+  if (flexiblePattern.test(message)) {
+    // If it has "theme wise" or "topic wise" with PYQ/question words, it's definitely a PYQ query
+    if (/(?:theme\s+wise|topic\s+wise|subject\s+wise)/i.test(message) && hasQuestionWord) return true;
+    // Check for "statistical questions from/of/on" - this is a PYQ query
+    if (/statistical\s+questions?\s+(?:from|of|on|about|related\s+to)/i.test(message)) return true;
+    // Otherwise, require subject keyword
+    if (hasSubject) return true;
+  }
+  
+  // Check for "statistical" in combination with PYQ-specific terms
+  if (/statistical.*(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper)/i.test(message)) return true;
+  if (/(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper).*statistical/i.test(message)) return true;
+  
+  return false;
+}
 
 function calculateMaxTokens(message, queryType = 'general', useOpenAI = false) {
   // For OpenAI: No token limit - let the model use its full context window (ChatGPT-like behavior)
@@ -214,7 +256,8 @@ export default async function handler(req, res) {
     }
 
     const allowPresetAnswers = process.env.ENABLE_PRESET_ANSWERS !== 'false';
-    if (allowPresetAnswers) {
+    const initialMessageIsPyq = isPyqQuery(message);
+    if (allowPresetAnswers && !initialMessageIsPyq) {
       const presetAnswer = findPresetAnswer(message);
       if (presetAnswer) {
         const cleanedPreset = cleanAIResponse(presetAnswer);
@@ -275,6 +318,9 @@ export default async function handler(req, res) {
         }).lean();
         
         if (chat && chat.messages && Array.isArray(chat.messages)) {
+          // Keep the full history for optimization, but let the optimizer
+          // aggressively keep more recent turns so follow-ups like
+          // "was he good?" always see enough context.
           const allMessages = chat.messages
             .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
             .map(msg => ({
@@ -283,31 +329,43 @@ export default async function handler(req, res) {
             }));
 
           if (contextOptimizer.shouldSkipContext(message, allMessages.length)) {
-            return [];
+            return { optimizedContext: [], fullHistory: allMessages };
           }
 
-          if (allMessages.length > 6) {
+          let optimizedContext = [];
+
+          // For longer chats, keep a large recent window plus several
+          // semantically relevant earlier turns.
+          if (allMessages.length > 12) {
             const summary = contextOptimizer.summarizeLongConversation(allMessages);
-            const recent = allMessages.slice(-2);
-            const relevant = contextOptimizer.selectRelevantContext(allMessages.slice(0, -2), message, 2);
+            const recent = allMessages.slice(-8); // keep last 8 turns verbatim
+            const relevant = contextOptimizer.selectRelevantContext(
+              allMessages.slice(0, -8),
+              message,
+              12 // pull up to 12 earlier relevant turns
+            );
             
             if (summary) {
-              return [
+              optimizedContext = [
                 { role: 'system', content: summary },
                 ...relevant,
                 ...recent
               ];
+            } else {
+              optimizedContext = contextOptimizer.selectRelevantContext(allMessages, message, 16);
             }
-            return contextOptimizer.selectRelevantContext(allMessages, message, 3);
+          } else {
+            // For short chats, include a generous slice of history
+            optimizedContext = contextOptimizer.selectRelevantContext(allMessages, message, 16);
           }
 
-          return contextOptimizer.selectRelevantContext(allMessages, message, 3);
+          return { optimizedContext, fullHistory: allMessages };
         }
       } catch (err) {
         console.warn('Failed to load conversation history:', err.message);
       }
-      return [];
-    })() : Promise.resolve([]);
+      return { optimizedContext: [], fullHistory: [] };
+    })() : Promise.resolve({ optimizedContext: [], fullHistory: [] });
 
     let finalSystemPrompt = systemPrompt || `You are Indicore, your intelligent exam preparation companion—think of me as ChatGPT, but specialized for UPSC, PCS, and SSC exam preparation. I'm here to help you succeed, whether you need explanations, practice questions, answer writing guidance, or just someone to discuss exam topics with. I can also help with general questions, but I always keep exam relevance in mind.
 
@@ -322,6 +380,17 @@ RESPONSE QUALITY STANDARDS - CRITICAL:
 - For Mains questions, structure answers with Introduction, Body (with sub-points), and Conclusion
 - For Prelims questions, provide clear explanations with key facts highlighted
 - Always verify information accuracy—never guess or make up facts
+
+EXAMPLES - MANDATORY REQUIREMENT:
+- ALWAYS include multiple relevant examples in every response (minimum 2-3 examples per topic)
+- Use diverse examples: PYQ references, case studies, current affairs, historical events, government schemes, real-world applications
+- Examples must be exam-relevant: connect to UPSC/PCS/SSC syllabus, PYQ patterns, and answer writing requirements
+- Include examples from different contexts: national, international, historical, contemporary, regional (for PCS)
+- For conceptual topics, provide both theoretical and practical examples
+- For policy topics, include implementation examples, success stories, and challenges
+- For historical topics, include chronological examples with dates and significance
+- Examples should be specific, verifiable, and directly relevant to the question asked
+- When explaining concepts, use analogies and real-world examples to enhance understanding
 
 MY PERSONALITY & APPROACH:
 - I'm conversational, friendly, and genuinely interested in helping you succeed. Think of me as a knowledgeable friend who's been through these exams and wants to share everything I know.
@@ -373,12 +442,31 @@ EXAM RELEVANCE - MANDATORY:
 - Tag subjects clearly: Identify which subject area (Polity, History, Geography, Economics, Science, Environment, etc.) and which GS paper it relates to.
 - Provide exam context: Mention how topics appear in exams, PYQ patterns, answer writing frameworks.
 - Include practical exam insights: How examiners frame questions, common mistakes, scoring strategies.
+- Reference actual PYQs when relevant: Mention specific year and paper when discussing topics that have appeared in exams
+- Connect to syllabus: Always relate topics to specific GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context
+- Provide answer writing frameworks: For Mains topics, include how to structure answers, what examiners look for
+- Include interconnections: Show how topics connect across subjects and papers (e.g., how a policy relates to GS-2 and GS-3)
+
+BROAD SEARCH SCOPE & COMPREHENSIVE COVERAGE:
+- Cast a wide net: Consider multiple perspectives, contexts, and dimensions of every topic
+- Cover all relevant aspects: Don't just answer the direct question—address related concepts, background, implications, and applications
+- Include interdisciplinary connections: Show how topics relate across subjects (e.g., how environmental policies connect to economics, geography, and governance)
+- Provide comprehensive context: Include historical background, current status, future implications, and global comparisons where relevant
+- Consider multiple exam perspectives: Address how topics appear in Prelims vs Mains, different GS papers, and various exam formats
+- Include comparative analysis: When relevant, compare Indian context with international examples, historical vs contemporary, different states/regions
+- Cover depth and breadth: Provide both detailed explanations and broader overviews to give complete understanding
 
 Write like you're having a natural conversation with a knowledgeable friend who happens to be an exam prep expert. Be helpful, be real, be engaging. Make every interaction feel valuable and personal. Always prioritize exam relevance and factual accuracy.`;
 
     const profileContext = userProfile ? formatProfileContext(userProfile) : '';
     if (profileContext) {
       finalSystemPrompt += profileContext;
+    }
+
+    // Add personalized prompt based on user's behavior and preferences
+    const personalizedPrompt = userProfile ? generatePersonalizedPrompt(userProfile) : '';
+    if (personalizedPrompt) {
+      finalSystemPrompt += personalizedPrompt;
     }
 
     const memoryPrompt = buildConversationMemoryPrompt(userProfile?.conversationSummaries);
@@ -412,11 +500,8 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         contextPayload.offset = contextPayload.offset || 0;
       }
 
-      const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(effectiveMsg);
-      const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(effectiveMsg);
-      const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(effectiveMsg);
-
-      if (!context && !hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+      // Use flexible PYQ detection
+      if (!context && !isPyqQuery(effectiveMsg)) {
         return null;
       }
 
@@ -461,21 +546,26 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     // This prevents "solve the pyqs you just gave me" from being treated as a new PYQ search
     // Check for solve requests early to prevent them from being treated as new PYQ queries
     // We need to check context before the Promise.all to avoid unnecessary PYQ searches
-    const rawHistoryForSolve = await historyPromise;
+    const historyData = await historyPromise;
+    const rawHistoryForSolve = historyData.optimizedContext || [];
     const conversationHistoryForSolve = contextOptimizer.compressContext(rawHistoryForSolve);
+    const fullConversationHistory = historyData.fullHistory || [];
+
+    const conversationLedger = contextOptimizer.buildConversationLedger(fullConversationHistory, 50, 10);
+    if (conversationLedger) {
+      finalSystemPrompt += `\n\nCONVERSATION LEDGER (chronological user prompts for recall):\n${conversationLedger}\nRefer to these prompt numbers whenever the user asks about earlier questions.`;
+    }
     const cachedPyqContextForSolve = chatId ? getPyqContext(pyqContextKey) : null;
-    const historyPyqContextForSolve = extractPyqContextFromHistory(conversationHistoryForSolve);
+    // Use fullConversationHistory (uncompressed) to ensure PYQ keywords aren't lost from long queries
+    const historyPyqContextForSolve = extractPyqContextFromHistory(fullConversationHistory);
     const previousPyqContextForSolve = cachedPyqContextForSolve || historyPyqContextForSolve;
     const PYQ_SOLVE_REGEX_EARLY = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
     const isSolveRequestEarly = previousPyqContextForSolve && PYQ_SOLVE_REGEX_EARLY.test(message.trim());
 
-    const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
-    const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(message);
-    const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(message);
     // Only treat as new PYQ query if it's NOT a solve request
-    const isPyqQuery = !isSolveRequestEarly && (hasPyqKeyword || hasPyqIntent || hasSubjectPyq);
+    const isPyqQueryResult = !isSolveRequestEarly && initialMessageIsPyq;
     
-    const needsContext = !isPyqQuery && message.length > 10;
+    const needsContext = !isPyqQueryResult && message.length > 10;
 
     // Reuse the history we already fetched for solve detection
     const [contextualData, pyqDb] = await Promise.all([
@@ -483,14 +573,14 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         contextualEnhancement: contextualLayer.generateContextualPrompt(message),
         examContext: examKnowledge.generateContextualPrompt(message)
       }) : Promise.resolve({ contextualEnhancement: '', examContext: '' }),
-      isPyqQuery ? tryPyqFromDb(message) : Promise.resolve(null)
+      isPyqQueryResult ? tryPyqFromDb(message) : Promise.resolve(null)
     ]);
 
     // Use the history we already processed
     const conversationHistory = conversationHistoryForSolve;
     const cachedPyqContext = cachedPyqContextForSolve;
 
-    if (isPyqQuery) {
+    if (isPyqQueryResult) {
       if (pyqDb && pyqDb.trim().length > 50) {
         // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
         let cleanedPyq = pyqDb;
@@ -527,7 +617,8 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         return;
       } else {
         const parsed = pyqService.parseQuery(message, language);
-        const noResultsMessage = `## Previous Year Questions (${parsed.examCode || 'UPSC'})\n\n**Topic:** ${parsed.theme || 'General'}\n\nNo questions were found in the database for the given criteria.\n\n### Suggestions:\n\n- Try a different topic or subject\n- Check if the spelling is correct\n- Try a broader search term\n- Use formats like "PYQ on economics" or "history pyqs"`;
+        const levelLine = parsed.level ? `**Level:** ${parsed.level}\n\n` : '';
+        const noResultsMessage = `## Previous Year Questions (${parsed.examCode || 'UPSC'})\n\n${levelLine}**Topic:** ${parsed.theme || 'General'}\n\nNo questions were found in the database for the given criteria.\n\n### Suggestions:\n\n- Try a different topic or subject\n- Check if the spelling is correct\n- Try a broader search term\n- Use formats like "PYQ on economics" or "history pyqs"`;
         const chunks = noResultsMessage.match(/[\s\S]{1,100}/g) || [noResultsMessage];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
@@ -554,18 +645,16 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         const msg = history[i];
         if (msg.role === 'user' && msg.content) {
           const userMsg = msg.content;
-          const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
-          const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
-          const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
           
-          if (hasPyqKeyword || hasPyqIntent || hasSubjectPyq) {
+          if (isPyqQuery(userMsg)) {
             const parsed = pyqService.parseQuery(userMsg, language);
             const theme = parsed.theme || '';
             const fromYear = parsed.fromYear;
             const toYear = parsed.toYear;
             const examCode = parsed.examCode || 'UPSC';
+            const level = parsed.level || '';
             
-            return { theme, fromYear, toYear, examCode, originalQuery: msg.content };
+            return { theme, fromYear, toYear, examCode, level, originalQuery: msg.content };
           }
         }
       }
@@ -574,10 +663,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
 
     function buildPyqPrompt(userMsg, previousContext = null) {
       if (!previousContext) {
-        const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(userMsg);
-        const hasPyqIntent = /(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)/i.test(userMsg);
-        const hasSubjectPyq = /(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs)/i.test(userMsg);
-        if (!hasPyqKeyword && !hasPyqIntent && !hasSubjectPyq) {
+        if (!isPyqQuery(userMsg)) {
           return '';
         }
       }
@@ -1300,6 +1386,12 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 persistMemory(finalMemoryText).catch(err => {
                   console.warn('Failed to persist conversation memory (stream):', err.message);
                 });
+                
+                // Update user personalization based on this interaction
+                updateUserPersonalization(session.user.email, message, finalMemoryText, chatId)
+                  .catch(err => {
+                    console.warn('Failed to update user personalization:', err.message);
+                  });
               }
               
               if (!res.writableEnded) {

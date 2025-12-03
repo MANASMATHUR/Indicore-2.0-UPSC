@@ -6,38 +6,51 @@ import Button from '../ui/Button';
 import { SkeletonLine } from '../ui/Skeleton';
 
 const MODEL_PRESETS = [
-  // OpenAI (general + reasoning + budget tiers)
-  { id: 'openai:gpt-5.1', label: 'OpenAI • GPT-5.1 — flagship reasoning', provider: 'openai', openAIModel: 'gpt-5.1' },
-  { id: 'openai:gpt-5', label: 'OpenAI • GPT-5 — next-gen balanced', provider: 'openai', openAIModel: 'gpt-5' },
-  { id: 'openai:gpt-5-mini', label: 'OpenAI • GPT-5 Mini — affordable high quality', provider: 'openai', openAIModel: 'gpt-5-mini' },
-  { id: 'openai:gpt-5-nano', label: 'OpenAI • GPT-5 Nano — ultra low cost', provider: 'openai', openAIModel: 'gpt-5-nano' },
-  { id: 'openai:gpt-5.1-chat-latest', label: 'OpenAI • GPT-5.1 Chat Latest — chat tuned', provider: 'openai', openAIModel: 'gpt-5.1-chat-latest' },
-  { id: 'openai:gpt-4.1', label: 'OpenAI • GPT-4.1 — deep reasoning (8k context)', provider: 'openai', openAIModel: 'gpt-4.1' },
-  { id: 'openai:gpt-4.1-mini', label: 'OpenAI • GPT-4.1 Mini — faster reasoning', provider: 'openai', openAIModel: 'gpt-4.1-mini' },
-  { id: 'openai:gpt-4.1-nano', label: 'OpenAI • GPT-4.1 Nano — ultra budget reasoning', provider: 'openai', openAIModel: 'gpt-4.1-nano' },
-  { id: 'openai:gpt-4o', label: 'OpenAI • GPT-4o — balanced flagship', provider: 'openai', openAIModel: 'gpt-4o' },
-  { id: 'openai:gpt-4o-2024-05-13', label: 'OpenAI • GPT-4o (May 2024) — legacy stable', provider: 'openai', openAIModel: 'gpt-4o-2024-05-13' },
-  { id: 'openai:gpt-4o-mini', label: 'OpenAI • GPT-4o Mini — fastest general model', provider: 'openai', openAIModel: 'gpt-4o-mini' },
-  { id: 'openai:gpt-4o-mini-2024-07-18', label: 'OpenAI • GPT-4o Mini (Jul 2024) — tuned economy', provider: 'openai', openAIModel: 'gpt-4o-mini-2024-07-18' },
-  { id: 'openai:o4-mini', label: 'OpenAI • o4 Mini — structured reasoning', provider: 'openai', openAIModel: 'o4-mini' },
-  { id: 'openai:o4-mini-deep-research', label: 'OpenAI • o4 Mini Deep Research — analytical deep-dives', provider: 'openai', openAIModel: 'o4-mini-deep-research' },
-  { id: 'openai:o3', label: 'OpenAI • o3 — chain-of-thought heavy', provider: 'openai', openAIModel: 'o3' },
-  { id: 'openai:o3-pro', label: 'OpenAI • o3 Pro — premium reasoning', provider: 'openai', openAIModel: 'o3-pro' },
-  { id: 'openai:o3-mini', label: 'OpenAI • o3 Mini — budget reasoning', provider: 'openai', openAIModel: 'o3-mini' },
-  { id: 'openai:o1', label: 'OpenAI • o1 — guided reasoning', provider: 'openai', openAIModel: 'o1' },
-  { id: 'openai:o1-mini', label: 'OpenAI • o1 Mini — affordable guided reasoning', provider: 'openai', openAIModel: 'o1-mini' },
-  { id: 'openai:o1-pro', label: 'OpenAI • o1 Pro — enterprise reasoning', provider: 'openai', openAIModel: 'o1-pro' },
-  { id: 'openai:o1-32k', label: 'OpenAI • o1 32K — long context reasoning', provider: 'openai', openAIModel: 'o1-32k' },
-  { id: 'perplexity:sonar-pro', label: 'Perplexity • Sonar Pro — research style', provider: 'perplexity', model: 'sonar-pro' }
+  {
+    id: 'openai:gpt-5.1',
+    label: 'OpenAI • GPT-5.1 Flagship — 1M token context',
+    provider: 'openai',
+    openAIModel: 'gpt-5.1',
+    tokenHint: 'Handles ~1M input tokens · 8K output tokens'
+  },
+  {
+    id: 'openai:gpt-5',
+    label: 'OpenAI • GPT-5 Balanced — 512K token context',
+    provider: 'openai',
+    openAIModel: 'gpt-5',
+    tokenHint: 'Handles ~512K input tokens · 6K output tokens'
+  },
+  {
+    id: 'openai:gpt-4.1',
+    label: 'OpenAI • GPT-4.1 Deep Reasoning — 256K token context',
+    provider: 'openai',
+    openAIModel: 'gpt-4.1',
+    tokenHint: 'Handles ~256K input tokens · 4K output tokens'
+  },
+  {
+    id: 'openai:gpt-4o',
+    label: 'OpenAI • GPT-4o Flagship — 128K token context',
+    provider: 'openai',
+    openAIModel: 'gpt-4o',
+    tokenHint: 'Handles ~128K input tokens · 4K output tokens'
+  },
+  {
+    id: 'openai:gpt-4o-2024-05-13',
+    label: 'OpenAI • GPT-4o (May 2024) — 128K token context',
+    provider: 'openai',
+    openAIModel: 'gpt-4o-2024-05-13',
+    tokenHint: 'Stable release · 128K context window'
+  }
 ];
 
 const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => {
 
   const defaultLocalSettings = {
     language: 'en',
-    model: 'sonar-pro',
+    // For OpenAI, we use `openAIModel` as the source of truth; the generic
+    // `model` field is only meaningful for non-OpenAI providers.
     provider: 'openai',
-    openAIModel: 'gpt-4o-mini',
+    openAIModel: 'gpt-5.1',
     useStreaming: true,
     enableCaching: true,
     quickResponses: true,
@@ -55,7 +68,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
   const resolvePresetId = (settingsObj) => {
     if (!settingsObj) return MODEL_PRESETS[0].id;
     if ((settingsObj.provider || 'openai') === 'openai') {
-      const match = MODEL_PRESETS.find(p => p.provider === 'openai' && p.openAIModel === (settingsObj.openAIModel || 'gpt-4o-mini'));
+      const match = MODEL_PRESETS.find(p => p.provider === 'openai' && p.openAIModel === (settingsObj.openAIModel || 'gpt-5.1'));
       return match?.id || MODEL_PRESETS[0].id;
     }
     const match = MODEL_PRESETS.find(p => p.provider === settingsObj.provider && p.model === settingsObj.model);
@@ -63,6 +76,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
   };
 
   const selectedPresetId = resolvePresetId(localSettings);
+  const selectedPreset = MODEL_PRESETS.find(p => p.id === selectedPresetId) || MODEL_PRESETS[0];
 
   useEffect(() => {
     if (isOpen && settings) {
@@ -181,7 +195,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Choose the exact model you want to use—this will automatically select the right provider under the hood.
+                    High-performing, large-context models only. {selectedPreset?.tokenHint || 'Select a model to see its token window.'}
                   </p>
                 </div>
               </div>

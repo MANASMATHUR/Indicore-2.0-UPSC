@@ -125,6 +125,169 @@ function sanitizeDigestData(data) {
 }
 
 /**
+ * Safely parse JSON from AI responses with multiple fallback strategies
+ * @param {string} content - The content to parse
+ * @param {string} context - Context for logging (e.g., 'news data', 'digest')
+ * @returns {object|null} Parsed JSON object or null if parsing fails
+ */
+function parseJSONSafely(content, context = 'response') {
+  if (!content || typeof content !== 'string') {
+    console.warn(`parseJSONSafely: Invalid content for ${context}`);
+    return null;
+  }
+
+  const trimmedContent = content.trim();
+
+  // Strategy 1: Try direct JSON.parse
+  try {
+    return JSON.parse(trimmedContent);
+  } catch (e) {
+    // Continue to next strategy
+  }
+
+  // Strategy 2: Extract JSON from markdown code blocks
+  const codeBlockPatterns = [
+    /```json\s*\n?([\s\S]*?)\n?```/i,
+    /```\s*\n?([\s\S]*?)\n?```/,
+  ];
+
+  for (const pattern of codeBlockPatterns) {
+    const match = trimmedContent.match(pattern);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1].trim());
+      } catch (e) {
+        // Try to repair and parse
+        const repaired = tryRepairJSON(match[1].trim());
+        if (repaired) return repaired;
+      }
+    }
+  }
+
+  // Strategy 3: Extract JSON object or array using regex
+  const jsonPatterns = [
+    /(\{[\s\S]*\})/,  // Match entire JSON object
+    /(\[[\s\S]*\])/,  // Match entire JSON array
+  ];
+
+  for (const pattern of jsonPatterns) {
+    const match = trimmedContent.match(pattern);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1]);
+      } catch (e) {
+        // Try to clean and repair common JSON issues
+        const cleaned = cleanJSON(match[1]);
+        try {
+          return JSON.parse(cleaned);
+        } catch (e2) {
+          // Try JSON repair library
+          const repaired = tryRepairJSON(cleaned);
+          if (repaired) return repaired;
+        }
+      }
+    }
+  }
+
+  // All strategies failed
+  console.error(`parseJSONSafely: Failed to parse ${context} after trying all strategies`);
+  console.error(`Content preview (first 2000 chars): ${trimmedContent.substring(0, 2000)}`);
+  return null;
+}
+
+/**
+ * Attempt to repair malformed JSON using jsonrepair library
+ * @param {string} jsonStr - The JSON string to repair
+ * @returns {object|null} Parsed JSON object or null if repair fails
+ */
+function tryRepairJSON(jsonStr) {
+  try {
+    // Try to use jsonrepair library if available
+    const { jsonrepair } = require('jsonrepair');
+    const repaired = jsonrepair(jsonStr);
+    return JSON.parse(repaired);
+  } catch (e) {
+    // jsonrepair not available or failed, return null
+    return null;
+  }
+}
+
+/**
+ * Clean common JSON formatting issues
+ * @param {string} jsonStr - The JSON string to clean
+ * @returns {string} Cleaned JSON string
+ */
+function cleanJSON(jsonStr) {
+  let cleaned = jsonStr;
+
+  // Remove any leading/trailing whitespace
+  cleaned = cleaned.trim();
+
+  // Remove any text before the first { or [
+  const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
+  let startIndex = -1;
+
+  if (firstBrace !== -1 && firstBracket !== -1) {
+    startIndex = Math.min(firstBrace, firstBracket);
+  } else if (firstBrace !== -1) {
+    startIndex = firstBrace;
+  } else if (firstBracket !== -1) {
+    startIndex = firstBracket;
+  }
+
+  if (startIndex > 0) {
+    cleaned = cleaned.substring(startIndex);
+  }
+
+  // Remove any text after the last } or ]
+  const lastBrace = cleaned.lastIndexOf('}');
+  const lastBracket = cleaned.lastIndexOf(']');
+  let endIndex = -1;
+
+  if (lastBrace !== -1 && lastBracket !== -1) {
+    endIndex = Math.max(lastBrace, lastBracket);
+  } else if (lastBrace !== -1) {
+    endIndex = lastBrace;
+  } else if (lastBracket !== -1) {
+    endIndex = lastBracket;
+  }
+
+  if (endIndex !== -1 && endIndex < cleaned.length - 1) {
+    cleaned = cleaned.substring(0, endIndex + 1);
+  }
+
+  // Remove trailing commas before closing brackets/braces
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+
+  // Remove control characters and zero-width characters
+  cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g, '');
+
+  // Try to close unclosed strings by adding missing quotes
+  const openQuotes = (cleaned.match(/(?<!\\)"/g) || []).length;
+  if (openQuotes % 2 !== 0) {
+    // Odd number of quotes, try to close the last one
+    cleaned = cleaned + '"';
+  }
+
+  // Try to close unclosed arrays/objects
+  const openBraces = (cleaned.match(/\{/g) || []).length;
+  const closeBraces = (cleaned.match(/\}/g) || []).length;
+  const openBrackets = (cleaned.match(/\[/g) || []).length;
+  const closeBrackets = (cleaned.match(/\]/g) || []).length;
+
+  // Add missing closing braces/brackets
+  if (openBrackets > closeBrackets) {
+    cleaned = cleaned + ']'.repeat(openBrackets - closeBrackets);
+  }
+  if (openBraces > closeBraces) {
+    cleaned = cleaned + '}'.repeat(openBraces - closeBraces);
+  }
+
+  return cleaned;
+}
+
+/**
  * Translate digest content to target language using Azure Translator
  */
 async function translateDigestContent(data, targetLanguage) {
@@ -470,7 +633,14 @@ IMPORTANT: If real-time news data is provided in the user's message, prioritize 
       const newsQuery = `Get latest current affairs and news relevant for UPSC exam preparation from the last ${dateRangeDays} days. Focus on: ${requestedCategories.join(', ')}. Provide actual current dates and sources. Today's date is ${new Date().toISOString().split('T')[0]}.`;
 
       // Try to get real-time news using Perplexity (which has web search) or OpenAI
-      const newsSystemPrompt = `You are a current affairs news aggregator. Fetch and provide REAL-TIME news from the last ${dateRangeDays} days relevant for competitive exams. Today is ${new Date().toISOString().split('T')[0]}. Include actual dates, sources, and current information. Format as JSON array with: title, summary, category, date (YYYY-MM-DD), source, relevance, keyPoints, tags.`;
+      const newsSystemPrompt = `You are a current affairs news aggregator. Fetch and provide REAL-TIME news from the last ${dateRangeDays} days relevant for competitive exams. Today is ${new Date().toISOString().split('T')[0]}. Include actual dates, sources, and current information. 
+
+IMPORTANT: Return ONLY valid JSON wrapped in a markdown code block. Format as:
+\`\`\`json
+[{"title": "...", "summary": "...", "category": "...", "date": "YYYY-MM-DD", "source": "...", "relevance": "high|medium|low", "keyPoints": [...], "tags": [...]}]
+\`\`\`
+
+Do not include any text outside the JSON code block.`;
 
       try {
         const newsAIResult = await callAIWithFallback(
@@ -488,20 +658,21 @@ IMPORTANT: If real-time news data is provided in the user's message, prioritize 
 
         const newsContent = newsAIResult?.content || '';
         if (newsContent) {
-          try {
-            const jsonMatch = newsContent.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
-              // Ensure it's an array
-              if (Array.isArray(parsed)) {
-                realNewsData = parsed;
-                console.log(`Fetched ${realNewsData.length} real-time news items`);
-              } else {
-                console.warn('Parsed news data is not an array');
-              }
+          const parsed = parseJSONSafely(newsContent, 'news data');
+          if (parsed) {
+            // Ensure it's an array
+            if (Array.isArray(parsed)) {
+              realNewsData = parsed;
+              console.log(`Fetched ${realNewsData.length} real-time news items`);
+            } else if (parsed.newsItems && Array.isArray(parsed.newsItems)) {
+              // Handle case where AI returns object with newsItems array
+              realNewsData = parsed.newsItems;
+              console.log(`Fetched ${realNewsData.length} real-time news items from newsItems property`);
+            } else {
+              console.warn('Parsed news data is not an array or does not contain newsItems array');
             }
-          } catch (parseError) {
-            console.warn('Could not parse news data:', parseError.message);
+          } else {
+            console.warn('Could not parse news data - parseJSONSafely returned null');
           }
         }
       } catch (newsError) {
@@ -531,7 +702,10 @@ IMPORTANT:
 - Today's date is ${new Date().toISOString().split('T')[0]} - ensure all dates are current
 - If real news data is provided, prioritize it over any training data
 
-Structure the response as JSON:
+CRITICAL: Return ONLY valid JSON wrapped in a markdown code block. Do not include any explanatory text before or after the JSON.
+
+Structure the response as:
+\`\`\`json
 {
   "title": "Current Affairs Digest - ${period}",
   "summary": "...",
@@ -581,7 +755,10 @@ Structure the response as JSON:
     }
   ],
   "sourceNotes": ["PIB - ...", "The Hindu - ..."]
-}`;
+}
+\`\`\`
+
+Remember: ONLY return the JSON code block, nothing else.`;
 
     let parsedData;
     try {
@@ -594,20 +771,18 @@ Structure the response as JSON:
         {
           model: preferredModel,
           preferredProvider: preferredProvider, // Use dynamic provider based on availability
-
           excludeProviders: [], // Allow fallback if Perplexity fails
           openAIModel: preferredOpenAIModel
         }
       );
       const aiResponse = aiResult?.content || '';
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedData = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found');
+      parsedData = parseJSONSafely(aiResponse, 'current affairs digest');
+
+      if (!parsedData) {
+        throw new Error('Failed to parse AI response as valid JSON');
       }
     } catch (aiError) {
-      console.warn('AI generation failed for current affairs digest, using fallback content:', aiError?.message);
+      console.error('AI generation failed for current affairs digest, using fallback content:', aiError?.message);
       parsedData = null;
     }
 

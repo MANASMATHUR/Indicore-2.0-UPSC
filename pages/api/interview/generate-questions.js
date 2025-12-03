@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import { callAIWithFallback } from '@/lib/ai-providers';
-import { translateText } from '@/pages/api/ai/translate';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,230 +13,206 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { examType = 'UPSC', questionType = 'personality', count = 5, language = 'en' } = req.body;
+    const { dafExtractedText, examType, questionType, count, language } = req.body;
+
+    const sanitizedExamType = examType || 'UPSC';
+    const hasDaf = dafExtractedText && dafExtractedText.trim().length > 0;
+
+    // Get user preferences
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
     const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
-    const excludedProviders = preferences.excludedProviders || [];
 
-    // Get language name for prompt
-    const languageNames = {
-      'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 'bn': 'Bengali',
-      'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 'ml': 'Malayalam',
-      'kn': 'Kannada', 'es': 'Spanish'
-    };
-    const langName = languageNames[language] || 'English';
-    
-    const systemPrompt = `You are an expert interview coach specializing in competitive exam interviews (UPSC, PCS, SSC). You excel at creating realistic interview questions that test:
+    let systemPrompt;
+    let userPrompt;
+    let questionsData;
 
-1. **Personality Assessment**: Leadership, ethics, decision-making, values
-2. **Current Affairs**: Recent events, government policies, international relations
-3. **Situational**: Problem-solving, crisis management, administrative scenarios
-4. **Technical**: Subject-specific knowledge for optional subjects
+    // Determine which mode: DAF-based or regular interview questions
+    if (hasDaf) {
+      // MODE 1: DAF-based personalized questions (from DAF modal)
+      const sanitizedDafText = dafExtractedText.trim();
+      const dafContent = sanitizedDafText.length > 0
+        ? sanitizedDafText.substring(0, 4000) + (sanitizedDafText.length > 4000 ? '\n\n... (truncated for context)' : '')
+        : '';
 
-**Question Requirements:**
-- Realistic and exam-appropriate
-- Open-ended to assess thinking process
-- Relevant to the exam type (UPSC/PCS/SSC)
-- Progressive difficulty
-- Focus on practical application
+      systemPrompt = `You are an expert interview coach specializing in ${sanitizedExamType} interviews. You have access to the candidate's Detailed Application Form (DAF).
 
-**IMPORTANT**: Generate all questions, hints, and expected points in English. The system will handle translation to other languages using professional translation services.`;
+**Your Role:**
+- Analyze the candidate's DAF content (education, work experience, hobbies, achievements, etc.)
+- Generate a list of 5-7 highly relevant, personalized interview questions based on their profile.
+- The questions should be challenging but realistic for a ${sanitizedExamType} interview.
+- Cover different areas: Hobbies, Education, Work Experience, and Situational questions based on their background.
 
-    const questionTypes = {
-      personality: 'personality assessment questions that evaluate leadership, ethics, values, and decision-making abilities',
-      current_affairs: 'current affairs questions about recent events, government policies, and national/international developments',
-      situational: 'situational questions presenting administrative scenarios and problem-solving challenges',
-      technical: 'technical questions related to optional subjects and specialized knowledge'
-    };
+**DAF Content:**
+${dafContent}
 
-    const userPrompt = `Generate ${count} ${questionTypes[questionType] || 'interview'} questions for ${examType} interview preparation in English.
+**Response Format:**
+Return ONLY a numbered list of questions. Do not include introductory or concluding text.
+1. [Question 1]
+2. [Question 2]
+...`;
 
-Format as JSON array:
-[
-  {
-    "question": "Question text",
-    "questionType": "${questionType}",
-    "hints": ["Hint 1", "Hint 2"],
-    "expectedPoints": ["Point 1", "Point 2"]
-  }
-]`;
+      userPrompt = `Generate 5-7 personalized interview questions based on the DAF provided above.`;
 
-    let questions;
-    try {
-      // Force OpenAI usage for interview questions
+      // Call AI to generate questions
       const aiResult = await callAIWithFallback(
         [{ role: 'user', content: userPrompt }],
         systemPrompt,
-        2500,
+        1000,
         0.7,
         {
           model: preferredModel,
-          preferredProvider: 'openai', // Force OpenAI
-          excludeProviders: ['perplexity'], // Exclude Perplexity for this call
+          preferredProvider: preferredProvider,
           openAIModel: preferredOpenAIModel
         }
       );
-      const aiResponse = aiResult?.content || '';
 
-      try {
-        const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          questions = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('No JSON array found');
-        }
-      } catch (parseError) {
-        questions = aiResponse
-          .split('\n')
-          .filter(line => line.trim() && (line.includes('?') || line.match(/^\d+\./)))
-          .slice(0, count)
-          .map((q) => ({
-            question: q.replace(/^\d+\.\s*/, '').trim(),
-            questionType,
-            hints: [],
-            expectedPoints: []
-          }));
-      }
-    } catch (aiError) {
-      console.warn('AI generation failed for interview questions, using fallback set:', aiError?.message);
-      questions = null;
-    }
+      const generatedQuestions = aiResult?.content || 'Unable to generate questions at this time. Please try again.';
 
-    const fallbackQuestionBank = {
-      personality: [
-        {
-          question: 'Tell us about a situation where you had to take a tough decision that went against popular opinion. How did you handle it?',
-          hints: ['Discuss context briefly', 'Highlight decision-making framework', 'Share outcome and learnings'],
-          expectedPoints: ['Demonstrates leadership courage', 'Shows ethical reasoning', 'Reflects on results']
-        },
-        {
-          question: 'How do you keep yourself motivated during setbacks or long preparation cycles?',
-          hints: ['Reference personal strategies', 'Mention support system', 'Connect to exam readiness'],
-          expectedPoints: ['Self-awareness', 'Resilience', 'Long-term orientation']
-        },
-        {
-          question: 'What does integrity mean to you in a public service context?',
-          hints: ['Define integrity', 'Provide a real or hypothetical example', 'Link to governance'],
-          expectedPoints: ['Values clarity', 'Ethical grounding', 'Administrative relevance']
-        }
-      ],
-      current_affairs: [
-        {
-          question: 'How would you assess the impact of recent monetary policy decisions on inflation and growth?',
-          hints: ['Mention latest policy stance', 'Discuss inflation trajectory', 'Balance growth concerns'],
-          expectedPoints: ['Knowledge of recent RBI decisions', 'Balanced economic reasoning', 'Awareness of fiscal-monetary coordination']
-        },
-        {
-          question: 'What are the strategic implications of India’s engagement in the Indo-Pacific region?',
-          hints: ['Refer to key initiatives', 'Discuss regional partners', 'Highlight challenges'],
-          expectedPoints: ['Geostrategic awareness', 'Clarity on foreign policy priorities', 'Understanding of maritime security']
-        },
-        {
-          question: 'Analyse the key provisions and significance of the latest climate-related commitments made by India.',
-          hints: ['Mention major targets', 'Discuss implementation challenges', 'Link to development needs'],
-          expectedPoints: ['Updated factual knowledge', 'Sustainable development perspective', 'Balanced analysis']
-        }
-      ],
-      situational: [
-        {
-          question: 'You are a district magistrate and a sudden flood affects multiple villages. Outline your immediate priority actions.',
-          hints: ['Life and safety first', 'Coordination with agencies', 'Communication strategy'],
-          expectedPoints: ['Crisis management framework', 'Stakeholder coordination', 'Resource prioritisation']
-        },
-        {
-          question: 'An RTI reveals procedural lapses in a government scheme under your charge. How will you address transparency while maintaining morale within the department?',
-          hints: ['Acknowledge issue', 'Corrective steps', 'Preventive measures'],
-          expectedPoints: ['Accountability', 'Process improvement', 'Team leadership']
-        },
-        {
-          question: 'As a police officer, you receive conflicting orders from political executives and your superior officer. How will you resolve the situation?',
-          hints: ['Reference rule of law', 'Seek clarity through hierarchy', 'Document decisions'],
-          expectedPoints: ['Adherence to legal procedures', 'Ethical judgement', 'Communication ability']
-        }
-      ],
-      technical: [
-        {
-          question: 'Explain the significance of federalism in the Indian Constitution with reference to recent Supreme Court judgements.',
-          hints: ['Define federal features', 'Cite landmark cases', 'Discuss contemporary relevance'],
-          expectedPoints: ['Conceptual clarity', 'Link to current jurisprudence', 'Analytical depth']
-        },
-        {
-          question: 'Differentiate between GDP deflator and CPI. In which situations is one preferred over the other?',
-          hints: ['Define both indicators', 'Explain calculation base', 'Give practical use-cases'],
-          expectedPoints: ['Economic concepts clarity', 'Understanding of data interpretation', 'Policy relevance']
-        },
-        {
-          question: 'Discuss the role of biotechnology in sustainable agriculture with examples from Indian context.',
-          hints: ['Mention key technologies', 'Discuss benefits and concerns', 'Provide policy references'],
-          expectedPoints: ['Subject knowledge', 'Awareness of national initiatives', 'Balanced viewpoint']
-        }
-      ]
-    };
+      return res.status(200).json({
+        success: true,
+        questions: generatedQuestions,
+        message: 'Questions generated based on your DAF'
+      });
 
-    if (!questions || questions.length === 0) {
-      const bank = fallbackQuestionBank[questionType] || fallbackQuestionBank.personality;
-      const replicated = [];
-      for (let i = 0; i < count; i++) {
-        replicated.push(bank[i % bank.length]);
-      }
-      questions = replicated.map((q) => ({
-        ...q,
-        questionType
-      }));
-    }
+    } else if (questionType) {
+      // MODE 2: Regular interview questions (from main interview page)
+      const questionCount = count || 5;
 
-    // Translate questions to target language if not English (using Azure Translator)
-    if (language && language !== 'en' && questions && Array.isArray(questions)) {
-      try {
-        console.log(`Translating ${questions.length} interview questions to ${language} using Azure Translator...`);
-        questions = await Promise.all(
-          questions.map(async (q) => {
-            const translatedQ = { ...q };
-            try {
-              if (q.question) {
-                translatedQ.question = await translateText(q.question, 'en', language, true);
-              }
-              if (q.hints && Array.isArray(q.hints)) {
-                translatedQ.hints = await Promise.all(
-                  q.hints.map(async (hint) => {
-                    try {
-                      return await translateText(hint, 'en', language, true);
-                    } catch (e) {
-                      return hint;
-                    }
-                  })
-                );
-              }
-              if (q.expectedPoints && Array.isArray(q.expectedPoints)) {
-                translatedQ.expectedPoints = await Promise.all(
-                  q.expectedPoints.map(async (point) => {
-                    try {
-                      return await translateText(point, 'en', language, true);
-                    } catch (e) {
-                      return point;
-                    }
-                  })
-                );
-              }
-            } catch (e) {
-              console.warn('Failed to translate question:', e.message);
-            }
-            return translatedQ;
-          })
-        );
-        console.log('Interview questions translation completed successfully');
-      } catch (translationError) {
-        console.warn('Translation failed, using English content:', translationError.message);
-        // Continue with English content if translation fails
-      }
-    }
+      // Define question type descriptions
+      const questionTypeDescriptions = {
+        personality: 'personality assessment questions that explore values, motivations, and character traits',
+        current_affairs: 'current affairs questions covering recent national and international events, government policies, and socio-economic issues',
+        situational: 'situational questions presenting hypothetical scenarios to assess decision-making and problem-solving abilities',
+        technical: 'technical questions related to the candidate\'s educational background and optional subjects'
+      };
 
-    return res.status(200).json({ questions });
-  } catch (error) {
-    console.error('Error generating interview questions:', error);
-    return res.status(500).json({ error: 'Failed to generate questions', details: error.message });
-  }
+      const typeDescription = questionTypeDescriptions[questionType] || 'general interview questions';
+
+      systemPrompt = `You are an expert interview coach specializing in ${sanitizedExamType} interviews.
+
+**Your Role:**
+- Generate ${questionCount} ${typeDescription} for a ${sanitizedExamType} interview.
+- Questions should be challenging but realistic for actual ${sanitizedExamType} interviews.
+- Each question should be clear, specific, and designed to assess the candidate's knowledge, skills, and suitability.
+- For personality questions: Focus on values, ethics, motivations, and character assessment.
+- For current affairs: Cover recent events (last 6-12 months), government policies, and socio-economic issues.
+- For situational questions: Present realistic scenarios that test decision-making, leadership, and problem-solving.
+- For technical questions: Cover the candidate's educational background and relevant subject knowledge.
+
+**Response Format:**
+Return a JSON array of question objects. Each object should have:
+{
+  "question": "The question text",
+  "questionType": "${questionType}"
 }
 
+Example:
+[
+  {
+    "question": "What motivates you to serve in the civil services?",
+    "questionType": "personality"
+  }
+]`;
+
+      userPrompt = `Generate ${questionCount} ${typeDescription} for ${sanitizedExamType} interview in JSON format.`;
+
+      // Call AI to generate questions
+      const aiResult = await callAIWithFallback(
+        [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+        2000,
+        0.7,
+        {
+          model: preferredModel,
+          preferredProvider: preferredProvider,
+          openAIModel: preferredOpenAIModel
+        }
+      );
+
+      let generatedContent = aiResult?.content || '[]';
+
+      // Try to parse JSON response
+      try {
+        // Remove markdown code blocks if present
+        generatedContent = generatedContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        questionsData = JSON.parse(generatedContent);
+
+        // Validate structure
+        if (!Array.isArray(questionsData)) {
+          throw new Error('Response is not an array');
+        }
+
+        // Ensure each question has required fields
+        questionsData = questionsData.map(q => ({
+          question: q.question || q.text || 'Question not available',
+          questionType: q.questionType || questionType
+        }));
+
+      } catch (parseError) {
+        console.error('Failed to parse AI response as JSON:', parseError);
+        // Fallback: try to extract questions from text
+        const lines = generatedContent.split('\n').filter(line => line.trim());
+        questionsData = lines
+          .filter(line => /^\d+\./.test(line.trim()))
+          .map(line => ({
+            question: line.replace(/^\d+\.\s*/, '').trim(),
+            questionType: questionType
+          }));
+      }
+
+      return res.status(200).json({
+        success: true,
+        questions: questionsData,
+        message: `Generated ${questionsData.length} ${questionType} questions`
+      });
+
+    } else {
+      // MODE 3: Generic questions when neither DAF nor questionType is provided
+      systemPrompt = `You are an expert interview coach specializing in ${sanitizedExamType} interviews.
+
+**Your Role:**
+- Generate a list of 5-7 common and important interview questions for ${sanitizedExamType} interviews.
+- The questions should be challenging but realistic for a ${sanitizedExamType} interview.
+- Cover different areas: Current Affairs, General Knowledge, Ethics, Governance, and Situational questions.
+- Focus on questions that are frequently asked in ${sanitizedExamType} interviews.
+
+**Response Format:**
+Return ONLY a numbered list of questions. Do not include introductory or concluding text.
+1. [Question 1]
+2. [Question 2]
+...`;
+
+      userPrompt = `Generate 5-7 common and important interview questions for ${sanitizedExamType} interviews.`;
+
+      // Call AI to generate questions
+      const aiResult = await callAIWithFallback(
+        [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+        1000,
+        0.7,
+        {
+          model: preferredModel,
+          preferredProvider: preferredProvider,
+          openAIModel: preferredOpenAIModel
+        }
+      );
+
+      const generatedQuestions = aiResult?.content || 'Unable to generate questions at this time. Please try again.';
+
+      return res.status(200).json({
+        success: true,
+        questions: generatedQuestions,
+        message: 'Generic questions generated'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error generating questions:', error);
+    return res.status(500).json({
+      error: 'Failed to generate questions. Please try again later.',
+      details: error.message
+    });
+  }
+}

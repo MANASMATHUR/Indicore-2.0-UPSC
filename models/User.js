@@ -1,19 +1,19 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
-  googleId: { 
-    type: String, 
-    required: true, 
-    unique: true 
+  googleId: {
+    type: String,
+    required: true,
+    unique: true
   },
-  name: { 
-    type: String, 
-    required: true 
+  name: {
+    type: String,
+    required: true
   },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true 
+  email: {
+    type: String,
+    required: true,
+    unique: true
   },
   picture: String,
   lastLogin: {
@@ -150,10 +150,122 @@ const userSchema = new mongoose.Schema({
     lastUpdated: {
       type: Date,
       default: Date.now
+    },
+    // Personalization fields
+    personalization: {
+      // Communication style preferences
+      communicationStyle: {
+        tone: {
+          type: String,
+          enum: ['formal', 'casual', 'friendly', 'professional', 'encouraging']
+        },
+        responseLength: {
+          type: String,
+          enum: ['concise', 'moderate', 'detailed', 'comprehensive']
+        },
+        prefersExamples: {
+          type: Boolean,
+          default: null
+        },
+        prefersAnalogies: {
+          type: Boolean,
+          default: null
+        },
+        prefersStepByStep: {
+          type: Boolean,
+          default: null
+        }
+      },
+      // Topic interests and frequency
+      topicInterests: [{
+        topic: String,
+        category: String, // e.g., 'Polity', 'History', 'Geography', 'Economics', 'Science', 'Environment'
+        frequency: {
+          type: Number,
+          default: 1
+        },
+        lastAsked: Date,
+        engagementScore: {
+          type: Number,
+          default: 0 // Based on follow-up questions, time spent, etc.
+        }
+      }],
+      // Study patterns
+      studyPatterns: {
+        preferredTimeOfDay: [{
+          hour: Number, // 0-23
+          frequency: Number
+        }],
+        averageSessionLength: {
+          type: Number, // in minutes
+          default: null
+        },
+        typicalQuestionTypes: [{
+          type: String, // e.g., 'concept_explanation', 'pyq_solving', 'answer_writing', 'current_affairs'
+          frequency: Number
+        }]
+      },
+      // Interaction patterns
+      interactionPatterns: {
+        averageMessagesPerSession: {
+          type: Number,
+          default: 0
+        },
+        followUpFrequency: {
+          type: Number,
+          default: 0 // How often user asks follow-up questions
+        },
+        clarificationFrequency: {
+          type: Number,
+          default: 0 // How often user asks for clarification
+        },
+        bookmarkFrequency: {
+          type: Number,
+          default: 0 // How often user bookmarks responses
+        }
+      },
+      // Learning preferences
+      learningPreferences: {
+        preferredFormat: {
+          type: String,
+          enum: ['structured', 'conversational', 'bullet_points', 'paragraphs', 'mixed']
+        },
+        needsMoreContext: {
+          type: Boolean,
+          default: null
+        },
+        prefersVisualAids: {
+          type: Boolean,
+          default: null
+        },
+        difficultyLevel: {
+          type: String,
+          enum: ['beginner', 'intermediate', 'advanced']
+        }
+      },
+      // Personalized recommendations
+      recommendations: {
+        suggestedTopics: [{
+          topic: String,
+          reason: String,
+          priority: Number,
+          suggestedAt: Date
+        }],
+        weakAreas: [{
+          topic: String,
+          identifiedAt: Date,
+          improvementSuggestions: [String]
+        }]
+      },
+      // Last updated timestamp for personalization
+      lastAnalyzed: {
+        type: Date,
+        default: Date.now
+      }
     }
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 userSchema.index({ email: 1 });
