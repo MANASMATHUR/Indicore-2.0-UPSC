@@ -5,12 +5,12 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { useToast } from '@/components/ui/ToastProvider';
 
-const ChatInput = ({ 
-  onSendMessage, 
-  onVoiceClick, 
-  onImageUpload, 
+const ChatInput = ({
+  onSendMessage,
+  onVoiceClick,
+  onImageUpload,
   onSendAssistantMessage,
-  disabled = false 
+  disabled = false
 }) => {
   const { showToast } = useToast();
   const [message, setMessage] = useState('');
@@ -44,7 +44,7 @@ const ChatInput = ({
       showToast('Please select a valid image file (.png, .jpg, .jpeg, .webp)', { type: 'error' });
       return;
     }
-    
+
     // Validate file size (max 10MB)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
@@ -54,37 +54,27 @@ const ChatInput = ({
 
     setIsProcessingImage(true);
     setShowImageDropdown(false);
-    
+
     // Show progress toast
     showToast('Processing image with OCR... This may take a moment.', { type: 'info', duration: 3000 });
 
     try {
       // OCR the image with multi-language support
       const { createWorker } = await import('tesseract.js');
-      
+
       // Try English first, then fallback to multi-language if needed
       // For Indic languages, use eng+hin (or other) for better accuracy
       const tesseractLang = 'eng+hin+tam+ben'; // Multi-language: English + Hindi + Tamil + Bengali
-      
+
       const worker = await createWorker(tesseractLang);
-      
-      // Recognize with progress tracking
-      const { data: { text: ocrText } } = await worker.recognize(file, {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            const progress = Math.round(m.progress * 100);
-            // Update toast with progress (if possible)
-            if (progress % 25 === 0) { // Update every 25%
-              showToast(`OCR Progress: ${progress}%`, { type: 'info', duration: 1000 });
-            }
-          }
-        }
-      });
-      
+
+      // Recognize text from image (logger removed to prevent DataCloneError with Web Workers)
+      const { data: { text: ocrText } } = await worker.recognize(file);
+
       await worker.terminate();
-      
+
       const extractedText = (ocrText || '').trim();
-      
+
       if (extractedText && extractedText.length > 10) {
         // Send the OCR text as a normal user message
         showToast('Text extracted successfully!', { type: 'success' });
@@ -121,7 +111,7 @@ const ChatInput = ({
     if (showImageDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -150,7 +140,7 @@ const ChatInput = ({
             Type your message and press Enter to send, or Shift+Enter for a new line
           </div>
         </div>
-        
+
         <Button
           type="button"
           variant="ghost"
@@ -217,7 +207,7 @@ const ChatInput = ({
           onChange={handleImageSelect}
           className="hidden"
         />
-        
+
         <Button
           type="submit"
           disabled={!message.trim() || disabled || isProcessingImage}
