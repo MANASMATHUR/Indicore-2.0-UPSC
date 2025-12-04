@@ -298,11 +298,9 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               { href: "/chat", icon: MessageSquare, title: "AI Chatbot", desc: "Exam-focused conversations", btn: "Start Chatting" },
-              { href: "/essay-builder", icon: FileText, title: "Essay Builder", desc: "AI-enhanced essay topics", btn: "Build Essays" },
+              { href: "/writing-tools", icon: FileText, title: "Writing Tools", desc: "Essay builder & vocabulary enhancement", btn: "Start Writing" },
               { href: "/pyq-archive", icon: Database, title: "PYQ Archive", desc: "Theme-organized questions", btn: "Explore PYQs" },
-              { href: "/vocabulary-builder", icon: Brain, title: "Vocabulary Builder", desc: "Bilingual flashcards", btn: "Build Vocabulary" },
-              { href: "/current-affairs-digest", icon: Newspaper, title: "Current Affairs Digest", desc: "Daily/weekly summaries", btn: "View Digest" },
-              { href: "/current-affairs", icon: Newspaper, title: "Current Affairs News", desc: "Browse news by category", btn: "Browse News" },
+              { href: "/current-affairs", icon: Newspaper, title: "Current Affairs", desc: "Browse news & generate digests", btn: "View Updates" },
               { href: "/mock-tests", icon: BarChart3, title: "Mock Tests", desc: "Performance tracking", btn: "Take Test" },
               { href: "/interview-prep", icon: Users, title: "Interview Prep", desc: "DAF upload & mock interviews", btn: "Start Practice" }
             ].map((tool, index) => (
