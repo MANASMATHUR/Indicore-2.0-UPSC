@@ -15,7 +15,7 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  
+
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -23,16 +23,23 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 60,
   },
-  
+
   // Compiler optimizations
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
   },
-  
+
   // Webpack optimizations
   webpack: (config, { isServer }) => {
+    // Externalize microsoft-cognitiveservices-speech-sdk for server-side builds
+    // This package is client-side only and should not be bundled for server
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('microsoft-cognitiveservices-speech-sdk');
+    }
+
     // Optimize bundle size
     if (!isServer) {
       config.optimization = {
@@ -65,7 +72,7 @@ const nextConfig = {
     }
     return config;
   },
-  
+
   // Headers for performance
   async headers() {
     return [
