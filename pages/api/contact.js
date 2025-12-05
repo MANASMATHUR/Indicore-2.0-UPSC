@@ -59,59 +59,68 @@ export default async function handler(req, res) {
 
   try {
     // Get email configuration from environment variables
-    // The recipient email should be set in environment variables (not exposed to frontend)
     const recipientEmail = process.env.CONTACT_EMAIL || process.env.ADMIN_EMAIL;
-    
+
     if (!recipientEmail) {
       console.error('CONTACT_EMAIL or ADMIN_EMAIL environment variable is not set');
-      return res.status(500).json({ 
-        error: 'Email service is not configured. Please contact the administrator.' 
+      return res.status(500).json({
+        error: 'Email service is not configured. Please contact the administrator.'
       });
     }
 
+    // Log environment variables for debugging (remove in production)
+    console.log('SMTP Config:', {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_SECURE,
+      user: process.env.SMTP_USER ? '***configured***' : 'NOT SET',
+      pass: process.env.SMTP_PASSWORD ? '***configured***' : 'NOT SET',
+      recipientEmail
+    });
+
     // Create transporter
-    // For production, you should configure SMTP settings in environment variables
-    // For now, we'll use a simple configuration that works with most email services
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: process.env.SMTP_USER, // Your email
-        pass: process.env.SMTP_PASSWORD, // Your email password or app password
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
       },
     });
 
-    // If SMTP credentials are not provided, use a fallback method
-    // This allows the user to configure it later
+    // If SMTP credentials are not provided, log the submission
     if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
       console.warn('SMTP credentials not configured. Email will not be sent.');
-      // In development, you might want to log the email instead
       console.log('Contact Form Submission:', {
-        name,
-        email,
-        message,
+        name: sanitizedName,
+        email: sanitizedEmail,
+        message: sanitizedMessage,
         recipientEmail,
         timestamp: new Date().toISOString()
       });
 
-      // Return success even if email is not configured (for development)
-      // In production, you should return an error if email is not configured
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: true,
         message: 'Your message has been received. We will get back to you soon.',
-        note: 'Email service is not fully configured. Please configure SMTP settings to receive emails.'
+        note: 'Email service is not fully configured.'
       });
     }
 
-    // Verify transporter configuration
-    await transporter.verify();
+    // Try to verify transporter configuration
+    try {
+      await transporter.verify();
+      console.log('SMTP transporter verified successfully');
+    } catch (verifyError) {
+      console.warn('SMTP transporter verification failed:', verifyError.message);
+      // Continue anyway - some servers don't support verify
+    }
 
     // Email content
     const mailOptions = {
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: recipientEmail,
-      replyTo: sanitizedEmail, // Allow replying directly to the user
+      replyTo: sanitizedEmail,
       subject: `Contact Form Submission from ${sanitizedName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -150,24 +159,38 @@ ${sanitizedMessage}
 
 ---
 This email was sent from the Indicore contact form.
-You can reply directly to this email to respond to ${name}.
+You can reply directly to this email to respond to ${sanitizedName}.
       `,
     };
 
     // Send email
     await transporter.sendMail(mailOptions);
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      message: 'Your message has been sent successfully. We will get back to you soon.' 
+      message: 'Your message has been sent successfully. We will get back to you soon.'
     });
   } catch (error) {
-    console.error('Error sending email:', error);
-    
-    // Don't expose internal error details to the client
-    return res.status(500).json({ 
-      error: 'Failed to send message. Please try again later or contact us directly.' 
+    console.error('Error sending email:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response
+    });
+
+    // Provide more specific error messages based on error type
+    let userMessage = 'Failed to send message. Please try again later or contact us directly.';
+
+    if (error.code === 'EAUTH') {
+      console.error('SMTP Authentication failed - check SMTP_USER and SMTP_PASSWORD');
+    } else if (error.code === 'ESOCKET' || error.code === 'ECONNECTION') {
+      console.error('SMTP Connection failed - check SMTP_HOST and SMTP_PORT');
+    } else if (error.code === 'ETIMEDOUT') {
+      console.error('SMTP Connection timed out');
+    }
+
+    return res.status(500).json({
+      error: userMessage
     });
   }
 }
-
