@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/Badge';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { Mic, MicOff, CheckCircle2, XCircle, MessageSquare, ArrowLeft, Sparkles, Loader2, TrendingUp, Award, AlertCircle, Volume2, VolumeX, Languages, Upload } from 'lucide-react';
 import DAFUploadModal from '@/components/DAFUploadModal';
-// Dynamic import for azureSpeechRecognition - loaded client-side only
+// Import Azure Speech Recognition for voice input
+import azureSpeechRecognition from '@/lib/azureSpeechRecognition';
 import speechService from '@/lib/speechService';
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference, translateText } from '@/lib/translationUtils';
