@@ -99,8 +99,7 @@ function buildUserPrompt(batch) {
   const serializedQuestions = batch
     .map(
       (doc, idx) =>
-        `#${idx + 1}\nID: ${doc._id}\nExam: ${doc.exam}\nLevel: ${doc.level || 'Unknown'}\nPaper: ${doc.paper || 'Unknown'}\nYear: ${
-          doc.year
+        `#${idx + 1}\nID: ${doc._id}\nExam: ${doc.exam}\nLevel: ${doc.level || 'Unknown'}\nPaper: ${doc.paper || 'Unknown'}\nYear: ${doc.year
         }\nTopicTags: ${(doc.topicTags || []).join(', ') || 'None'}\nQuestion:\n${doc.question}\n`
     )
     .join('\n---\n');
@@ -110,7 +109,7 @@ function buildUserPrompt(batch) {
 
 async function callOpenAI(batch) {
   const payload = {
-    model: process.env.OPENAI_PYQ_CLEANUP_MODEL || 'gpt-4o-mini',
+    model: process.env.OPENAI_PYQ_CLEANUP_MODEL || 'gpt-4o',
     temperature: 0.1,
     max_tokens: 3000,
     messages: [
