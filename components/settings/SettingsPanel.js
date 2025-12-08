@@ -21,6 +21,20 @@ const MODEL_PRESETS = [
     tokenHint: 'Handles ~512K input tokens · 6K output tokens'
   },
   {
+    id: 'openai:gpt-4o',
+    label: 'OpenAI • GPT-4o Flagship — 128K token context',
+    provider: 'openai',
+    openAIModel: 'gpt-4o',
+    tokenHint: 'Handles ~128K input tokens · 4K output tokens'
+  },
+  {
+    id: 'openai:gpt-4o-mini',
+    label: 'OpenAI • GPT-4o Mini — Fast & Efficient',
+    provider: 'openai',
+    openAIModel: 'gpt-4o-mini',
+    tokenHint: 'Fast, cheap, and capable'
+  },
+  {
     id: 'openai:gpt-4.1',
     label: 'OpenAI • GPT-4.1 Deep Reasoning — 256K token context',
     provider: 'openai',
@@ -50,7 +64,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
     // For OpenAI, we use `openAIModel` as the source of truth; the generic
     // `model` field is only meaningful for non-OpenAI providers.
     provider: 'openai',
-    openAIModel: 'gpt-5.1',
+    openAIModel: 'gpt-4o',
     useStreaming: true,
     enableCaching: true,
     quickResponses: true,
@@ -60,7 +74,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
     sessionQuestions: 0,
     ...(settings || {})
   };
-  
+
   const [localSettings, setLocalSettings] = useState(defaultLocalSettings);
   const [metrics, setMetrics] = useState(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -141,7 +155,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
           <div className="space-y-4">
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">🌐 Language & AI</h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -244,7 +258,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
               </div>
-              
+
               <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <div className="flex-1">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -301,7 +315,7 @@ const SettingsPanel = memo(({ isOpen, onClose, settings, onUpdateSettings }) => 
                   className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ml-2"
                 />
               </div>
-              
+
               <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <div className="flex-1">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">

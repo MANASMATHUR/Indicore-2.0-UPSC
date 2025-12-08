@@ -51,7 +51,7 @@ Generate exactly 5 flashcards. Return only the JSON array, no other text.`;
             {
                 preferredProvider: provider,
                 model: model,
-                openAIModel: openAIModel
+                openAIModel: openAIModel || 'gpt-4o'
             }
         );
 
@@ -107,9 +107,11 @@ Generate exactly 5 flashcards. Return only the JSON array, no other text.`;
 
     } catch (error) {
         console.error('Error generating flashcards:', error);
+        console.error('Stack:', error.stack);
         return res.status(500).json({
             error: 'Failed to generate flashcards',
-            details: error.message
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 }

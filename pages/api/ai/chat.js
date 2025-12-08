@@ -20,25 +20,30 @@ const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|pap
 // More flexible PYQ detection - checks for PYQ keywords OR subject + question words anywhere in message
 function isPyqQuery(message) {
   if (!message || typeof message !== 'string') return false;
-  
+
   const lowerMsg = message.toLowerCase();
-  
+
+  // EXCLUSION: Ignore memory saving, flashcard, or explicit context setting
+  // This prevents "save this flashcard" from triggering PYQ search due to words like "question" and "technology"
+  if (/(?:save|store|remember|keep).*(?:flashcard|memory|note|this)/i.test(message)) return false;
+  if (/here\s+is\s+a\s+question/i.test(message)) return false;
+
   // Check for explicit PYQ keywords
   const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
   if (hasPyqKeyword) return true;
-  
+
   // Check for subject keywords (excluding "statistical" to avoid false positives on general statistics questions)
   // "statistical" is only matched in specific PYQ contexts below
   const subjectPattern = /(?:eco|geo|hist|pol|sci|tech|env|economics|economy|geography|history|polity|politics|science|technology|environment)/i;
   const hasSubject = subjectPattern.test(message);
-  
+
   // Check for question-related words
   const questionPattern = /(?:questions?|qs|pyq|pyqs|question\s+paper|question\s+papers)/i;
   const hasQuestionWord = questionPattern.test(message);
-  
+
   // If both subject and question words are present, it's likely a PYQ query
   if (hasSubject && hasQuestionWord) return true;
-  
+
   // Check for patterns like "topic wise pyqs", "theme wise pyqs", "questions from", "questions of"
   // Include "statistical" only in specific PYQ contexts (e.g., "statistical questions from previous years")
   const flexiblePattern = /(?:topic\s+wise|theme\s+wise|subject\s+wise|questions?\s+(?:from|of|on|about|related\s+to))/i;
@@ -50,11 +55,11 @@ function isPyqQuery(message) {
     // Otherwise, require subject keyword
     if (hasSubject) return true;
   }
-  
+
   // Check for "statistical" in combination with PYQ-specific terms
   if (/statistical.*(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper)/i.test(message)) return true;
   if (/(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper).*statistical/i.test(message)) return true;
-  
+
   return false;
 }
 
@@ -123,26 +128,26 @@ function validateChatRequest(req) {
 function formatAnalysisResponse(analysisData) {
   let response = `## 📊 PYQ Analysis\n\n`;
   response += `**Question:** ${analysisData.question}\n\n`;
-  
+
   if (analysisData.topicTags && analysisData.topicTags.length > 0) {
     response += `**Topic Tags:** ${analysisData.topicTags.join(', ')}\n\n`;
   }
-  
+
   if (analysisData.keywords && analysisData.keywords.length > 0) {
     response += `**Important Keywords:** ${analysisData.keywords.join(', ')}\n\n`;
   }
-  
+
   if (analysisData.analysis) {
     response += `**In-depth Analysis:**\n${analysisData.analysis}\n\n`;
   }
-  
+
   if (analysisData.similarQuestions && analysisData.similarQuestions.length > 0) {
     response += `**Similar Questions:**\n`;
     analysisData.similarQuestions.forEach((q, idx) => {
       response += `${idx + 1}. [${q.year}] ${q.question} (${q.exam})\n`;
     });
   }
-  
+
   return response;
 }
 
@@ -151,17 +156,17 @@ function calculateMaxTokens(message, queryType = 'general', useOpenAI = false) {
   if (useOpenAI) {
     return undefined; // undefined means no limit - model uses full context window
   }
-  
+
   // For other providers: Use higher limits for long conversations
   const msgLen = message.length;
   const wordCount = message.split(/\s+/).length;
-  
+
   const isComplex = wordCount > 20 || /explain|describe|analyze|compare|discuss|elaborate/i.test(message);
   const isList = /list|enumerate|name|give.*examples/i.test(message);
   const isShort = /what is|who is|when|where|define/i.test(message);
-  
+
   let base = 1500;
-  
+
   if (isShort) {
     base = 8000;
   } else if (isList) {
@@ -171,22 +176,22 @@ function calculateMaxTokens(message, queryType = 'general', useOpenAI = false) {
   } else {
     base = Math.min(40000, Math.max(8000, msgLen * 10));
   }
-  
+
   if (queryType === 'pyq') {
     base = Math.max(base, 40000);
   }
-  
+
   return base; // Higher limits for other providers
 }
 
 function isResponseComplete(response) {
   const trimmed = response.trim();
   if (trimmed.length < 10) return false;
-  
+
   const sentences = trimmed.split(/[.!?]/).filter(s => s.trim().length > 0);
   const lastSent = sentences.length > 0 ? sentences[sentences.length - 1].trim() : trimmed.trim();
   if (lastSent.length > 0 && lastSent.length < 5) return false;
-  
+
   const incomplete = [
     /-\s*$/, /,\s*$/, /and\s*$/, /or\s*$/, /the\s*$/, /a\s*$/, /an\s*$/,
     /to\s*$/, /of\s*$/, /in\s*$/, /for\s*$/, /with\s*$/, /by\s*$/, /from\s*$/,
@@ -195,7 +200,7 @@ function isResponseComplete(response) {
     /additionally\s*$/, /consequently\s*$/, /meanwhile\s*$/, /otherwise\s*$/,
     /nevertheless\s*$/, /nonetheless\s*$/
   ];
-  
+
   return !incomplete.some(p => p.test(trimmed));
 }
 
@@ -218,7 +223,7 @@ function isPyqSolveRequest(message) {
 
 function extractPyqContextFromHistory(history, language) {
   if (!history || history.length === 0) return null;
-  
+
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
     if (msg.role === 'user' && msg.content) {
@@ -251,7 +256,7 @@ async function chatHandler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ 
+    return res.status(405).json({
       error: 'Method not allowed',
       code: 'METHOD_NOT_ALLOWED'
     });
@@ -259,7 +264,7 @@ async function chatHandler(req, res) {
 
   const session = await getServerSession(req, res, authOptions);
   if (!session) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Unauthorized',
       code: 'UNAUTHORIZED'
     });
@@ -274,7 +279,7 @@ async function chatHandler(req, res) {
     if (typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Invalid message format' });
     }
-    
+
     const unsafePatterns = [
       /leak|cheat|fraud|scam/i,
       /specific.*exam.*answer/i,
@@ -284,22 +289,22 @@ async function chatHandler(req, res) {
       /exam.*paper.*solution/i,
       /answer.*key.*leak/i
     ];
-    
+
     if (unsafePatterns.some(pattern => pattern.test(message))) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Request contains potentially unsafe content. Please focus on general exam preparation topics.',
         code: 'UNSAFE_CONTENT'
       });
     }
 
     if (inputType === 'textOnly') {
-      return res.status(200).json({ 
+      return res.status(200).json({
         response: null,
         timestamp: new Date().toISOString()
       });
     }
 
-    const cacheKey = `${message.trim()}-${language || 'en'}-${model || 'sonar-pro'}-${providerPreference}-${openAIModel || 'default'}`;
+    const cacheKey = `${message.trim()}-${language || 'en'}-${model || 'sonar-pro'}-${providerPreference}-${openAIModel || 'gpt-4o'}`;
     const cached = responseCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return res.status(200).json({
@@ -368,21 +373,21 @@ async function chatHandler(req, res) {
     if (chatId) {
       try {
         await connectToDatabase();
-        const chat = await Chat.findOne({ 
-          _id: chatId, 
-          userEmail: session.user.email 
+        const chat = await Chat.findOne({
+          _id: chatId,
+          userEmail: session.user.email
         })
-        .select('messages.sender messages.text messages.timestamp')
-        .lean();
-        
+          .select('messages.sender messages.text messages.timestamp')
+          .lean();
+
         if (chat && chat.messages && Array.isArray(chat.messages)) {
           // Use a large window of recent messages so short follow-ups like
           // "was he good?" still have plenty of context to resolve pronouns.
           const recentMessages = chat.messages.slice(-60);
           conversationHistory = recentMessages
-            .filter(msg => 
-              msg.sender && 
-              msg.text && 
+            .filter(msg =>
+              msg.sender &&
+              msg.text &&
               msg.text.trim().length > 0 &&
               msg.text.trim() !== message.trim()
             )
@@ -395,7 +400,7 @@ async function chatHandler(req, res) {
         console.warn('Failed to load conversation history:', err.message);
       }
     }
-    
+
     const pyqContextKey = `${session.user.email}:${chatId || 'default'}`;
     const cachedPyqContext = chatId ? getPyqContext(pyqContextKey) : null;
     const historyPyqContext = extractPyqContextFromHistory(conversationHistory, language);
@@ -514,7 +519,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     if (saveWorthyInfo && !isSaveConfirmation(message)) {
       finalSystemPrompt += `\n\nMEMORY SAVING INSTRUCTION:\nThe user just mentioned: "${saveWorthyInfo.value}". This seems like important information that should be remembered. At the END of your response, add a friendly follow-up question asking if they want to save this to memory. Use this exact format: "[Your main response]\n\n💾 I noticed you mentioned "${saveWorthyInfo.value}". Would you like me to save this to your memory so I can remember it in future conversations?"`;
     }
-    
+
     // If user confirmed saving, add instruction to acknowledge and save
     if (isSaveConfirmation(message)) {
       finalSystemPrompt += `\n\nMEMORY SAVING CONFIRMATION:\nThe user just confirmed they want to save information to memory. Acknowledge this at the start of your response with something like "Got it! I've saved that to your memory." Then proceed with your normal response.`;
@@ -526,7 +531,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       try {
         const questionNumber = analyzeMatch[1] ? parseInt(analyzeMatch[1], 10) : null;
         const questionText = message.replace(/analyze\s+(?:pyq|question|this\s+question|that\s+question)\s*(?:number\s*)?\d*/i, '').trim();
-        
+
         // If question text is provided, analyze it directly
         if (questionText && questionText.length > 20) {
           const response = await fetch(`${req.headers.origin || 'http://localhost:3000'}/api/pyq/analyze`, {
@@ -534,7 +539,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ questionText })
           });
-          
+
           if (response.ok) {
             const analysisData = await response.json();
             return res.status(200).json({
@@ -544,7 +549,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             });
           }
         }
-        
+
         // Return helpful message
         return res.status(200).json({
           response: `To analyze a PYQ question:\n\n1. First search for PYQs (e.g., "PYQ on history")\n2. Then say "analyze question [number]" or provide the question text\n\nAlternatively, paste the question text and say "analyze this question"`,
@@ -567,7 +572,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         'kannada': 'kn', 'spanish': 'es', 'english': 'en'
       };
       const targetLangCode = languageMap[targetLang] || 'hi';
-      
+
       // Extract text to translate
       let textToTranslate = message;
       const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
@@ -576,12 +581,12 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       } else {
         textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
       }
-      
+
       if (textToTranslate && textToTranslate.length > 0) {
         try {
           const translateModule = await import('@/pages/api/ai/translate');
           const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
-          
+
           if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
             return res.status(200).json({
               response: translated,
@@ -617,10 +622,10 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     const needsContext = !initialMessageIsPyq;
     const contextualEnhancement = needsContext ? contextualLayer.generateContextualPrompt(message) : '';
     const examContext = needsContext ? examKnowledge.generateContextualPrompt(message) : '';
-    
+
     // Generate answer framework prompt
     const answerFrameworkPrompt = examKnowledge.generateAnswerFrameworkPrompt(message);
-    
+
     // Try to get relevant PYQ context (not full PYQ list, but context about similar questions)
     let pyqContextPrompt = '';
     if (!initialMessageIsPyq) {
@@ -629,7 +634,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         pyqContextPrompt = `\n\nPYQ CONTEXT:\nWhen relevant, mention that similar questions have been asked in previous UPSC exams. Reference PYQ patterns to show exam relevance.`;
       }
     }
-    
+
     function buildPyqPrompt(userMsg) {
       if (!isPyqQuery(userMsg)) return '';
 
@@ -704,12 +709,12 @@ Requirements:
       if (contextPayload && typeof contextPayload.offset !== 'number') {
         contextPayload.offset = contextPayload.offset || 0;
       }
-      
+
       // Use flexible PYQ detection
       if (!overrideContext && !isPyqQuery(effectiveMessage)) {
         return null;
       }
-      
+
       try {
         const searchResult = await pyqService.search(effectiveMessage, contextPayload, language);
         if (searchResult?.content) {
@@ -721,7 +726,7 @@ Requirements:
           }
           return searchResult.content;
         }
-        
+
         if (overrideContext && chatId) {
           clearPyqContext(pyqContextKey);
         }
@@ -733,7 +738,7 @@ Requirements:
     // Check if user wants to solve questions from previous PYQ context
     // This must be checked BEFORE regular PYQ queries to avoid treating "solve the pyqs" as a new query
     const isSolveRequest = previousPyqContext && isPyqSolveRequest(message);
-    
+
     // If solving questions, fetch the PYQs again to include in context
     let pyqContextForSolving = null;
     if (isSolveRequest && previousPyqContext) {
@@ -746,17 +751,17 @@ Requirements:
       } catch (error) {
         console.warn('Failed to fetch PYQs for solving:', error.message);
       }
-      
+
       // If context fetch failed, we can't proceed with solve request
       // Return an error response instead of sending confusing message to AI
       if (!pyqContextForSolving) {
-        return res.status(200).json({ 
+        return res.status(200).json({
           response: 'I apologize, but I couldn\'t retrieve the questions you asked about earlier. Please ask for the questions again, or provide the specific questions you\'d like me to solve.',
           source: 'error'
         });
       }
     }
-    
+
     // Only check for new PYQ queries if this is NOT a solve request
     // This prevents "solve the pyqs you just gave me" from being treated as a new PYQ search
     const pyqDb = !isSolveRequest ? await tryPyqFromDb(message, isPyqFollowUp ? previousPyqContext : null) : null;
@@ -772,7 +777,7 @@ Requirements:
       cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
       // Normalize excessive blank lines (4+ to 2) - consistent with chat-stream.js
       cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
-      
+
       // Validate length but don't use cleanAIResponse which might strip newlines
       if (cleanedPyq && cleanedPyq.trim().length >= 20) {
         return res.status(200).json({ response: cleanedPyq.trim(), source: 'pyq-db' });
@@ -780,7 +785,7 @@ Requirements:
     }
 
     const contextOptimizer = (await import('@/lib/context-optimizer')).default;
-    
+
     if (!contextOptimizer.shouldUseLLM(message)) {
       const quickResponse = contextualLayer.getQuickResponse(message);
       if (quickResponse && !quickResponse.requiresAI) {
@@ -795,17 +800,17 @@ Requirements:
     const pyqPrompt = buildPyqPrompt(message);
     const hasContext = contextualEnhancement || examContext || answerFrameworkPrompt;
     const optimizedPrompt = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, !!hasContext, false);
-    
+
     let enhancedSystemPrompt = optimizedPrompt;
-    
+
     if (answerFrameworkPrompt) {
       enhancedSystemPrompt += answerFrameworkPrompt;
     }
-    
+
     if (pyqContextPrompt && !pyqPrompt) {
       enhancedSystemPrompt += pyqContextPrompt;
     }
-    
+
     if (pyqPrompt) {
       enhancedSystemPrompt += pyqPrompt;
     } else if (contextualEnhancement && needsContext) {
@@ -820,16 +825,16 @@ Requirements:
     }
 
     const optimalModel = contextOptimizer.selectOptimalModel(message, !!hasContext);
-    
+
     const estimatedPromptTokens = estimateTokenLength(messagesForAPI);
     const requiresLargeContextProvider = estimatedPromptTokens >= 16000;
-    
+
     const openAIKey = process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY;
     const useOpenAI = (requiresLargeContextProvider || providerPreference === 'openai') && !!openAIKey;
-    
+
     // Calculate token budget: undefined for OpenAI (unlimited), higher limits for others
     const calculatedTokens = calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general', useOpenAI);
-    const maxTokens = useOpenAI 
+    const maxTokens = useOpenAI
       ? undefined // OpenAI: no limit - uses full context window
       : (calculatedTokens || 40000); // Other providers: use calculated or default high limit
 
@@ -838,7 +843,7 @@ Requirements:
     if (finalSystemPrompt && finalSystemPrompt.trim().length > 0) {
       messagesForAPI.push({ role: 'system', content: finalSystemPrompt });
     }
-    
+
     // Add conversation history before the current message
     if (conversationHistory.length > 0) {
       // If we have many messages, keep the most recent ones
@@ -850,28 +855,28 @@ Requirements:
         messagesForAPI.push(...conversationHistory);
       }
     }
-    
+
     // If solving questions, add PYQ context to the user message
     // Note: pyqContextForSolving is guaranteed to be non-null here because we return early if it's null
     let userMessage = message;
     if (isSolveRequest) {
       userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
     }
-    
+
     // Ensure message is valid before adding
     if (!userMessage || userMessage.trim().length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Message cannot be empty',
         code: 'INVALID_MESSAGE',
         timestamp: new Date().toISOString()
       });
     }
-    
+
     messagesForAPI.push({ role: 'user', content: userMessage.trim() });
 
     // Final validation: ensure we have at least one user message
     if (messagesForAPI.filter(m => m.role === 'user').length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid message format',
         code: 'INVALID_MESSAGE_FORMAT',
         timestamp: new Date().toISOString()
@@ -904,19 +909,19 @@ Requirements:
     );
 
     const rawResponse = aiResult?.content;
-    
+
     if (!rawResponse || rawResponse.trim().length === 0) {
       console.error(`[Chat] Empty response from AI provider. Message: "${message?.substring(0, 50)}..."`);
       throw new Error('Empty response from AI provider');
     }
-    
+
     const cleanedResponse = cleanAIResponse(rawResponse);
     // Use very lenient validation - allow shorter responses for simple questions
     const questionLength = message ? message.trim().length : 0;
     // For very short prompts (1-5 chars like "hi"), accept responses as short as 5 chars
     const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
     let validResponse = validateAndCleanResponse(cleanedResponse, minLength);
-    
+
     // If validation failed but we have any content, try to salvage it
     // For very short prompts, be extremely lenient
     const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
@@ -928,16 +933,16 @@ Requirements:
         salvaged = salvaged.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         salvaged = salvaged.replace(/From\s+result[^.!?\n]*/gi, '');
         salvaged = salvaged.replace(/[ \t]+/g, ' ');
-        
+
         if (!/[.!?]$/.test(salvaged) && salvaged.length > minSalvageLength) {
           salvaged += '.';
         }
-        
+
         // Re-validate with very low threshold for short questions
         validResponse = validateAndCleanResponse(salvaged, minSalvageLength) || salvaged;
       }
     }
-    
+
     // If still not valid, try one more aggressive salvage attempt
     if (!validResponse && rawResponse && rawResponse.trim().length >= minSalvageLength) {
       const veryLenientCleaned = rawResponse.trim()
@@ -945,21 +950,21 @@ Requirements:
         .replace(/From\s+result[^.!?\n]*/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
-      
+
       const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(veryLenientCleaned));
       if (!hasGarbledPatterns && /[A-Za-zÀ-ÖØ-öø-ÿ0-9]/.test(veryLenientCleaned)) {
         // Add punctuation if missing
         const finalCleaned = !/[.!?]$/.test(veryLenientCleaned) && veryLenientCleaned.length > minSalvageLength
           ? veryLenientCleaned + '.'
           : veryLenientCleaned;
-        
+
         const revalidated = validateAndCleanResponse(finalCleaned, minSalvageLength);
         if (revalidated) {
           validResponse = revalidated;
         }
       }
     }
-    
+
     // Use even more lenient fallback threshold (matching chat-stream.js)
     const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
     if (!validResponse || validResponse.length < minFallbackLength) {
@@ -984,67 +989,67 @@ Requirements:
         console.warn('Failed to update user personalization:', err.message);
       });
 
-      // If user confirmed saving, save the information to profile
-      // Check conversation history for previous save prompt
-      if (isSaveConfirmation(message) && chatId) {
-        try {
-          await connectToDatabase();
-          const chat = await Chat.findOne({ 
-            _id: chatId, 
-            userEmail: session.user.email 
-          }).lean();
-          
-          if (chat && chat.messages && chat.messages.length > 1) {
-            // Get last assistant message to find what was suggested to save
-            const lastAssistantMsg = [...chat.messages].reverse().find(msg => msg.sender === 'assistant');
-            if (lastAssistantMsg && lastAssistantMsg.text) {
-              // Try to extract the fact from the assistant's previous message
-              const saveMatch = lastAssistantMsg.text.match(/mentioned[^"]*"([^"]+)"/i);
-              if (saveMatch && saveMatch[1]) {
-                const factToSave = saveMatch[1].trim();
-                const userDoc = await User.findOne({ email: session.user.email });
-                if (userDoc) {
-                  if (!userDoc.profile) userDoc.profile = {};
-                  if (!userDoc.profile.facts) userDoc.profile.facts = [];
-                  
-                  const normalizedFact = factToSave.toLowerCase().trim();
-                  const exists = userDoc.profile.facts.some(f => {
-                    if (!f || typeof f !== 'string') return false;
-                    return f.toLowerCase().trim() === normalizedFact;
-                  });
-                  
-                  if (!exists) {
-                    userDoc.profile.facts.push(factToSave);
-                    if (userDoc.profile.facts.length > 20) {
-                      userDoc.profile.facts = userDoc.profile.facts.slice(-20);
-                    }
-                    userDoc.profile.lastUpdated = new Date();
-                    await userDoc.save();
+    // If user confirmed saving, save the information to profile
+    // Check conversation history for previous save prompt
+    if (isSaveConfirmation(message) && chatId) {
+      try {
+        await connectToDatabase();
+        const chat = await Chat.findOne({
+          _id: chatId,
+          userEmail: session.user.email
+        }).lean();
+
+        if (chat && chat.messages && chat.messages.length > 1) {
+          // Get last assistant message to find what was suggested to save
+          const lastAssistantMsg = [...chat.messages].reverse().find(msg => msg.sender === 'assistant');
+          if (lastAssistantMsg && lastAssistantMsg.text) {
+            // Try to extract the fact from the assistant's previous message
+            const saveMatch = lastAssistantMsg.text.match(/mentioned[^"]*"([^"]+)"/i);
+            if (saveMatch && saveMatch[1]) {
+              const factToSave = saveMatch[1].trim();
+              const userDoc = await User.findOne({ email: session.user.email });
+              if (userDoc) {
+                if (!userDoc.profile) userDoc.profile = {};
+                if (!userDoc.profile.facts) userDoc.profile.facts = [];
+
+                const normalizedFact = factToSave.toLowerCase().trim();
+                const exists = userDoc.profile.facts.some(f => {
+                  if (!f || typeof f !== 'string') return false;
+                  return f.toLowerCase().trim() === normalizedFact;
+                });
+
+                if (!exists) {
+                  userDoc.profile.facts.push(factToSave);
+                  if (userDoc.profile.facts.length > 20) {
+                    userDoc.profile.facts = userDoc.profile.facts.slice(-20);
                   }
+                  userDoc.profile.lastUpdated = new Date();
+                  await userDoc.save();
                 }
               }
             }
           }
-        } catch (err) {
-          console.warn('Failed to save to user memory:', err.message);
+        }
+      } catch (err) {
+        console.warn('Failed to save to user memory:', err.message);
+      }
+    }
+
+    responseCache.set(cacheKey, {
+      response: validResponse,
+      timestamp: Date.now()
+    });
+
+    if (responseCache.size > 500) {
+      const now = Date.now();
+      for (const [key, value] of responseCache.entries()) {
+        if (now - value.timestamp > CACHE_TTL) {
+          responseCache.delete(key);
         }
       }
-      
-      responseCache.set(cacheKey, {
-        response: validResponse,
-        timestamp: Date.now()
-      });
-          
-      if (responseCache.size > 500) {
-        const now = Date.now();
-        for (const [key, value] of responseCache.entries()) {
-          if (now - value.timestamp > CACHE_TTL) {
-            responseCache.delete(key);
-          }
-        }
-      }
-      
-    return res.status(200).json({ 
+    }
+
+    return res.status(200).json({
       response: validResponse,
       savePrompt: saveWorthyInfo ? saveWorthyInfo.description : null,
       saveWorthyInfo: saveWorthyInfo ? { type: saveWorthyInfo.type, value: saveWorthyInfo.value } : null
@@ -1054,7 +1059,7 @@ Requirements:
     console.error('Chat API Error:', error);
 
     if (error.message.includes('malicious') || error.message.includes('unsupported') || error.message.includes('required')) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: error.message,
         code: 'VALIDATION_ERROR',
         timestamp: new Date().toISOString()
@@ -1077,7 +1082,7 @@ Requirements:
       });
     }
 
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal server error',
       code: 'INTERNAL_ERROR',
       timestamp: new Date().toISOString()
