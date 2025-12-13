@@ -172,7 +172,7 @@ Provide comprehensive analysis in JSON format:
       { role: 'user', content: userPrompt }
     ];
 
-    const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
     const analysisContent = await callOpenAIAPI(
       messages,
       openAIModel,
@@ -190,8 +190,8 @@ Provide comprehensive analysis in JSON format:
       }
     } catch (parseError) {
       console.error('Failed to parse analysis:', parseError);
-      return res.status(500).json({ 
-        error: 'Failed to parse analysis', 
+      return res.status(500).json({
+        error: 'Failed to parse analysis',
         details: parseError.message,
         rawContent: analysisContent.substring(0, 500)
       });
@@ -202,7 +202,7 @@ Provide comprehensive analysis in JSON format:
     result.analyzedAt = new Date();
     await result.save();
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       analysis,
       resultId: result._id
     });

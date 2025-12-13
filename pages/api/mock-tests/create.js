@@ -5,6 +5,7 @@ import MockTest from '@/models/MockTest';
 import PYQ from '@/models/PYQ';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { translateText } from '@/pages/api/ai/translate';
+import { getUserPerformanceStats, getAdaptiveDifficultyMix } from '@/lib/personalizationHelpers';
 
 const DEFAULT_DIFFICULTY_MIX = { easy: 0.3, medium: 0.5, hard: 0.2 };
 
@@ -79,7 +80,8 @@ export default async function handler(req, res) {
       topics,
       language = 'en',
       usePYQ = false,
-      difficultyMix: requestedDifficultyMix
+      difficultyMix: requestedDifficultyMix,
+      useAdaptive = true // NEW: Allow users to opt-in to adaptive difficulty
     } = req.body;
 
     if (!examType || !duration || !totalQuestions) {
@@ -88,10 +90,41 @@ export default async function handler(req, res) {
 
     await connectToDatabase();
 
-    const difficultyMix = normalizeDifficultyMix(requestedDifficultyMix);
+    // 🎯 PERSONALIZATION: Get adaptive difficulty suggestion
+    let difficultyMix;
+    let adaptiveSuggestion = null;
+
+    if (useAdaptive && !requestedDifficultyMix) {
+      // Get user performance stats
+      const userStats = await getUserPerformanceStats(session.user.email);
+
+      // Get AI-suggested difficulty mix based on performance
+      const suggestedMix = getAdaptiveDifficultyMix(userStats);
+      difficultyMix = normalizeDifficultyMix(suggestedMix);
+
+      adaptiveSuggestion = {
+        appliedMix: difficultyMix,
+        reason: userStats.averageScore === null
+          ? 'No prior tests - using balanced mix'
+          : userStats.averageScore >= 80
+            ? `High performance (${userStats.averageScore}%) - challenging mix`
+            : userStats.averageScore >= 60
+              ? `Good performance (${userStats.averageScore}%) - balanced mix`
+              : `Building confidence (${userStats.averageScore}%) - easier mix`,
+        userStats: {
+          averageScore: userStats.averageScore,
+          totalTests: userStats.totalTests
+        }
+      };
+
+      console.log(`✨ Adaptive difficulty: ${adaptiveSuggestion.reason}`);
+    } else {
+      difficultyMix = normalizeDifficultyMix(requestedDifficultyMix);
+    }
+
 
     const isMains = paperType === 'Mains';
-    
+
     // Get exam-specific information
     const getExamSpecificInfo = (examType) => {
       const examInfo = {
@@ -141,7 +174,7 @@ export default async function handler(req, res) {
     const examSpecificSubjects = isMains ? examInfo.mains?.subjects : examInfo.prelims?.subjects;
     const examSpecificFocus = isMains ? examInfo.mains?.focus : examInfo.prelims?.focus;
     const difficultyTargets = buildDifficultyTargets(totalQuestions, difficultyMix);
-    
+
     // Get language name for prompt
     const languageNames = {
       'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 'bn': 'Bengali',
@@ -149,156 +182,52 @@ export default async function handler(req, res) {
       'kn': 'Kannada', 'es': 'Spanish'
     };
     const langName = languageNames[language] || 'English';
-    
-    const systemPrompt = `You are an expert test creator for ${examType} competitive exams. Your task is to create high-quality mock test questions that:
 
-CRITICAL REQUIREMENTS:
-1. **EXAM-RELEVANT**: Every question MUST be directly relevant to ${examType} syllabus and exam pattern. Questions should test knowledge that actually appears in ${examType} exams.
-2. **PRECISE & CURRENT**: Questions must be precise, unambiguous, and aligned with the LATEST ${examType} syllabus (as of 2024-2025). Include recent developments, current affairs, and updated policies where relevant.
-3. **SYLLABUS ALIGNMENT**: Strictly follow the official ${examType} syllabus. For UPSC: GS-1, GS-2, GS-3, GS-4, Prelims pattern. For PCS: State-specific syllabus. For SSC: General awareness and aptitude.
-4. **VERIFIABLE INFORMATION**: ONLY use verifiable facts, dates, and information. NEVER make up facts or statistics.
-5. **PROPER SUBJECT TAGGING**: Tag each question with correct subject (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS paper (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+    const systemPrompt = `Expert ${examType} test creator. Generate exam-quality questions:
 
-QUALITY STANDARDS:
-1. Match ${examType} exam pattern and difficulty level exactly
-2. Cover ${examType}-specific topics and syllabus comprehensively
-3. Include proper explanations aligned with ${examType} standards
-4. Follow ${examType} marking scheme and negative marking rules
-5. Test conceptual understanding as per ${examType} requirements
-6. Questions should be clear, unambiguous, and free from errors
+REQUIREMENTS:
+1. ${examType}-relevant, aligned with official syllabus (2024-2025)
+2. Verifiable facts only - no fabrication
+3. Proper subject tags (${isMains ? examInfo.mains?.subjects?.[0] : examInfo.prelims?.subjects?.[0]}, etc.)
+4. ${isMains ? `Subjective format, ${examInfo.mains?.wordLimits?.[1] || 250} words` : `MCQ with 4 options, negative marking: ${examInfo.prelims?.negativeMarking || '1/3'}`}
 
-**${examType} Exam-Specific Requirements:**
-${isMains ? `
-- For ${examType} Mains exams: Create SUBJECTIVE questions (essay-type answers)
-  - Questions should require descriptive answers
-  - Specify word limits: ${examInfo.mains?.wordLimits?.join(' or ')} words
-  - No multiple choice options needed
-  - Questions should test analytical and writing skills
-  - Cover topics from: ${examSpecificSubjects?.join(', ')}
-  - Focus areas: ${examSpecificFocus}
-` : `
-- For ${examType} Prelims exams: Create MULTIPLE CHOICE questions (MCQ)
-  - Clear, unambiguous questions matching ${examType} style
-- Four options (A, B, C, D) with one correct answer
-  - Negative marking: ${examInfo.prelims?.negativeMarking || '1/3rd mark deducted'}
-  - Cover subjects: ${examSpecificSubjects?.join(', ')}
-  - Focus areas: ${examSpecificFocus}
-  ${examInfo.prelims?.note ? `- IMPORTANT: ${examInfo.prelims.note}` : ''}
-`}
-- Detailed explanations that match ${examType} answer key style
-- Subject and topic classification as per ${examType} syllabus
-- Appropriate difficulty level matching ${examType} standards
+${isMains
+        ? `Mains: Analytical questions, word limits ${examInfo.mains?.wordLimits?.join('/')}, cover: ${examSpecificFocus}`
+        : `Prelims: Clear MCQs, cover: ${examSpecificFocus}`}
 
-**IMPORTANT**: Generate all questions, options, explanations, and content in English. The system will handle translation to other languages using professional translation services.`;
+Generate in English only. Include detailed explanations.`;
 
     const difficultyInstruction = `Maintain approximately ${difficultyTargets.easy} easy, ${difficultyTargets.medium} medium, and ${difficultyTargets.hard} hard questions. Every question must include a difficulty label that aligns with this distribution.`;
 
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
     const excludedProviders = preferences.excludedProviders || [];
 
-    const userPrompt = `Create a mock test for ${examType} ${paperType || 'Prelims'}${subject ? ` - ${subject}` : ''} in English.
+    const userPrompt = `Create ${totalQuestions} ${examType} ${paperType || 'Prelims'} questions${subject ? ` on ${subject}` : ''}.
 
-**${examType} Test Specifications:**
-- Total Questions: ${totalQuestions}
-- Duration: ${duration} minutes
-- Paper Type: ${paperType || 'Prelims'}
-- Exam Type: ${examType}
-${topics ? `- Topics to cover: ${topics.join(', ')}` : ''}
-${examSpecificSubjects ? `- Subjects to cover: ${examSpecificSubjects.join(', ')}` : ''}
+Specs: ${totalQuestions} questions, ${duration} min, ${isMains ? 'Subjective' : 'MCQ'}
+${topics ? `Topics: ${topics.join(', ')}` : ''}
+Difficulty: ${difficultyTargets.easy} easy, ${difficultyTargets.medium} medium, ${difficultyTargets.hard} hard
 
-${difficultyInstruction}
-
-${isMains ? `
-**IMPORTANT: This is a ${examType} MAINS exam - Generate SUBJECTIVE questions only (no multiple choice).**
-
-Generate questions in JSON format:
+JSON format:
 {
   "title": "${examType} ${paperType} Mock Test",
-  "description": "Mock test for ${examType} ${paperType} covering ${examSpecificSubjects?.join(', ')}",
-  "questions": [
-    {
-      "question": "Question text appropriate for ${examType} Mains (e.g., 'Discuss the impact of globalization on Indian culture. Illustrate with examples.' for UPSC, or state-specific questions for PCS)",
-      "questionType": "subjective",
-      "wordLimit": ${examInfo.mains?.wordLimits?.[1] || 250},
-      "explanation": "Key points that should be covered in the answer as per ${examType} standards",
-      "subject": "${examSpecificSubjects?.[0] || 'General Studies'}",
-      "topic": "Topic name relevant to ${examType} syllabus",
-      "difficulty": "medium",
-      "marks": 10
-    }
-  ]
-}
-
-**For ${examType} Mains questions:**
-- Use questionType: "subjective" for ALL questions
-- Do NOT include "options" or "correctAnswer" fields
-- Set appropriate wordLimit: ${examInfo.mains?.wordLimits?.join(' or ')} words
-- Marks should be realistic (10 marks for ${examInfo.mains?.wordLimits?.[1] || 250} words, 5 marks for ${examInfo.mains?.wordLimits?.[0] || 150} words)
-- Include explanation field with key points that should be covered
-- Cover topics from: ${examSpecificSubjects?.join(', ')}
-${examType === 'PCS' ? '- Include state-specific content and regional issues where relevant' : ''}
-${examType === 'SSC' ? '- Focus on descriptive writing, quantitative problem-solving, and English comprehension' : ''}
-` : `
-Generate questions in JSON format:
-{
-  "title": "${examType} ${paperType} Mock Test",
-  "description": "Mock test for ${examType} ${paperType} covering ${examSpecificSubjects?.join(', ')}",
-  "questions": [
-    {
-      "question": "Question text appropriate for ${examType} Prelims",
-      "questionType": "mcq",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Option A",
-      "explanation": "Detailed explanation matching ${examType} answer key style",
-      "subject": "${examSpecificSubjects?.[0] || 'General Studies'}",
-      "topic": "Topic name relevant to ${examType} syllabus",
-      "difficulty": "medium",
-      "marks": 1,
-      "negativeMarks": ${examType === 'SSC' ? 0.25 : 0.33}
-    }
-  ]
-}
-
-**For ${examType} Prelims questions:**
-- Use questionType: "mcq" for ALL questions
-- Include exactly 4 options (A, B, C, D)
-- Set correctAnswer to one of the options
-- Negative marking: ${examInfo.prelims?.negativeMarking || '1/3rd mark deducted'}
-- Cover subjects: ${examSpecificSubjects?.join(', ')}
-${examType === 'PCS' ? '- Include state-specific questions where relevant (geography, history, culture, current affairs)' : ''}
-${examType === 'SSC' ? '- Focus on reasoning, quantitative aptitude, general awareness, and English comprehension' : ''}
-`}
-
-Generate exactly ${totalQuestions} questions. Ensure questions are:
-1. **EXAM-RELEVANT**: Directly aligned with ${examType} syllabus and exam pattern
-2. **PRECISE & CURRENT**: Based on latest syllabus (2024-2025), recent developments, and current affairs
-3. **VERIFIABLE**: Only use factual, verifiable information - no made-up facts
-4. **PROPERLY TAGGED**: Each question must have correct subject and GS paper tags
-5. Appropriate for ${examType} exam level and difficulty
-6. Covering ${examType}-specific syllabus and topics comprehensively
-7. Following ${examType} question pattern and style exactly
-8. Valid and well-structured with clear, detailed explanations
-
-**For MCQ Questions (Prelims):**
-- Each question must have exactly 4 options (A, B, C, D)
-- Options should be plausible and test conceptual understanding
-- Correct answer must be unambiguous
-- Explanation should be detailed, explaining why the correct answer is right and why others are wrong
-- Include relevant facts, dates, and context in explanations
-
-**For Subjective Questions (Mains):**
-- Questions should test analytical and writing skills
-- Should require structured answers with multiple dimensions
-- Explanation should list key points that should be covered in the answer
-- Include expected answer framework (Introduction, Main Body, Conclusion)`;
+  "questions": [{
+    "question": "...",
+    "questionType": "${isMains ? 'subjective' : 'mcq'}",
+    ${isMains
+        ? `"wordLimit": ${examInfo.mains?.wordLimits?.[1] || 250}, "marks": 10, "explanation": "key points"`
+        : `"options": ["A","B","C","D"], "correctAnswer": "A", "explanation": "...", "marks": 1, "negativeMarks": ${examType === 'SSC' ? 0.25 : 0.33}`},
+    "subject": "${examSpecificSubjects?.[0] || 'GS'}", "topic": "...", "difficulty": "medium"
+  }]
+}`;
 
     // Fetch PYQ questions if requested
     let pyqQuestions = [];
     let processedQuestions = [];
-    
+
     if (usePYQ) {
       try {
         const pyqFilter = {
@@ -306,7 +235,7 @@ Generate exactly ${totalQuestions} questions. Ensure questions are:
           level: paperType === 'Mains' ? 'Mains' : 'Prelims',
           lang: language === 'en' ? { $in: ['en', 'multi'] } : language
         };
-        
+
         // Add subject filter if provided
         if (subject && subject.trim()) {
           pyqFilter.$or = [
@@ -442,89 +371,89 @@ Format as JSON array:
     let parsedData = null;
 
     if (questionsNeeded > 0 || !usePYQ) {
-      const aiPrompt = usePYQ 
+      const aiPrompt = usePYQ
         ? `${userPrompt}\n\nGenerate exactly ${questionsNeeded} additional questions to complete the test (${processedQuestions.length} questions already provided from PYQ archive).`
         : userPrompt;
 
-    const aiResult = await callAIWithFallback(
+      const aiResult = await callAIWithFallback(
         [{ role: 'user', content: aiPrompt }],
-      systemPrompt,
-      3500,
-      0.6,
-      {
-        model: preferredModel,
-        preferredProvider,
-        excludeProviders: excludedProviders,
-        openAIModel: preferredOpenAIModel
-      }
-    );
-    const aiResponse = aiResult?.content || '';
+        systemPrompt,
+        3500,
+        0.6,
+        {
+          model: preferredModel,
+          preferredProvider,
+          excludeProviders: excludedProviders,
+          openAIModel: preferredOpenAIModel
+        }
+      );
+      const aiResponse = aiResult?.content || '';
 
-    let parsedData;
-    try {
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedData = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found');
+      let parsedData;
+      try {
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON found');
+        }
+      } catch (parseError) {
+        return res.status(500).json({ error: 'Failed to parse test data', details: parseError.message });
       }
-    } catch (parseError) {
-      return res.status(500).json({ error: 'Failed to parse test data', details: parseError.message });
-    }
 
       // Process AI-generated questions
       aiQuestions = parsedData.questions.map((q, index) => {
-      const question = {
-        question: q.question,
-        questionType: q.questionType || (isMains ? 'subjective' : 'mcq'),
-        subject: q.subject || subject || 'General',
-        topic: q.topic || 'General',
-        difficulty: q.difficulty || 'medium',
-        marks: q.marks || (isMains ? 10 : 1),
-        explanation: q.explanation || '',
-        source: 'ai'
-      };
+        const question = {
+          question: q.question,
+          questionType: q.questionType || (isMains ? 'subjective' : 'mcq'),
+          subject: q.subject || subject || 'General',
+          topic: q.topic || 'General',
+          difficulty: q.difficulty || 'medium',
+          marks: q.marks || (isMains ? 10 : 1),
+          explanation: q.explanation || '',
+          source: 'ai'
+        };
 
-      // Validate question text
-      if (!question.question || question.question.trim().length < 10) {
-        throw new Error(`Question ${index + 1} is invalid or too short`);
-      }
+        // Validate question text
+        if (!question.question || question.question.trim().length < 10) {
+          throw new Error(`Question ${index + 1} is invalid or too short`);
+        }
 
-      if (question.questionType === 'mcq') {
-        // Validate MCQ questions
-        question.options = q.options || [];
-        question.correctAnswer = q.correctAnswer || '';
-        question.negativeMarks = q.negativeMarks || (examType === 'SSC' ? 0.25 : 0.33);
-        
-        // Validate MCQ structure
-        if (!Array.isArray(question.options) || question.options.length !== 4) {
-          throw new Error(`Question ${index + 1}: MCQ must have exactly 4 options`);
-        }
-        if (!question.correctAnswer || !question.options.includes(question.correctAnswer)) {
-          throw new Error(`Question ${index + 1}: correctAnswer must be one of the provided options`);
-        }
-        if (question.options.some(opt => !opt || opt.trim().length === 0)) {
-          throw new Error(`Question ${index + 1}: All options must be non-empty`);
-        }
-      } else {
-        // Validate subjective questions
-        const defaultWordLimit = examType === 'SSC' ? 300 : 250;
-        question.wordLimit = q.wordLimit || defaultWordLimit;
-        // Remove options and correctAnswer for subjective questions
-        delete question.options;
-        delete question.correctAnswer;
-        delete question.negativeMarks;
-        
-        // Validate word limit is reasonable
-        if (question.wordLimit < 100 || question.wordLimit > 500) {
-          question.wordLimit = defaultWordLimit; // Reset to default
-        }
-      }
+        if (question.questionType === 'mcq') {
+          // Validate MCQ questions
+          question.options = q.options || [];
+          question.correctAnswer = q.correctAnswer || '';
+          question.negativeMarks = q.negativeMarks || (examType === 'SSC' ? 0.25 : 0.33);
 
-      // Validate marks
-      if (question.marks < 0 || question.marks > 50) {
-        question.marks = isMains ? 10 : 1; // Reset to default
-      }
+          // Validate MCQ structure
+          if (!Array.isArray(question.options) || question.options.length !== 4) {
+            throw new Error(`Question ${index + 1}: MCQ must have exactly 4 options`);
+          }
+          if (!question.correctAnswer || !question.options.includes(question.correctAnswer)) {
+            throw new Error(`Question ${index + 1}: correctAnswer must be one of the provided options`);
+          }
+          if (question.options.some(opt => !opt || opt.trim().length === 0)) {
+            throw new Error(`Question ${index + 1}: All options must be non-empty`);
+          }
+        } else {
+          // Validate subjective questions
+          const defaultWordLimit = examType === 'SSC' ? 300 : 250;
+          question.wordLimit = q.wordLimit || defaultWordLimit;
+          // Remove options and correctAnswer for subjective questions
+          delete question.options;
+          delete question.correctAnswer;
+          delete question.negativeMarks;
+
+          // Validate word limit is reasonable
+          if (question.wordLimit < 100 || question.wordLimit > 500) {
+            question.wordLimit = defaultWordLimit; // Reset to default
+          }
+        }
+
+        // Validate marks
+        if (question.marks < 0 || question.marks > 50) {
+          question.marks = isMains ? 10 : 1; // Reset to default
+        }
 
         return question;
       });
@@ -541,54 +470,14 @@ Format as JSON array:
       console.warn(`Warning: Generated ${processedQuestions.length} questions${usePYQ ? ` (${processedQuestions.length - aiQuestions.length} from PYQ, ${aiQuestions.length} from AI)` : ''}, expected ${totalQuestions}`);
     }
 
-    // Translate questions to target language if not English (using Azure Translator)
+    // Translate questions to target language if not English (using batch translation)
     if (language && language !== 'en' && processedQuestions && Array.isArray(processedQuestions)) {
+      const { batchTranslateQuestions } = await import('@/lib/batchTranslate');
       try {
-        console.log(`Translating ${processedQuestions.length} mock test questions to ${language} using Azure Translator...`);
-        processedQuestions = await Promise.all(
-          processedQuestions.map(async (q) => {
-            const translatedQ = { ...q };
-            try {
-              if (q.question) {
-                translatedQ.question = await translateText(q.question, 'en', language, true);
-              }
-              if (q.explanation) {
-                translatedQ.explanation = await translateText(q.explanation, 'en', language, true);
-              }
-              if (q.options && Array.isArray(q.options)) {
-                translatedQ.options = await Promise.all(
-                  q.options.map(async (option) => {
-                    try {
-                      return await translateText(option, 'en', language, true);
-                    } catch (e) {
-                      return option;
-                    }
-                  })
-                );
-                // Also translate correctAnswer if it exists
-                if (q.correctAnswer && q.options.includes(q.correctAnswer)) {
-                  // Find the translated version of correctAnswer
-                  const originalIndex = q.options.indexOf(q.correctAnswer);
-                  if (originalIndex >= 0 && originalIndex < translatedQ.options.length) {
-                    translatedQ.correctAnswer = translatedQ.options[originalIndex];
-                  }
-                }
-              }
-              if (q.subject) {
-                translatedQ.subject = await translateText(q.subject, 'en', language, true);
-              }
-              if (q.topic) {
-                translatedQ.topic = await translateText(q.topic, 'en', language, true);
-              }
-            } catch (e) {
-              console.warn('Failed to translate question:', e.message);
-            }
-            return translatedQ;
-          })
-        );
-        console.log('Mock test questions translation completed successfully');
+        processedQuestions = await batchTranslateQuestions(processedQuestions, language);
+        console.log('Mock test batch translation completed successfully');
       } catch (translationError) {
-        console.warn('Translation failed, using English content:', translationError.message);
+        console.warn('Batch translation failed, using English content:', translationError.message);
         // Continue with English content if translation fails
       }
     }
@@ -599,7 +488,7 @@ Format as JSON array:
     const totalMarks = processedQuestions.reduce((sum, q) => sum + (q.marks || 1), 0);
 
     const testData = {
-      title: usePYQ 
+      title: usePYQ
         ? `${examType} ${paperType || 'Prelims'} Mock Test (PYQ-Based)`
         : (parsedData?.title || `${examType} ${paperType || 'Prelims'} Mock Test`),
       description: usePYQ
@@ -619,12 +508,24 @@ Format as JSON array:
         appliedTargets: appliedDifficultyTargets,
         subjectDistribution,
         sourceDistribution
-      }
+      },
+      // NEW: Include adaptive personalization info
+      adaptiveSuggestion
     };
 
     const mockTest = await MockTest.create(testData);
 
-    return res.status(200).json({ mockTest });
+    // Return with personalization message if applicable
+    const response = { mockTest };
+    if (adaptiveSuggestion) {
+      response.personalization = {
+        message: adaptiveSuggestion.reason,
+        appliedMix: adaptiveSuggestion.appliedMix,
+        userStats: adaptiveSuggestion.userStats
+      };
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     console.error('Error creating mock test:', error);
     return res.status(500).json({ error: 'Failed to create mock test', details: error.message });
