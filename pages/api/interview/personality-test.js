@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
     const excludedProviders = preferences.excludedProviders || [];
 
     const systemPrompt = `You are a personality assessment expert for competitive exam interviews. Analyze answers to personality test questions and identify key traits, strengths, and areas for development.
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 - Decision-making
 - Teamwork`;
 
-    const answersText = answers.map((a, idx) => 
+    const answersText = answers.map((a, idx) =>
       `${idx + 1}. Q: ${a.question}\n   A: ${a.answer}`
     ).join('\n\n');
 

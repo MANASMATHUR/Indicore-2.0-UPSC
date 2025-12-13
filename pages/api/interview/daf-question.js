@@ -48,14 +48,14 @@ export default async function handler(req, res) {
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
 
     // Create system prompt with DAF context
     const sanitizedDafText = dafExtractedText.trim();
     const dafContent = sanitizedDafText.length > 0
       ? sanitizedDafText.substring(0, 3000) + (sanitizedDafText.length > 3000 ? '\n\n... (truncated for context)' : '')
       : 'No DAF content provided';
-    
+
     const systemPrompt = `You are an expert interview coach specializing in ${sanitizedExamType} interviews. You have access to the candidate's Detailed Application Form (DAF) and need to provide personalized, customized answers based on their specific profile.
 
 **Your Role:**
@@ -113,7 +113,7 @@ Provide a comprehensive, personalized answer that:
 
   } catch (error) {
     console.error('Error processing DAF question:', error);
-    
+
     // Clean up uploaded file on error
     try {
       if (dafFile && dafFile.filepath && fs.existsSync(dafFile.filepath)) {
@@ -122,7 +122,7 @@ Provide a comprehensive, personalized answer that:
     } catch (cleanupError) {
       console.error('Error cleaning up file:', cleanupError);
     }
-    
+
     return res.status(500).json({
       error: 'Failed to process your question. Please try again later.',
       details: error.message
