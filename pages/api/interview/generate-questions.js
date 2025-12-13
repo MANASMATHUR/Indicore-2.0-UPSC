@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
 
     let systemPrompt;
     let userPrompt;
