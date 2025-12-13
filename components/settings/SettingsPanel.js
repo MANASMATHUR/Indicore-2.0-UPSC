@@ -42,13 +42,6 @@ const MODEL_PRESETS = [
     tokenHint: 'Handles ~256K input tokens · 4K output tokens'
   },
   {
-    id: 'openai:gpt-4o',
-    label: 'OpenAI • GPT-4o Flagship — 128K token context',
-    provider: 'openai',
-    openAIModel: 'gpt-4o',
-    tokenHint: 'Handles ~128K input tokens · 4K output tokens'
-  },
-  {
     id: 'openai:gpt-4o-2024-05-13',
     label: 'OpenAI • GPT-4o (May 2024) — 128K token context',
     provider: 'openai',

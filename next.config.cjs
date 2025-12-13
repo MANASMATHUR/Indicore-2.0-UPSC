@@ -40,6 +40,9 @@ const nextConfig = {
       config.externals.push('microsoft-cognitiveservices-speech-sdk');
     }
 
+    // Fix for pdfjs-dist identifying as node-canvas dependency
+    config.resolve.alias.canvas = false;
+
     // Optimize bundle size
     if (!isServer) {
       config.optimization = {
