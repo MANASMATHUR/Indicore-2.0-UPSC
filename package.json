@@ -13,7 +13,8 @@
     "scrape:upsc": "node scripts/upsc-pyq-scraper.js",
     "organize:pyqs": "node scripts/organize-existing-pyqs.js",
     "essay:check": "node scripts/check-essay-coverage.js",
-    "essay:generate": "node scripts/generate-all-essays.js"
+    "essay:generate": "node scripts/generate-all-essays.js",
+    "postinstall": "node scripts/fix-canvas-dep.cjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
