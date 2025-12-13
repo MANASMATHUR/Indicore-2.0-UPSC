@@ -131,7 +131,8 @@ const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
 
       if (file.type === 'application/pdf') {
         // Dynamic import PDFJS (works reliably with v3.11.174)
-        const pdfjsModule = await import('pdfjs-dist');
+        // Use minified build to avoid node-specific dependencies like canvas
+        const pdfjsModule = await import('pdfjs-dist/build/pdf.min.js');
         const pdfjsLib = pdfjsModule.default || pdfjsModule;
 
         console.log('PDFJS Lib loaded (v3):', pdfjsLib.version);

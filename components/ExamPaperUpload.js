@@ -37,19 +37,19 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
         'image/png',
         'image/jpg'
       ];
-      
+
       if (!allowedTypes.includes(file.type)) {
         showToast('Please select a valid file type (.txt, .md, .pdf, .doc, .docx, .jpg, .png)', { type: 'error' });
         return;
       }
-      
+
       // Validate file size (max 20MB for exam papers)
       const maxSize = 20 * 1024 * 1024; // 20MB
       if (file.size > maxSize) {
         showToast('File size too large. Please select a file smaller than 20MB.', { type: 'error' });
         return;
       }
-      
+
       setSelectedFile(file);
       extractTextFromFile(file);
     }
@@ -59,7 +59,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
     setIsUploading(true);
     try {
       let text = '';
-      
+
       if (file.type === 'application/pdf') {
         text = await extractTextFromPDF(file);
       } else if (file.type.startsWith('image/')) {
@@ -68,7 +68,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       } else {
         text = await readFileAsText(file);
       }
-      
+
       setExtractedText(text);
     } catch (error) {
       setExtractedText(`❌ Error reading file: ${file.name}\n\nPlease ensure the file is not corrupted and try again.`);
@@ -79,27 +79,29 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
 
   const extractTextFromPDF = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
-    
+
     try {
-      const pdfjsLib = await import('pdfjs-dist');
-      
+      // Use minified build to avoid node-specific dependencies like canvas
+      const pdfjsModule = await import('pdfjs-dist/build/pdf.min.js');
+      const pdfjsLib = pdfjsModule.default || pdfjsModule;
+
       const workerSources = [
         `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`,
         `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`,
         `//cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
       ];
-      
+
       for (const workerSrc of workerSources) {
         try {
           pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-          
-          const pdf = await pdfjsLib.getDocument({ 
+
+          const pdf = await pdfjsLib.getDocument({
             data: arrayBuffer,
             verbosity: 0
           }).promise;
-          
+
           let fullText = '';
-          
+
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
@@ -109,7 +111,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
               .join(' ');
             fullText += pageText + '\n';
           }
-          
+
           const extractedText = fullText.trim();
           if (extractedText && extractedText.length > 10) {
             return extractedText;
@@ -120,7 +122,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
       }
     } catch (pdfjsError) {
     }
-    
+
     return `[PDF File: ${file.name}]\n\n⚠️ PDF text extraction failed. This PDF might be image-based or password-protected.\n\nPlease provide the exam paper content manually in the text area below for AI evaluation.`;
   };
 
@@ -135,7 +137,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
 
   const handleEvaluate = async () => {
     const textToEvaluate = manualText.trim() || extractedText.trim();
-    
+
     if (!textToEvaluate) {
       showToast('Please upload a file or enter exam paper content manually.', { type: 'error' });
       return;
@@ -148,7 +150,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
 
     try {
       setIsUploading(true);
-      
+
       // Send to evaluation API
       const response = await fetch('/api/ai/evaluate-exam', {
         method: 'POST',
@@ -163,7 +165,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
 
       if (!response.ok) throw new Error('Evaluation failed');
       const data = await response.json();
-      
+
       onEvaluate(data.evaluation, examType, subject);
       showToast('Evaluation complete!', { type: 'success' });
       onClose();
@@ -184,18 +186,18 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
         'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'image/jpeg', 'image/png', 'image/jpg'
       ];
-      
+
       if (!allowedTypes.includes(file.type)) {
         showToast('Please select a valid file type', { type: 'error' });
         return;
       }
-      
+
       const maxSize = 20 * 1024 * 1024;
       if (file.size > maxSize) {
         showToast('File size too large. Please select a file smaller than 20MB.', { type: 'error' });
         return;
       }
-      
+
       setSelectedFile(file);
       extractTextFromFile(file);
     }
@@ -209,7 +211,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
 
   return (
     <>
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
@@ -243,11 +245,10 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
                   <button
                     key={exam.code}
                     onClick={() => setExamType(exam.code)}
-                    className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-                      examType === exam.code
+                    className={`p-3 rounded-lg border-2 transition-all duration-200 ${examType === exam.code
                         ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                         : 'border-gray-200 dark:border-slate-600 hover:border-indigo-300'
-                    }`}
+                      }`}
                   >
                     <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${exam.color}`}>
                       {exam.name}
@@ -267,7 +268,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="e.g., General Studies, History, Mathematics, etc."
-                      className="w-full p-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="w-full p-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
               />
             </div>
 
@@ -279,7 +280,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                      className="w-full p-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="w-full p-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
               >
                 {supportedLanguages.map((lang) => (
                   <option key={lang.code} value={lang.code}>
@@ -302,7 +303,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
                 onChange={handleFileSelect}
                 className="hidden"
               />
-              
+
               {selectedFile ? (
                 <div className="space-y-4">
                   <div className="text-green-600">
@@ -353,7 +354,7 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
                   {extractedText.substring(0, 500)}
                   {extractedText.length > 500 && '...'}
                 </div>
-                
+
                 {extractedText.includes('[PDF File:') && (
                   <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                     <div className="flex items-center gap-2 mb-3">

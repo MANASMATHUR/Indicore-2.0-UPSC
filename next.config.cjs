@@ -41,10 +41,35 @@ const nextConfig = {
     }
 
     // Fix for pdfjs-dist identifying as node-canvas dependency
+    // Explicitly alias to a mock file
     config.resolve.alias.canvas = false;
+    config.resolve.alias.encoding = false;
+
+    // Use IgnorePlugin as backup
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^canvas$/,
+      }),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^encoding$/,
+      })
+    );
 
     // Optimize bundle size
     if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        encoding: false,
+        fs: false,
+        http: false,
+        https: false,
+        zlib: false,
+        path: false,
+        stream: false,
+        util: false,
+        url: false,
+      };
       config.optimization = {
         ...config.optimization,
         moduleIds: 'deterministic',
