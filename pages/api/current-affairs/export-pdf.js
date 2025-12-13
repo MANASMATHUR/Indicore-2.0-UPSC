@@ -18,11 +18,11 @@ function escapeHtml(text) {
 
 // Generate HTML content for the digest
 function generateHTML(digest) {
-  const startDate = digest.startDate instanceof Date 
-    ? digest.startDate 
+  const startDate = digest.startDate instanceof Date
+    ? digest.startDate
     : (digest.startDate ? new Date(digest.startDate) : new Date());
-  const endDate = digest.endDate instanceof Date 
-    ? digest.endDate 
+  const endDate = digest.endDate instanceof Date
+    ? digest.endDate
     : (digest.endDate ? new Date(digest.endDate) : new Date());
 
   let html = `
@@ -249,7 +249,7 @@ export default async function handler(req, res) {
     await connectToDatabase();
 
     let digest;
-    
+
     // Try to find digest by ID first
     if (digestId) {
       try {
@@ -263,7 +263,7 @@ export default async function handler(req, res) {
         // Continue to try digestData fallback
       }
     }
-    
+
     // If not found by ID, use the provided digest data (fallback)
     if (!digest && digestData) {
       digest = digestData;
@@ -272,34 +272,49 @@ export default async function handler(req, res) {
     if (!digest) {
       return res.status(404).json({ error: 'Digest not found. Please generate a digest first.' });
     }
-    
+
     // Ensure digest is a plain object (not Mongoose document)
     if (digest.toObject) {
       digest = digest.toObject();
     }
 
-    // Import puppeteer dynamically
-    const puppeteer = await import('puppeteer');
-    
-    // Launch browser
-    browser = await puppeteer.default.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
-    });
+    // Launch browser based on environment
+    if (process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      // Production (Vercel/AWS): Use puppeteer-core with @sparticuz/chromium
+      const chromium = await import('@sparticuz/chromium');
+      const puppeteerCore = await import('puppeteer-core');
+
+      // Configure chromium
+      // const executablePath = await chromium.default.executablePath();
+
+      browser = await puppeteerCore.default.launch({
+        args: chromium.default.args,
+        defaultViewport: chromium.default.defaultViewport,
+        executablePath: await chromium.default.executablePath(),
+        headless: chromium.default.headless,
+      });
+    } else {
+      // Local development: Use standard puppeteer
+      const puppeteer = await import('puppeteer');
+      browser = await puppeteer.default.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+    }
 
     const page = await browser.newPage();
-    
+
     // Generate HTML content
     const htmlContent = generateHTML(digest);
-    
+
     // Set content and wait for fonts to load
     await page.setContent(htmlContent, {
       waitUntil: 'networkidle0'
@@ -342,8 +357,8 @@ export default async function handler(req, res) {
     }
 
     // Set response headers BEFORE sending
-    const startDate = digest.startDate instanceof Date 
-      ? digest.startDate 
+    const startDate = digest.startDate instanceof Date
+      ? digest.startDate
       : (digest.startDate ? new Date(digest.startDate) : new Date());
     const dateStr = startDate.toISOString().split('T')[0];
 
@@ -351,12 +366,12 @@ export default async function handler(req, res) {
     res.setHeader('Content-Disposition', `attachment; filename="current-affairs-${digest.period}-${dateStr}.pdf"`);
     res.setHeader('Content-Length', buffer.length);
     res.setHeader('Cache-Control', 'no-cache');
-    
+
     // Send the buffer - use res.send() for Next.js API routes
     return res.send(buffer);
   } catch (error) {
     console.error('Error exporting PDF:', error);
-    
+
     // Make sure to close browser on error
     if (browser) {
       try {
@@ -365,7 +380,7 @@ export default async function handler(req, res) {
         console.error('Error closing browser:', closeError);
       }
     }
-    
+
     return res.status(500).json({ error: 'Failed to export PDF', details: error.message });
   }
 }
