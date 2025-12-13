@@ -6,7 +6,7 @@ import { callAIWithFallback } from '@/lib/ai-providers';
 
 export default async function handler(req, res) {
   // Feature temporarily disabled - keeping codebase for future use
-  return res.status(503).json({ 
+  return res.status(503).json({
     error: 'Formula Sheets feature is currently under maintenance. Please check back later.',
     maintenance: true,
     message: 'This feature is temporarily disabled but will be available soon.'
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const preferences = session.user?.preferences || {};
     const preferredModel = preferences.model || 'sonar-pro';
     const preferredProvider = preferences.provider || 'openai';
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
     const excludedProviders = preferences.excludedProviders || [];
 
     const { subject, topic, type = 'formula' } = req.body;
