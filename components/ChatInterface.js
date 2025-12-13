@@ -248,17 +248,30 @@ export default function ChatInterface({ user }) {
       resetStreamingState();
       let speechLanguage = messageLanguage;
       if (isVoiceInput) {
+        // English pattern: "Translate to Marathi"
         const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
+        // Hindi pattern: "Marathi mein anuvad" or "मराठी में अनुवाद"
+        const hindiMatch = message.match(/(\w+|[\u0900-\u097F]+)\s*(?:में|me)\s*(?:अनुवाद|anuvad|translate)/i);
+
+        const languageMap = {
+          'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
+          'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+          'kannada': 'kn', 'spanish': 'es', 'english': 'en',
+          // Hindi script support
+          'मराठी': 'mr', 'हिंदी': 'hi', 'तमिळ': 'ta', 'बंगाली': 'bn',
+          'पंजाबी': 'pa', 'गुजराती': 'gu', 'तेलुगु': 'te', 'मल्याळम': 'ml',
+          'कन्नड': 'kn', 'स्पॅनिश': 'es', 'इंग्रजी': 'en'
+        };
+
+        let requestedLang = null;
         if (translationMatch) {
-          const requestedLang = translationMatch[1].toLowerCase();
-          const languageMap = {
-            'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
-            'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
-            'kannada': 'kn', 'spanish': 'es', 'english': 'en'
-          };
-          if (languageMap[requestedLang]) {
-            speechLanguage = languageMap[requestedLang];
-          }
+          requestedLang = translationMatch[1].toLowerCase();
+        } else if (hindiMatch) {
+          requestedLang = hindiMatch[1].toLowerCase();
+        }
+
+        if (requestedLang && languageMap[requestedLang]) {
+          speechLanguage = languageMap[requestedLang];
         }
       }
 
@@ -505,17 +518,30 @@ export default function ChatInterface({ user }) {
     // Detect if user is asking for translation in voice input
     let speechLanguage = messageLanguage; // For speech output
     if (isVoiceInput) {
+      // English pattern: "Translate to Marathi"
       const translationMatch = message.match(/translate.*?(?:to|in|into)\s+(\w+)/i);
+      // Hindi pattern: "Marathi mein anuvad" or "मराठी में अनुवाद"
+      const hindiMatch = message.match(/(\w+|[\u0900-\u097F]+)\s*(?:में|me)\s*(?:अनुवाद|anuvad|translate)/i);
+
+      const languageMap = {
+        'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
+        'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
+        'kannada': 'kn', 'spanish': 'es', 'english': 'en',
+        // Hindi script support
+        'मराठी': 'mr', 'हिंदी': 'hi', 'तमिळ': 'ta', 'बंगाली': 'bn',
+        'पंजाबी': 'pa', 'गुजराती': 'gu', 'तेलुगु': 'te', 'मल्याळम': 'ml',
+        'कन्नड': 'kn', 'स्पॅनिश': 'es', 'इंग्रजी': 'en'
+      };
+
+      let requestedLang = null;
       if (translationMatch) {
-        const requestedLang = translationMatch[1].toLowerCase();
-        const languageMap = {
-          'marathi': 'mr', 'hindi': 'hi', 'tamil': 'ta', 'bengali': 'bn',
-          'punjabi': 'pa', 'gujarati': 'gu', 'telugu': 'te', 'malayalam': 'ml',
-          'kannada': 'kn', 'spanish': 'es', 'english': 'en'
-        };
-        if (languageMap[requestedLang]) {
-          speechLanguage = languageMap[requestedLang]; // Only for speech, not text
-        }
+        requestedLang = translationMatch[1].toLowerCase();
+      } else if (hindiMatch) {
+        requestedLang = hindiMatch[1].toLowerCase();
+      }
+
+      if (requestedLang && languageMap[requestedLang]) {
+        speechLanguage = languageMap[requestedLang]; // Only for speech, not text
       }
     }
     try {

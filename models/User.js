@@ -147,6 +147,32 @@ const userSchema = new mongoose.Schema({
       of: String,
       default: {}
     },
+    // ChatGPT-style explicit memories
+    memories: [{
+      content: {
+        type: String,
+        required: true
+      },
+      category: {
+        type: String,
+        enum: ['goal', 'preference', 'study_habit', 'exam', 'subject', 'personal', 'general'],
+        default: 'general'
+      },
+      importance: {
+        type: String,
+        enum: ['high', 'normal', 'low'],
+        default: 'normal'
+      },
+      savedAt: {
+        type: Date,
+        default: Date.now
+      },
+      lastUsed: Date,
+      useCount: {
+        type: Number,
+        default: 0
+      }
+    }],
     lastUpdated: {
       type: Date,
       default: Date.now
@@ -262,6 +288,333 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
       }
+    },
+
+    // ========== NEW PERSONALIZATION FIELDS ==========
+
+    // Enhanced UI/UX Preferences
+    uiPreferences: {
+      theme: {
+        type: String,
+        enum: ['light', 'dark', 'auto'],
+        default: 'auto'
+      },
+      fontSize: {
+        type: String,
+        enum: ['small', 'medium', 'large'],
+        default: 'medium'
+      },
+      reducedMotion: {
+        type: Boolean,
+        default: false
+      },
+      notificationsEnabled: {
+        type: Boolean,
+        default: true
+      },
+      soundEnabled: {
+        type: Boolean,
+        default: false
+      },
+      compactView: {
+        type: Boolean,
+        default: false
+      }
+    },
+
+    // Study Schedule & Reminders
+    studySchedule: {
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      preferredStudyTime: [{
+        day: {
+          type: String,
+          enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        },
+        startTime: String, // HH:MM format
+        endTime: String,
+        enabled: Boolean
+      }],
+      dailyGoalMinutes: {
+        type: Number,
+        default: 120
+      },
+      reminders: {
+        studyReminder: {
+          type: Boolean,
+          default: false
+        },
+        reminderTime: String, // HH:MM format
+        breakReminder: {
+          type: Boolean,
+          default: false
+        },
+        breakIntervalMinutes: {
+          type: Number,
+          default: 50
+        },
+        dailyDigest: {
+          type: Boolean,
+          default: false
+        },
+        digestTime: String
+      }
+    },
+
+    // Learning Path & Progress
+    learningPath: {
+      currentTopics: [{
+        subject: String, // GS-1, GS-2, etc.
+        topic: String,
+        startedAt: Date,
+        lastStudied: Date,
+        completionPercentage: {
+          type: Number,
+          default: 0
+        },
+        status: {
+          type: String,
+          enum: ['not_started', 'in_progress', 'completed', 'reviewing'],
+          default: 'not_started'
+        }
+      }],
+      completedTopics: [{
+        subject: String,
+        topic: String,
+        completedAt: Date,
+        masteryLevel: {
+          type: String,
+          enum: ['basic', 'intermediate', 'advanced'],
+          default: 'basic'
+        }
+      }],
+      plannedTopics: [{
+        subject: String,
+        topic: String,
+        priority: {
+          type: Number,
+          default: 1
+        },
+        targetDate: Date
+      }]
+    },
+
+    // Performance Metrics (Enhanced)
+    performanceMetrics: {
+      overallScore: {
+        type: Number,
+        default: 0
+      }, // 0-100
+      subjectWiseScores: [{
+        subject: String,
+        score: Number,
+        questionsAttempted: Number,
+        questionsCorrect: Number,
+        lastUpdated: Date
+      }],
+      pyqPerformance: {
+        totalAttempted: {
+          type: Number,
+          default: 0
+        },
+        totalCorrect: {
+          type: Number,
+          default: 0
+        },
+        accuracyRate: {
+          type: Number,
+          default: 0
+        },
+        averageTimePerQuestion: {
+          type: Number,
+          default: 0
+        } // in seconds
+      },
+      mockTestPerformance: {
+        totalTests: {
+          type: Number,
+          default: 0
+        },
+        averageScore: {
+          type: Number,
+          default: 0
+        },
+        bestScore: {
+          type: Number,
+          default: 0
+        },
+        improvementTrend: {
+          type: String,
+          enum: ['improving', 'stable', 'declining'],
+          default: 'stable'
+        }
+      },
+      essayPerformance: {
+        totalEssays: {
+          type: Number,
+          default: 0
+        },
+        averageScore: {
+          type: Number,
+          default: 0
+        },
+        strengthAreas: [String],
+        improvementAreas: [String]
+      }
+    },
+
+    // Goals & Milestones
+    goals: {
+      shortTerm: [{
+        title: String,
+        description: String,
+        targetDate: Date,
+        completed: {
+          type: Boolean,
+          default: false
+        },
+        completedAt: Date,
+        category: {
+          type: String,
+          enum: ['daily', 'weekly', 'monthly']
+        },
+        progress: {
+          type: Number,
+          default: 0
+        } // 0-100
+      }],
+      longTerm: [{
+        title: String,
+        description: String,
+        targetDate: Date,
+        milestones: [{
+          title: String,
+          completed: {
+            type: Boolean,
+            default: false
+          },
+          completedAt: Date
+        }],
+        progress: {
+          type: Number,
+          default: 0
+        }
+      }],
+      achievements: [{
+        title: String,
+        description: String,
+        icon: String,
+        earnedAt: Date,
+        category: String
+      }]
+    },
+
+    // Bookmarks & Saved Content
+    savedContent: {
+      pyqs: [{
+        questionId: String,
+        question: String,
+        savedAt: Date,
+        tags: [String],
+        notes: String
+      }],
+      chatMessages: [{
+        chatId: String,
+        messageId: String,
+        content: String,
+        savedAt: Date,
+        tags: [String],
+        notes: String
+      }],
+      flashcards: [{
+        flashcardId: String,
+        front: String,
+        back: String,
+        savedAt: Date,
+        deck: String
+      }],
+      essays: [{
+        essayId: String,
+        title: String,
+        content: String,
+        savedAt: Date,
+        score: Number
+      }],
+      currentAffairs: [{
+        articleId: String,
+        title: String,
+        url: String,
+        savedAt: Date,
+        tags: [String]
+      }]
+    },
+
+    // Notifications & Communication Preferences
+    notificationPreferences: {
+      email: {
+        enabled: {
+          type: Boolean,
+          default: true
+        },
+        studyReminders: {
+          type: Boolean,
+          default: true
+        },
+        weeklyDigest: {
+          type: Boolean,
+          default: true
+        },
+        achievementAlerts: {
+          type: Boolean,
+          default: true
+        },
+        newFeatures: {
+          type: Boolean,
+          default: false
+        }
+      },
+      inApp: {
+        enabled: {
+          type: Boolean,
+          default: true
+        },
+        studyStreakAlerts: {
+          type: Boolean,
+          default: true
+        },
+        goalReminders: {
+          type: Boolean,
+          default: true
+        },
+        contentRecommendations: {
+          type: Boolean,
+          default: true
+        }
+      }
+    },
+
+    // Privacy & Data Management
+    privacySettings: {
+      dataCollectionConsent: {
+        type: Boolean,
+        default: true
+      },
+      analyticsConsent: {
+        type: Boolean,
+        default: true
+      },
+      personalizationConsent: {
+        type: Boolean,
+        default: true
+      },
+      lastExportedAt: Date,
+      accountDeletionRequested: {
+        type: Boolean,
+        default: false
+      },
+      deletionRequestedAt: Date
     }
   }
 }, {

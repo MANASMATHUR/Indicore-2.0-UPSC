@@ -30,8 +30,8 @@ const essaySchema = new mongoose.Schema({
   },
   generatedBy: {
     type: String,
-    enum: ['perplexity', 'manual', 'preset'],
-    default: 'perplexity'
+    enum: ['perplexity', 'manual', 'preset', 'openai'],
+    default: 'openai'
   },
   generatedAt: {
     type: Date,
@@ -53,7 +53,7 @@ essaySchema.index({ topic: 1 });
 essaySchema.index({ letter: 1 });
 essaySchema.index({ createdAt: -1 });
 
-essaySchema.methods.updateAccess = function() {
+essaySchema.methods.updateAccess = function () {
   this.lastAccessedAt = new Date();
   this.accessCount += 1;
   return this.save();

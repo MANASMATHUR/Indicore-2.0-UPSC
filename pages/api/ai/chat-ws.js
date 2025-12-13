@@ -33,7 +33,7 @@ function calculateMaxTokens(message, useOpenAI = false) {
   if (useOpenAI) {
     return undefined; // undefined means no limit - model uses full context window
   }
-  
+
   // For other providers (Perplexity, Claude): Use reasonable limits based on their API constraints
   const messageLength = message.length;
   if (messageLength < 100) return 8000;
@@ -72,10 +72,10 @@ export default function handler(req, res) {
           const normalizedOpenAIModel = typeof openAIModel === 'string' && openAIModel.trim().length > 0
             ? openAIModel.trim()
             : '';
-          const resolvedOpenAIModel = normalizedOpenAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+          const resolvedOpenAIModel = normalizedOpenAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
           const openAIKey = process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY;
           let useOpenAI = providerPreference === 'openai' && openAIKey;
-          
+
           if (!message) {
             socket.emit('chat:error', { error: 'Message is required' });
             return;
@@ -102,7 +102,7 @@ export default function handler(req, res) {
           // PARALLELIZE: Load user profile and conversation history simultaneously
           const extractedInfo = extractUserInfo(message);
           const saveWorthyInfo = detectSaveWorthyInfo(message);
-          
+
           // Start both database queries in parallel for maximum speed
           const [userProfileResult, conversationHistoryResult] = await Promise.allSettled([
             // User profile query
@@ -111,7 +111,7 @@ export default function handler(req, res) {
                 await connectToDatabase();
                 const userDoc = await User.findOne({ email: session.user.email }).lean();
                 let profile = userDoc?.profile || null;
-                
+
                 // Update profile if needed (non-blocking, but we wait for it)
                 if (profile && Object.keys(extractedInfo).length > 0) {
                   try {
@@ -136,29 +136,29 @@ export default function handler(req, res) {
             // Conversation history query
             (async () => {
               if (!chatId) return [];
-            try {
-              await connectToDatabase();
-              const chat = await Chat.findOne({ 
-                _id: chatId, 
-                userEmail: session.user.email 
-              })
-              .select('messages.sender messages.text messages.timestamp')
-              .lean();
-              
-              if (chat && chat.messages && Array.isArray(chat.messages)) {
-                const recentMessages = chat.messages.slice(-15);
+              try {
+                await connectToDatabase();
+                const chat = await Chat.findOne({
+                  _id: chatId,
+                  userEmail: session.user.email
+                })
+                  .select('messages.sender messages.text messages.timestamp')
+                  .lean();
+
+                if (chat && chat.messages && Array.isArray(chat.messages)) {
+                  const recentMessages = chat.messages.slice(-15);
                   return recentMessages
-                  .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
-                  .map(msg => ({
-                    role: msg.sender === 'user' ? 'user' : 'assistant',
-                    content: msg.text
-                  }));
+                    .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
+                    .map(msg => ({
+                      role: msg.sender === 'user' ? 'user' : 'assistant',
+                      content: msg.text
+                    }));
+                }
+                return [];
+              } catch (err) {
+                console.warn('Failed to load conversation history:', err.message);
+                return [];
               }
-                return [];
-            } catch (err) {
-              console.warn('Failed to load conversation history:', err.message);
-                return [];
-            }
             })()
           ]);
 
@@ -303,7 +303,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           if (saveWorthyInfo && !isSaveConfirmation(message)) {
             finalSystemPrompt += `\n\nMEMORY SAVING INSTRUCTION:\nThe user just mentioned: "${saveWorthyInfo.value}". This seems like important information that should be remembered. At the END of your response, add a friendly follow-up question asking if they want to save this to memory. Use this exact format: "[Your main response]\n\n💾 I noticed you mentioned "${saveWorthyInfo.value}". Would you like me to save this to your memory so I can remember it in future conversations?"`;
           }
-          
+
           // If user confirmed saving, add instruction to acknowledge and save
           if (isSaveConfirmation(message)) {
             finalSystemPrompt += `\n\nMEMORY SAVING CONFIRMATION:\nThe user just confirmed they want to save information to memory. Acknowledge this at the start of your response with something like "Got it! I've saved that to your memory." Then proceed with your normal response.`;
@@ -319,7 +319,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
               'kannada': 'kn', 'spanish': 'es', 'english': 'en'
             };
             const targetLangCode = languageMap[targetLang] || 'hi';
-            
+
             // Extract text to translate
             let textToTranslate = message;
             const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
@@ -328,12 +328,12 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             } else {
               textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
             }
-            
+
             if (textToTranslate && textToTranslate.length > 0) {
               try {
                 const translateModule = await import('@/pages/api/ai/translate');
                 const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
-                
+
                 if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
                   socket.emit('chat:response', {
                     success: true,
@@ -371,7 +371,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           const examContext = needsContext ? examKnowledge.generateContextualPrompt(message) : '';
 
           let enhancedSystemPrompt = finalSystemPrompt + contextualEnhancement + examContext;
-          
+
           // Truncate system prompt if too long (Perplexity has limits)
           const maxSystemLength = 2000;
           if (enhancedSystemPrompt.length > maxSystemLength) {
@@ -398,11 +398,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           const selectedModel = model || 'sonar-pro';
           const providerName = useOpenAI ? 'openai' : 'perplexity';
           const tokenBudget = calculateMaxTokens(message, useOpenAI);
-          
+
           // Start API call immediately - no delays
           let response;
           if (useOpenAI) {
-          try {
+            try {
               // OpenAI: No max_tokens = unlimited (uses full context window like ChatGPT)
               const payload = {
                 model: resolvedOpenAIModel,
@@ -410,10 +410,10 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 temperature: 0.5,
                 stream: true
               };
-              
+
               // Only add max_tokens if explicitly provided (for other use cases)
               // For chat, we want unlimited responses
-              
+
               response = await axios.post('https://api.openai.com/v1/chat/completions', payload, {
                 headers: {
                   'Authorization': `Bearer ${openAIKey}`,
@@ -487,121 +487,121 @@ Write like you're having a natural conversation with a knowledgeable friend who 
               return;
             }
           } else {
-          try {
-            // Perplexity: Use token budget (they have API limits)
-            const perplexityMaxTokens = tokenBudget || 16000;
-            response = await axios.post('https://api.perplexity.ai/chat/completions', {
-              model: selectedModel,
-              messages: messagesForAPI,
-              max_tokens: perplexityMaxTokens,
-              temperature: 0.5,
-              top_p: 0.9,
-              stream: true
-            }, {
-              headers: {
-                'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Accept': 'text/event-stream'
-              },
-              responseType: 'stream',
-              timeout: 120000, // Increased for long responses
-              // Optimize connection reuse
-              httpAgent: new (require('http').Agent)({ keepAlive: true }),
-              httpsAgent: new (require('https').Agent)({ keepAlive: true })
-            });
-          } catch (apiError) {
-            let errorMessage = 'API request failed. Please try again.';
-            
-            if (apiError.response?.status === 400) {
-              let errorText = '';
-              
-              try {
-                if (apiError.response?.data) {
-                  if (typeof apiError.response.data === 'string') {
-                    errorText = apiError.response.data;
-                  } else if (apiError.response.data.error?.message) {
-                    errorText = apiError.response.data.error.message;
-                  } else if (apiError.response.data.message) {
-                    errorText = apiError.response.data.message;
-                  } else if (Buffer.isBuffer(apiError.response.data)) {
-                    try {
-                      const parsed = JSON.parse(apiError.response.data.toString());
-                      errorText = parsed.error?.message || parsed.message || '';
-                    } catch (e) {
-                      errorText = apiError.response.data.toString().substring(0, 200);
-                    }
-                  }
-                }
-              } catch (e) {
-                errorText = apiError.message || '';
-              }
-              
-              console.error('Perplexity API 400 error (WS):', errorText || apiError.message);
-              
-              if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
-                errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
-              } else if (errorText && errorText.includes('user message')) {
-                errorMessage = 'Invalid request format. Please try again.';
-              }
+            try {
+              // Perplexity: Use token budget (they have API limits)
+              const perplexityMaxTokens = tokenBudget || 16000;
+              response = await axios.post('https://api.perplexity.ai/chat/completions', {
+                model: selectedModel,
+                messages: messagesForAPI,
+                max_tokens: perplexityMaxTokens,
+                temperature: 0.5,
+                top_p: 0.9,
+                stream: true
+              }, {
+                headers: {
+                  'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+                  'Content-Type': 'application/json',
+                  'Accept': 'text/event-stream'
+                },
+                responseType: 'stream',
+                timeout: 120000, // Increased for long responses
+                // Optimize connection reuse
+                httpAgent: new (require('http').Agent)({ keepAlive: true }),
+                httpsAgent: new (require('https').Agent)({ keepAlive: true })
+              });
+            } catch (apiError) {
+              let errorMessage = 'API request failed. Please try again.';
 
-              try {
-                const fallbackMaxTokens = tokenBudget || 16000;
-                const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
-                const fallbackResult = await callAIWithFallback(
-                  conversationMessagesForAI,
-                  finalSystemContent,
-                  Math.min(fallbackMaxTokens, 8000),
-                  0.5,
-                  {
-                    preferredProvider: 'perplexity',
-                    model: selectedModel,
-                    openAIModel: resolvedOpenAIModel
-                  }
-                );
+              if (apiError.response?.status === 400) {
+                let errorText = '';
 
-                // Use dynamic validation based on question length
-                const questionLength = message ? message.trim().length : 0;
-                const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
-                const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-
-                const fallbackContent = fallbackResult?.content?.trim();
-                if (fallbackContent && fallbackContent.length >= minFallbackLength) {
-                  let cleanedResponse = cleanAIResponse(fallbackContent);
-                  let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fallbackContent;
-
-                  if (validResponse && validResponse.trim().length >= minFallbackLength) {
-                    responseCache.set(cacheKey, {
-                      response: validResponse,
-                      timestamp: Date.now()
-                    });
-
-                    await persistMemory(validResponse);
-
-                    const chunkSize = 400;
-                    for (let i = 0; i < validResponse.length; i += chunkSize) {
-                      const chunk = validResponse.slice(i, i + chunkSize);
-                      if (chunk.trim().length > 0) {
-                        socket.emit('chat:chunk', { chunk, done: false });
+                try {
+                  if (apiError.response?.data) {
+                    if (typeof apiError.response.data === 'string') {
+                      errorText = apiError.response.data;
+                    } else if (apiError.response.data.error?.message) {
+                      errorText = apiError.response.data.error.message;
+                    } else if (apiError.response.data.message) {
+                      errorText = apiError.response.data.message;
+                    } else if (Buffer.isBuffer(apiError.response.data)) {
+                      try {
+                        const parsed = JSON.parse(apiError.response.data.toString());
+                        errorText = parsed.error?.message || parsed.message || '';
+                      } catch (e) {
+                        errorText = apiError.response.data.toString().substring(0, 200);
                       }
                     }
-                    socket.emit('chat:chunk', { chunk: '', done: true });
-                    return;
                   }
+                } catch (e) {
+                  errorText = apiError.message || '';
                 }
-              } catch (fallbackError) {
-                console.error('Fallback after Perplexity 400 failed:', fallbackError.message);
+
+                console.error('Perplexity API 400 error (WS):', errorText || apiError.message);
+
+                if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
+                  errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
+                } else if (errorText && errorText.includes('user message')) {
+                  errorMessage = 'Invalid request format. Please try again.';
+                }
+
+                try {
+                  const fallbackMaxTokens = tokenBudget || 16000;
+                  const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
+                  const fallbackResult = await callAIWithFallback(
+                    conversationMessagesForAI,
+                    finalSystemContent,
+                    Math.min(fallbackMaxTokens, 8000),
+                    0.5,
+                    {
+                      preferredProvider: 'perplexity',
+                      model: selectedModel,
+                      openAIModel: resolvedOpenAIModel
+                    }
+                  );
+
+                  // Use dynamic validation based on question length
+                  const questionLength = message ? message.trim().length : 0;
+                  const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+                  const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+
+                  const fallbackContent = fallbackResult?.content?.trim();
+                  if (fallbackContent && fallbackContent.length >= minFallbackLength) {
+                    let cleanedResponse = cleanAIResponse(fallbackContent);
+                    let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fallbackContent;
+
+                    if (validResponse && validResponse.trim().length >= minFallbackLength) {
+                      responseCache.set(cacheKey, {
+                        response: validResponse,
+                        timestamp: Date.now()
+                      });
+
+                      await persistMemory(validResponse);
+
+                      const chunkSize = 400;
+                      for (let i = 0; i < validResponse.length; i += chunkSize) {
+                        const chunk = validResponse.slice(i, i + chunkSize);
+                        if (chunk.trim().length > 0) {
+                          socket.emit('chat:chunk', { chunk, done: false });
+                        }
+                      }
+                      socket.emit('chat:chunk', { chunk: '', done: true });
+                      return;
+                    }
+                  }
+                } catch (fallbackError) {
+                  console.error('Fallback after Perplexity 400 failed:', fallbackError.message);
+                }
+              } else {
+                console.error('Perplexity API error (WS):', apiError.response?.status, apiError.message);
               }
-            } else {
-              console.error('Perplexity API error (WS):', apiError.response?.status, apiError.message);
-            }
-            
-            ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
-            return;
+
+              ws.send(JSON.stringify({ type: 'error', message: errorMessage }));
+              return;
             }
           }
 
           let fullResponse = '';
-          
+
           // Optimize: Process stream chunks immediately without buffering
           let buffer = '';
           response.data.on('data', (chunk) => {
@@ -609,7 +609,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             const lines = buffer.split('\n');
             // Keep incomplete line in buffer
             buffer = lines.pop() || '';
-            
+
             // Process complete lines immediately
             for (const line of lines) {
               if (line.startsWith('data: ')) {
@@ -622,25 +622,25 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                     const questionLength = message ? message.trim().length : 0;
                     const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
                     const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
-                    
+
                     let cleanedResponse = cleanAIResponse(fullResponse);
                     let isValid = validateAndCleanResponse(cleanedResponse, minLength);
                     let memoryCandidate = '';
-                    
+
                     // If validation failed but we have content, try to salvage it
                     // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
                     const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(fullResponse));
                     if (!isValid && fullResponse.trim().length >= minSalvageLength && !hasGarbledPatterns) {
-                        cleanedResponse = fullResponse.trim();
-                        cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                        cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-                        if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
-                          cleanedResponse += '.';
+                      cleanedResponse = fullResponse.trim();
+                      cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                      cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+                      if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
+                        cleanedResponse += '.';
                       }
                       // Re-validate with lower threshold
                       isValid = validateAndCleanResponse(cleanedResponse, minSalvageLength) || cleanedResponse;
                     }
-                    
+
                     // Accept if valid and meets minimum length
                     const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
                     if (isValid && isValid.length >= minAcceptableLength) {
@@ -649,7 +649,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                         timestamp: Date.now()
                       });
                       memoryCandidate = isValid;
-                      
+
                       // Background cache cleanup
                       if (responseCache.size > 500) {
                         setImmediate(() => {
@@ -672,11 +672,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                       // Use it if it's reasonable (very lenient for short questions)
                       const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
                       if (cleanedResponse.length >= minUseLength) {
-                      responseCache.set(cacheKey, {
-                        response: cleanedResponse,
-                        timestamp: Date.now()
-                      });
-                      memoryCandidate = cleanedResponse;
+                        responseCache.set(cacheKey, {
+                          response: cleanedResponse,
+                          timestamp: Date.now()
+                        });
+                        memoryCandidate = cleanedResponse;
                       }
                     }
 
@@ -684,11 +684,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                       persistMemory(memoryCandidate);
                     }
                   });
-                  
+
                   socket.emit('chat:chunk', { chunk: '', done: true });
                   return;
                 }
-                
+
                 try {
                   const parsed = JSON.parse(data);
                   if (parsed.choices?.[0]?.delta?.content) {
@@ -696,7 +696,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                     // Light cleaning for streaming (citations only) - minimal processing
                     // Use faster regex for streaming
                     if (content.includes('[') && /\d/.test(content)) {
-                    content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+                      content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                     }
                     fullResponse += content;
                     // Emit immediately - no buffering, no await
@@ -714,11 +714,11 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             if (isSaveConfirmation(message) && chatId) {
               try {
                 await connectToDatabase();
-                const chat = await Chat.findOne({ 
-                  _id: chatId, 
-                  userEmail: session.user.email 
+                const chat = await Chat.findOne({
+                  _id: chatId,
+                  userEmail: session.user.email
                 }).lean();
-                
+
                 if (chat && chat.messages && chat.messages.length > 1) {
                   // Get last assistant message to find what was suggested to save
                   const lastAssistantMsg = [...chat.messages].reverse().find(msg => msg.sender === 'assistant');
@@ -731,13 +731,13 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                       if (userDoc) {
                         if (!userDoc.profile) userDoc.profile = {};
                         if (!userDoc.profile.facts) userDoc.profile.facts = [];
-                        
+
                         const normalizedFact = factToSave.toLowerCase().trim();
                         const exists = userDoc.profile.facts.some(f => {
                           if (!f || typeof f !== 'string') return false;
                           return f.toLowerCase().trim() === normalizedFact;
                         });
-                        
+
                         if (!exists) {
                           userDoc.profile.facts.push(factToSave);
                           if (userDoc.profile.facts.length > 20) {
@@ -754,7 +754,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 console.warn('Failed to save to user memory:', err.message);
               }
             }
-            
+
             // Emit save prompt info if available
             if (saveWorthyInfo && !isSaveConfirmation(message)) {
               socket.emit('chat:save-prompt', {
@@ -763,7 +763,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
                 value: saveWorthyInfo.value
               });
             }
-            
+
             socket.emit('chat:chunk', { chunk: '', done: true });
           });
 
@@ -772,7 +772,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             if (streamError.response?.status === 401 || streamError.response?.status === 402) {
               errorMsg = `${providerName === 'openai' ? 'OpenAI' : 'Perplexity'} rejected the request. Please verify API keys and credits.`;
             }
-            socket.emit('chat:error', { 
+            socket.emit('chat:error', {
               error: errorMsg,
               code: streamError.response?.status === 401 || streamError.response?.status === 402 ? 'API_CREDITS_EXHAUSTED' : 'STREAMING_ERROR'
             });
@@ -780,7 +780,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
 
         } catch (error) {
           let errorMessage = error.response?.data?.message || error.message || 'Internal server error';
-          
+
           if (error.response) {
             const status = error.response.status;
             if (status === 401) {
@@ -793,8 +793,8 @@ Write like you're having a natural conversation with a knowledgeable friend who 
               errorMessage = 'Access denied. Please verify your API key permissions.';
             }
           }
-          
-          socket.emit('chat:error', { 
+
+          socket.emit('chat:error', {
             error: errorMessage,
             code: error.response?.status === 401 || error.response?.status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR'
           });

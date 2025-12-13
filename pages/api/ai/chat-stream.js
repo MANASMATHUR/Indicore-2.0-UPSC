@@ -33,25 +33,25 @@ const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|pap
 // More flexible PYQ detection - checks for PYQ keywords OR subject + question words anywhere in message
 function isPyqQuery(message) {
   if (!message || typeof message !== 'string') return false;
-  
+
   const lowerMsg = message.toLowerCase();
-  
+
   // Check for explicit PYQ keywords
   const hasPyqKeyword = /(pyq|pyqs|previous\s+year|past\s+year)/i.test(message);
   if (hasPyqKeyword) return true;
-  
+
   // Check for subject keywords (excluding "statistical" to avoid false positives on general statistics questions)
   // "statistical" is only matched in specific PYQ contexts below
   const subjectPattern = /(?:eco|geo|hist|pol|sci|tech|env|economics|economy|geography|history|polity|politics|science|technology|environment)/i;
   const hasSubject = subjectPattern.test(message);
-  
+
   // Check for question-related words
   const questionPattern = /(?:questions?|qs|pyq|pyqs|question\s+paper|question\s+papers)/i;
   const hasQuestionWord = questionPattern.test(message);
-  
+
   // If both subject and question words are present, it's likely a PYQ query
   if (hasSubject && hasQuestionWord) return true;
-  
+
   // Check for patterns like "topic wise pyqs", "theme wise pyqs", "questions from", "questions of"
   // Include "statistical" only in specific PYQ contexts (e.g., "statistical questions from previous years")
   const flexiblePattern = /(?:topic\s+wise|theme\s+wise|subject\s+wise|questions?\s+(?:from|of|on|about|related\s+to))/i;
@@ -63,11 +63,11 @@ function isPyqQuery(message) {
     // Otherwise, require subject keyword
     if (hasSubject) return true;
   }
-  
+
   // Check for "statistical" in combination with PYQ-specific terms
   if (/statistical.*(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper)/i.test(message)) return true;
   if (/(?:pyq|pyqs|previous\s+year|past\s+year|question\s+paper).*statistical/i.test(message)) return true;
-  
+
   return false;
 }
 
@@ -76,7 +76,7 @@ function calculateMaxTokens(message, queryType = 'general', useOpenAI = false) {
   if (useOpenAI) {
     return undefined; // undefined means no limit - model uses full context window
   }
-  
+
   // For other providers: Use higher limits for long conversations
   if (queryType === 'pyq') {
     return 40000;
@@ -97,11 +97,11 @@ function estimateTokenLength(messages) {
 function isResponseComplete(response) {
   const trimmed = response.trim();
   if (trimmed.length < 10) return false;
-  
+
   const sentences = trimmed.split(/[.!?]/).filter(s => s.trim().length > 0);
   const lastSent = sentences.length > 0 ? sentences[sentences.length - 1].trim() : trimmed.trim();
   if (lastSent.length > 0 && lastSent.length < 5) return false;
-  
+
   const incomplete = [
     /-\s*$/, /,\s*$/, /and\s*$/, /or\s*$/, /the\s*$/, /a\s*$/, /an\s*$/,
     /to\s*$/, /of\s*$/, /in\s*$/, /for\s*$/, /with\s*$/, /by\s*$/, /from\s*$/,
@@ -110,7 +110,7 @@ function isResponseComplete(response) {
     /additionally\s*$/, /consequently\s*$/, /meanwhile\s*$/, /otherwise\s*$/,
     /nevertheless\s*$/, /nonetheless\s*$/
   ];
-  
+
   return !incomplete.some(p => p.test(trimmed));
 }
 
@@ -132,7 +132,7 @@ export default async function handler(req, res) {
     const normalizedOpenAIModel = typeof openAIModel === 'string' && openAIModel.trim().length > 0
       ? openAIModel.trim()
       : '';
-    const resolvedOpenAIModel = normalizedOpenAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    const resolvedOpenAIModel = normalizedOpenAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
     const openAIKey = process.env.OPENAI_API_KEY || process.env.OPEN_AI_KEY;
     let useOpenAI = providerPreference === 'openai' && openAIKey;
 
@@ -151,33 +151,33 @@ export default async function handler(req, res) {
     if (!message || typeof message !== 'string' || message.length === 0) {
       return res.status(400).json({ error: 'Message is required' });
     }
-    
+
     const supportedModels = ['sonar-pro', 'sonar', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research'];
     const selectedModel = model || 'sonar-pro';
     if (!supportedModels.includes(selectedModel)) {
       return res.status(400).json({ error: 'Unsupported model' });
     }
-    
+
     if (UNSAFE_PATTERNS.some(pattern => pattern.test(message))) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Request contains potentially unsafe content. Please focus on general exam preparation topics.',
         code: 'UNSAFE_CONTENT'
       });
     }
-    
+
     const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     const rateLimitKey = `rate_limit_${clientIP}`;
-    
+
     if (global.rateLimitMap && global.rateLimitMap[rateLimitKey]) {
       const lastRequest = global.rateLimitMap[rateLimitKey];
       if (Date.now() - lastRequest < 1000) {
-        return res.status(429).json({ 
+        return res.status(429).json({
           error: 'Rate limit exceeded. Please wait a moment before making another request.',
           code: 'RATE_LIMIT_EXCEEDED'
         });
       }
     }
-    
+
     if (!global.rateLimitMap) global.rateLimitMap = {};
     global.rateLimitMap[rateLimitKey] = Date.now();
     const cacheKey = `${message}-${language || 'en'}-${model || 'sonar-pro'}-${providerPreference}-${normalizedOpenAIModel || 'default'}`;
@@ -188,7 +188,7 @@ export default async function handler(req, res) {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       if (res.flushHeaders) res.flushHeaders();
-      
+
       const chunks = cached.response.match(/[\s\S]{1,50}/g) || [cached.response];
       for (const chunk of chunks) {
         res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
@@ -220,7 +220,7 @@ export default async function handler(req, res) {
         'kannada': 'kn', 'spanish': 'es', 'english': 'en'
       };
       const targetLangCode = languageMap[targetLang] || 'hi';
-      
+
       let textToTranslate = message;
       const colonMatch = message.match(/translate[^:]*:\s*(.+)/i);
       if (colonMatch) {
@@ -228,12 +228,12 @@ export default async function handler(req, res) {
       } else {
         textToTranslate = message.replace(/translate\s+(?:this|that|the\s+following|text)?\s*(?:to|in|into)\s+\w+/i, '').trim();
       }
-      
+
       if (textToTranslate && textToTranslate.length > 0) {
         try {
           const translateModule = await import('@/pages/api/ai/translate');
           const translated = await translateModule.translateText(textToTranslate, 'auto', targetLangCode, true);
-          
+
           if (translated && translated.trim() && translated.trim() !== textToTranslate.trim()) {
             const chunks = translated.match(/[\s\S]{1,100}/g) || [translated];
             for (const chunk of chunks) {
@@ -292,7 +292,7 @@ export default async function handler(req, res) {
     })();
 
     const extractedInfo = extractUserInfo(message);
-    
+
     let userProfile = await userProfilePromise;
     if (Object.keys(extractedInfo).length > 0) {
       try {
@@ -312,11 +312,11 @@ export default async function handler(req, res) {
     const historyPromise = chatId ? (async () => {
       try {
         await connectToDatabase();
-        const chat = await Chat.findOne({ 
-          _id: chatId, 
-          userEmail: session.user.email 
+        const chat = await Chat.findOne({
+          _id: chatId,
+          userEmail: session.user.email
         }).lean();
-        
+
         if (chat && chat.messages && Array.isArray(chat.messages)) {
           // Keep the full history for optimization, but let the optimizer
           // aggressively keep more recent turns so follow-ups like
@@ -344,7 +344,7 @@ export default async function handler(req, res) {
               message,
               12 // pull up to 12 earlier relevant turns
             );
-            
+
             if (summary) {
               optimizedContext = [
                 { role: 'system', content: summary },
@@ -516,7 +516,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
               ...result.context,
               originalQuery: result.context.originalQuery || effectiveMsg
             });
-        }
+          }
           return result.content;
         }
       } catch (error) {
@@ -564,7 +564,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
 
     // Only treat as new PYQ query if it's NOT a solve request
     const isPyqQueryResult = !isSolveRequestEarly && initialMessageIsPyq;
-    
+
     const needsContext = !isPyqQueryResult && message.length > 10;
 
     // Reuse the history we already fetched for solve detection
@@ -584,7 +584,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       if (pyqDb && pyqDb.trim().length > 50) {
         // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
         let cleanedPyq = pyqDb;
-        
+
         // Remove citation patterns and UI artifacts but preserve newlines
         cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
@@ -593,10 +593,10 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
         // Only normalize excessive blank lines (4+ to 2), preserve structure
         cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
-        
+
         // Trim only leading/trailing whitespace, preserve internal newlines
         cleanedPyq = cleanedPyq.trim();
-        
+
         // Ensure we still have newlines after cleaning
         if (!cleanedPyq.includes('\n') && pyqDb.includes('\n')) {
           console.warn('WARNING: Cleaning removed all newlines, using original');
@@ -640,12 +640,12 @@ Write like you're having a natural conversation with a knowledgeable friend who 
 
     function extractPyqContextFromHistory(history) {
       if (!history || history.length === 0) return null;
-      
+
       for (let i = history.length - 1; i >= 0; i--) {
         const msg = history[i];
         if (msg.role === 'user' && msg.content) {
           const userMsg = msg.content;
-          
+
           if (isPyqQuery(userMsg)) {
             const parsed = pyqService.parseQuery(userMsg, language);
             const theme = parsed.theme || '';
@@ -653,7 +653,7 @@ Write like you're having a natural conversation with a knowledgeable friend who 
             const toYear = parsed.toYear;
             const examCode = parsed.examCode || 'UPSC';
             const level = parsed.level || '';
-            
+
             return { theme, fromYear, toYear, examCode, level, originalQuery: msg.content };
           }
         }
@@ -667,12 +667,12 @@ Write like you're having a natural conversation with a knowledgeable friend who 
           return '';
         }
       }
-      
+
       let theme = '';
       let fromYear = null;
       let toYear = null;
       let examCodeDetected = 'UPSC';
-      
+
       if (previousContext) {
         theme = previousContext.theme || '';
         fromYear = previousContext.fromYear;
@@ -685,9 +685,9 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         toYear = parsed.toYear;
         examCodeDetected = parsed.examCode || 'UPSC';
       }
-      
+
       const yearLine = fromYear ? `Limit to ${fromYear}-${toYear}.` : 'Cover all available years.';
-      
+
       return `\n\nPYQ LISTING MODE:\nYou are providing Previous Year Questions (PYQ) from the database. Your task is to format and present questions in a clear, organized, and complete manner.
 
 CRITICAL REQUIREMENTS - RESPONSE QUALITY:
@@ -752,11 +752,11 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     // Use the context we already extracted earlier (avoid duplicate extraction)
     const previousPyqContext = previousPyqContextForSolve;
     const isSolveRequest = isSolveRequestEarly;
-    
-    const isFollowUpQuestion = /^(give|show|get|fetch|find|search|more|another|additional|next|other|different)\s+(more|questions|pyqs|previous year|questions|pyq)/i.test(message) || 
-                               /^(more|another|additional|next|other|different|continue|keep going|show more|give more)/i.test(message.trim()) ||
-                               /^(more|another|additional|next|other|different)\s+(of|from|those|them|these|questions|pyqs?)/i.test(message.trim());
-    
+
+    const isFollowUpQuestion = /^(give|show|get|fetch|find|search|more|another|additional|next|other|different)\s+(more|questions|pyqs|previous year|questions|pyq)/i.test(message) ||
+      /^(more|another|additional|next|other|different|continue|keep going|show more|give more)/i.test(message.trim()) ||
+      /^(more|another|additional|next|other|different)\s+(of|from|those|them|these|questions|pyqs?)/i.test(message.trim());
+
     if (isFollowUpQuestion && previousPyqContext) {
       const messageCount = conversationHistory.length;
       const estimatedOffset = Math.max(0, Math.floor((messageCount - 1) / 2) * 50);
@@ -770,7 +770,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
         // Consistent with main PYQ handler above
         let cleanedPyq = pyqDb;
-        
+
         // Remove citation patterns and UI artifacts but preserve newlines
         cleanedPyq = cleanedPyq.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
         cleanedPyq = cleanedPyq.replace(/From\s+result[^.!?\n]*/gi, '');
@@ -779,16 +779,16 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         cleanedPyq = cleanedPyq.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
         // Normalize excessive blank lines (4+ to 2) - consistent with main handler
         cleanedPyq = cleanedPyq.replace(/\n{4,}/g, '\n\n');
-        
+
         // Trim only leading/trailing whitespace, preserve internal newlines
         cleanedPyq = cleanedPyq.trim();
-        
+
         // Ensure we still have newlines after cleaning
         if (!cleanedPyq.includes('\n') && pyqDb.includes('\n')) {
           console.warn('WARNING: Cleaning removed all newlines, using original');
           cleanedPyq = pyqDb;
         }
-        
+
         const chunks = cleanedPyq.match(/[\s\S]{1,100}/g) || [cleanedPyq];
         for (const chunk of chunks) {
           res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
@@ -822,7 +822,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         return;
       }
     }
-    
+
     // If solving questions, fetch the PYQs again to include in context
     let pyqContextForSolving = null;
     if (isSolveRequest && previousPyqContext) {
@@ -835,7 +835,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       } catch (error) {
         console.warn('Failed to fetch PYQs for solving:', error.message);
       }
-      
+
       // If context fetch failed, we can't proceed with solve request
       // Return an error response instead of sending confusing message to AI
       if (!pyqContextForSolving) {
@@ -849,7 +849,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         return;
       }
     }
-    
+
     // conversationHistory is already compressed (from line 465), don't compress again
     const optimizedHistory = conversationHistory;
     const hasContext = optimizedHistory.length > 0;
@@ -859,14 +859,14 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     // Solve requests should get answer/solution instructions, not listing instructions
     const pyqPrompt = !isSolveRequest ? buildPyqPrompt(message, previousPyqContext) : null;
     let systemContent = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, hasContext, isFollowUp);
-    
+
     // If solving questions, enhance the user message with PYQ context
     // Note: pyqContextForSolving is guaranteed to be non-null here because we return early if it's null
     let userMessage = message;
     if (isSolveRequest) {
       userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
     }
-    
+
     if (pyqPrompt) {
       systemContent += pyqPrompt;
     } else if (contextualEnhancement && needsContext) {
@@ -886,18 +886,18 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     }
 
     const optimalModel = contextOptimizer.selectOptimalModel(message, hasContext && optimizedHistory.length > 2);
-    
+
     // Ensure we always have at least one user message
     const messagesForAPI = [];
     if (finalSystemContent && finalSystemContent.trim().length > 0) {
       messagesForAPI.push({ role: 'system', content: finalSystemContent });
     }
-    
+
     // Add history if available
     if (optimizedHistory && optimizedHistory.length > 0) {
       messagesForAPI.push(...optimizedHistory);
     }
-    
+
     // Always add user message (ensure it's not empty)
     // Use userMessage if solving questions (includes PYQ context), otherwise use original message
     const finalUserMessage = userMessage || message;
@@ -928,7 +928,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
     // Calculate token budget: undefined for OpenAI (unlimited), higher limits for others
     const calculatedTokens = calculateMaxTokens(message, pyqPrompt ? 'pyq' : 'general', useOpenAI);
-    const maxTokens = useOpenAI 
+    const maxTokens = useOpenAI
       ? undefined // OpenAI: no limit - uses full context window
       : (calculatedTokens || 40000); // Other providers: use calculated or default high limit
 
@@ -1013,14 +1013,14 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         (async () => {
           try {
             await connectToDatabase();
-            const chat = await Chat.findOne({ 
-              _id: chatId, 
-              userEmail: session.user.email 
+            const chat = await Chat.findOne({
+              _id: chatId,
+              userEmail: session.user.email
             }).lean();
-            
+
             if (chat && chat.messages && chat.messages.length > 0) {
               const conversationFacts = await extractConversationFacts(chat.messages, session.user.email);
-              
+
               if (conversationFacts.facts && conversationFacts.facts.length > 0) {
                 const user = await User.findOne({ email: session.user.email });
                 if (user) {
@@ -1054,7 +1054,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
         })();
       }
-      
+
       return;
     }
 
@@ -1142,138 +1142,138 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         return;
       }
     } else {
-    try {
-      // Perplexity requires max_tokens, so use a high limit if undefined
-      const perplexityMaxTokens = maxTokens || 40000;
-      response = await axios.post('https://api.perplexity.ai/chat/completions', {
-        model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
-        messages: messagesForAPI,
-        max_tokens: perplexityMaxTokens,
-        temperature: pyqPrompt ? 0.2 : 0.7,
-        top_p: 0.9,
-        stream: true
-      }, {
-        headers: {
-          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
-        },
-        responseType: 'stream',
-        timeout: 520000
-      });
-    } catch (apiError) {
-      let errorMessage = 'API request failed. Please try again.';
-      
-      if (apiError.response?.status === 400) {
-        let errorText = '';
-        
-        try {
-          if (apiError.response?.data) {
-            if (typeof apiError.response.data === 'string') {
-              errorText = apiError.response.data;
-            } else if (apiError.response.data.error?.message) {
-              errorText = apiError.response.data.error.message;
-            } else if (apiError.response.data.message) {
-              errorText = apiError.response.data.message;
-            } else if (Buffer.isBuffer(apiError.response.data)) {
-              try {
-                const parsed = JSON.parse(apiError.response.data.toString());
-                errorText = parsed.error?.message || parsed.message || '';
-              } catch (e) {
-                errorText = apiError.response.data.toString().substring(0, 200);
-              }
-            }
-          }
-        } catch (e) {
-          errorText = apiError.message || '';
-        }
-        
-        console.error('Perplexity API 400 error:', errorText || apiError.message);
-        console.error('API 400 Error Details:', {
+      try {
+        // Perplexity requires max_tokens, so use a high limit if undefined
+        const perplexityMaxTokens = maxTokens || 40000;
+        response = await axios.post('https://api.perplexity.ai/chat/completions', {
           model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
-          maxTokens,
-          messageLength: message.length,
-          systemContentLength: finalSystemContent.length,
-          messagesCount: messagesForAPI.length,
-          hasPyqPrompt: !!pyqPrompt,
-          errorMessage: errorText
+          messages: messagesForAPI,
+          max_tokens: perplexityMaxTokens,
+          temperature: pyqPrompt ? 0.2 : 0.7,
+          top_p: 0.9,
+          stream: true
+        }, {
+          headers: {
+            'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          responseType: 'stream',
+          timeout: 520000
         });
-        
-        if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
-          errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
-        } else if (errorText && errorText.includes('user message')) {
-          errorMessage = 'Invalid request format. Please try again.';
-        }
-      } else {
-        console.error('Perplexity API error:', apiError.response?.status, apiError.message);
-      }
-      
-      if (apiError.response?.status === 400 && !requiresLargeContextProvider) {
-        console.log('Retrying with Perplexity fallback due to 400 error');
-        try {
-          const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
-          const fallbackMaxTokens = maxTokens ? Math.min(maxTokens, 8000) : 16000;
-          const aiResult = await callAIWithFallback(
-            conversationMessagesForAI,
-            finalSystemContent,
-            fallbackMaxTokens,
-            pyqPrompt ? 0.2 : 0.7,
-            {
-              preferredProvider: 'perplexity',
-              model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
-                useLongContextModel: requiresLargeContextProvider,
-                openAIModel: resolvedOpenAIModel
-            }
-          );
-          
-          // Use dynamic validation based on question length
-          const questionLength = message ? message.trim().length : 0;
-          const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
-          const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
-          
-          let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
-          if (fullResponse && fullResponse.length >= minFallbackLength) {
-            let cleanedResponse = cleanAIResponse(fullResponse);
-            let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fullResponse;
-            
-            if (validResponse && validResponse.length >= minFallbackLength) {
-                await persistMemory(validResponse);
-              const chunkSize = 400;
-              for (let i = 0; i < validResponse.length; i += chunkSize) {
-                const chunk = validResponse.slice(i, i + chunkSize);
-                if (chunk.trim().length > 0) {
-                  res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
-                  if (typeof res.flush === 'function') {
-                    res.flush();
-                  }
+      } catch (apiError) {
+        let errorMessage = 'API request failed. Please try again.';
+
+        if (apiError.response?.status === 400) {
+          let errorText = '';
+
+          try {
+            if (apiError.response?.data) {
+              if (typeof apiError.response.data === 'string') {
+                errorText = apiError.response.data;
+              } else if (apiError.response.data.error?.message) {
+                errorText = apiError.response.data.error.message;
+              } else if (apiError.response.data.message) {
+                errorText = apiError.response.data.message;
+              } else if (Buffer.isBuffer(apiError.response.data)) {
+                try {
+                  const parsed = JSON.parse(apiError.response.data.toString());
+                  errorText = parsed.error?.message || parsed.message || '';
+                } catch (e) {
+                  errorText = apiError.response.data.toString().substring(0, 200);
                 }
               }
-              res.write('data: [DONE]\n\n');
-              if (typeof res.flush === 'function') {
-                res.flush();
-              }
-              res.end();
-              return;
             }
+          } catch (e) {
+            errorText = apiError.message || '';
           }
-        } catch (fallbackError) {
-          console.error('Perplexity fallback also failed:', fallbackError.message);
+
+          console.error('Perplexity API 400 error:', errorText || apiError.message);
+          console.error('API 400 Error Details:', {
+            model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
+            maxTokens,
+            messageLength: message.length,
+            systemContentLength: finalSystemContent.length,
+            messagesCount: messagesForAPI.length,
+            hasPyqPrompt: !!pyqPrompt,
+            errorMessage: errorText
+          });
+
+          if (errorText && (errorText.includes('system message') || errorText.includes('messages array'))) {
+            errorMessage = 'Request format error. The system prompt may be too long. Please try a shorter question.';
+          } else if (errorText && errorText.includes('user message')) {
+            errorMessage = 'Invalid request format. Please try again.';
+          }
+        } else {
+          console.error('Perplexity API error:', apiError.response?.status, apiError.message);
         }
-      }
-      
-      res.write(`data: ${JSON.stringify({
-        content: STREAMING_FALLBACK_MESSAGE,
-        fallback: true
-      })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
+
+        if (apiError.response?.status === 400 && !requiresLargeContextProvider) {
+          console.log('Retrying with Perplexity fallback due to 400 error');
+          try {
+            const conversationMessagesForAI = messagesForAPI.filter(msg => msg.role !== 'system');
+            const fallbackMaxTokens = maxTokens ? Math.min(maxTokens, 8000) : 16000;
+            const aiResult = await callAIWithFallback(
+              conversationMessagesForAI,
+              finalSystemContent,
+              fallbackMaxTokens,
+              pyqPrompt ? 0.2 : 0.7,
+              {
+                preferredProvider: 'perplexity',
+                model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
+                useLongContextModel: requiresLargeContextProvider,
+                openAIModel: resolvedOpenAIModel
+              }
+            );
+
+            // Use dynamic validation based on question length
+            const questionLength = message ? message.trim().length : 0;
+            const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
+            const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10);
+
+            let fullResponse = (aiResult?.content || '').replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '').trim();
+            if (fullResponse && fullResponse.length >= minFallbackLength) {
+              let cleanedResponse = cleanAIResponse(fullResponse);
+              let validResponse = validateAndCleanResponse(cleanedResponse, minLength) || fullResponse;
+
+              if (validResponse && validResponse.length >= minFallbackLength) {
+                await persistMemory(validResponse);
+                const chunkSize = 400;
+                for (let i = 0; i < validResponse.length; i += chunkSize) {
+                  const chunk = validResponse.slice(i, i + chunkSize);
+                  if (chunk.trim().length > 0) {
+                    res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+                    if (typeof res.flush === 'function') {
+                      res.flush();
+                    }
+                  }
+                }
+                res.write('data: [DONE]\n\n');
+                if (typeof res.flush === 'function') {
+                  res.flush();
+                }
+                res.end();
+                return;
+              }
+            }
+          } catch (fallbackError) {
+            console.error('Perplexity fallback also failed:', fallbackError.message);
+          }
+        }
+
+        res.write(`data: ${JSON.stringify({
+          content: STREAMING_FALLBACK_MESSAGE,
+          fallback: true
+        })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
       }
     }
 
     let fullResponse = '';
     let streamError = null;
-    
+
     await new Promise((resolve) => {
       const keepAlive = setInterval(() => {
         if (!res.writableEnded) res.write('');
@@ -1286,7 +1286,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             const data = line.slice(6);
             if (data === '[DONE]') {
               clearInterval(keepAlive);
-              
+
               // Log if response is too short for debugging
               if (!fullResponse || fullResponse.trim().length < 10) {
                 console.warn(`[Stream] Empty/short response received. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
@@ -1300,7 +1300,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               // For very short prompts (1-5 chars like "hi"), accept responses as short as 5 chars
               const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
               let isValid = validateAndCleanResponse(cleanedResponse, minLength);
-              
+
               // If validation failed but we have any content, try to salvage it
               // For very short prompts, be extremely lenient
               const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
@@ -1310,20 +1310,20 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                   cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
                   cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
                   cleanedResponse = cleanedResponse.replace(/[ \t]+/g, ' ');
-                  
+
                   if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
                     cleanedResponse += '.';
                   }
-                  
+
                   // Re-validate with very low threshold for short questions
                   isValid = validateAndCleanResponse(cleanedResponse, minSalvageLength) || cleanedResponse;
                 }
               }
-              
+
               // Accept response if it's valid and meets minimum length (very lenient for short questions)
               // For very short prompts like "hi", accept responses as short as 5 chars
               const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
-              
+
               // If validation returned null but we have content, try to use it anyway if it's reasonable
               if (!isValid && fullResponse && fullResponse.trim().length >= minSalvageLength) {
                 // Try one more time with even more lenient validation
@@ -1332,13 +1332,13 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                   isValid = veryLenientCleaned;
                 }
               }
-              
+
               if (isValid && isValid.length >= minAcceptableLength) {
                 responseCache.set(cacheKey, {
                   response: isValid,
                   timestamp: Date.now()
                 });
-                
+
                 if (responseCache.size > 500) {
                   const now = Date.now();
                   for (const [key, value] of responseCache.entries()) {
@@ -1360,22 +1360,22 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
                 if (cleanedResponse.length >= minUseLength) {
                   isValid = cleanedResponse;
-                responseCache.set(cacheKey, {
-                  response: cleanedResponse,
-                  timestamp: Date.now()
-                });
+                  responseCache.set(cacheKey, {
+                    response: cleanedResponse,
+                    timestamp: Date.now()
+                  });
                 }
               }
-              
+
               // Only use fallback if we truly have nothing usable (very lenient threshold)
               // For very short prompts like "hi", accept responses as short as 5 chars
               const minFallbackLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
               if (!isValid || isValid.length < minFallbackLength) {
                 console.error(`[Stream] Response too short or invalid. Length: ${fullResponse?.length || 0}, Valid: ${!!isValid}, Message: "${message?.substring(0, 50)}..."`);
                 if (!res.writableEnded) {
-                res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-                res.write('data: [DONE]\n\n');
-                res.end();
+                  res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+                  res.write('data: [DONE]\n\n');
+                  res.end();
                 }
                 resolve();
                 return;
@@ -1386,20 +1386,20 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 persistMemory(finalMemoryText).catch(err => {
                   console.warn('Failed to persist conversation memory (stream):', err.message);
                 });
-                
+
                 // Update user personalization based on this interaction
                 updateUserPersonalization(session.user.email, message, finalMemoryText, chatId)
                   .catch(err => {
                     console.warn('Failed to update user personalization:', err.message);
                   });
               }
-              
+
               if (!res.writableEnded) {
-              res.write('data: [DONE]\n\n');
-              if (typeof res.flush === 'function') {
-                res.flush();
-              }
-              res.end();
+                res.write('data: [DONE]\n\n');
+                if (typeof res.flush === 'function') {
+                  res.flush();
+                }
+                res.end();
               }
               resolve();
               return;
@@ -1417,13 +1417,13 @@ Remember: Your goal is to present questions clearly and completely. If no questi
                 content = content.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
                 content = content.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
                 content = content.replace(/👤|🎓|🌐/g, '');
-                
+
                 if (content.trim().length > 0) {
                   fullResponse += content;
                   if (!res.writableEnded) {
-                  res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                  if (typeof res.flush === 'function') {
-                    res.flush();
+                    res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                    if (typeof res.flush === 'function') {
+                      res.flush();
                     }
                   }
                 }
@@ -1441,7 +1441,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
         }
       });
-      
+
       // Add error handler for stream
       response.data.on('error', (error) => {
         clearInterval(keepAlive);
@@ -1457,32 +1457,32 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
       response.data.on('end', () => {
         clearInterval(keepAlive);
-        
+
         // Calculate question length and thresholds first
         const questionLength = message ? message.trim().length : 0;
         const minLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
         const minSalvageLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 15);
         const minFallbackLength = questionLength <= 5 ? 3 : (questionLength < 20 ? 5 : 10); // Even more lenient
-        
+
         // Log if response is too short for debugging, but don't immediately reject
         if (!fullResponse || fullResponse.trim().length < minFallbackLength) {
           console.warn(`[Stream] Stream ended with empty/short response. Length: ${fullResponse?.length || 0}, Message: "${message?.substring(0, 50)}..."`);
           // Only send fallback if we truly have nothing
           if (!fullResponse || fullResponse.trim().length === 0) {
-          if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({ content: STREAMING_FALLBACK_MESSAGE, fallback: true })}\n\n`);
+              res.write('data: [DONE]\n\n');
+              res.end();
+            }
+            resolve();
+            return;
           }
-          resolve();
-          return;
-        }
           // If we have some content, continue to validation
         }
 
         let cleanedResponse = cleanAIResponse(fullResponse || '');
         let isValid = validateAndCleanResponse(cleanedResponse, minLength);
-        
+
         // If validation failed but we have any content, try to salvage it
         // For very short prompts, be extremely lenient
         // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
@@ -1493,16 +1493,16 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
             cleanedResponse = cleanedResponse.replace(/From\s+result[^.!?\n]*/gi, '');
             cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
-            
+
             if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
               cleanedResponse += '.';
             }
-            
+
             // Re-validate with very low threshold for short questions
             isValid = validateAndCleanResponse(cleanedResponse, minSalvageLength) || cleanedResponse;
           }
         }
-        
+
         // If still not valid, try one more aggressive salvage attempt
         // Note: fullResponse could be < minFallbackLength here (from line 1376), so check length first
         if (!isValid && fullResponse && fullResponse.trim().length > 0) {
@@ -1511,7 +1511,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             .replace(/From\s+result[^.!?\n]*/gi, '')
             .replace(/\s+/g, ' ')
             .trim();
-          
+
           // Check for garbled patterns specifically, not isGarbledResponse() which includes length checks
           const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(veryLenientCleaned));
           if (veryLenientCleaned.length >= minFallbackLength && !hasGarbledPatterns) {
@@ -1519,14 +1519,14 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             const finalCleaned = !/[.!?]$/.test(veryLenientCleaned) && veryLenientCleaned.length > minFallbackLength
               ? veryLenientCleaned + '.'
               : veryLenientCleaned;
-            
+
             // Accept if it meets minimum length and isn't garbled
             if (finalCleaned.length >= minFallbackLength) {
               isValid = finalCleaned;
             }
           }
         }
-        
+
         const minAcceptableLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : (questionLength < 50 ? 15 : 30));
         if (isValid && isValid.length >= minAcceptableLength) {
           responseCache.set(cacheKey, {
@@ -1537,27 +1537,27 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           const hasGarbledPatterns = GARBLED_PATTERNS.some(pattern => pattern.test(fullResponse));
           if (!hasGarbledPatterns) {
             // Try to use response even if validation failed but it has some content
-          cleanedResponse = fullResponse.trim();
-          cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-          cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
+            cleanedResponse = fullResponse.trim();
+            cleanedResponse = cleanedResponse.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
+            cleanedResponse = cleanedResponse.replace(/\s+/g, ' ').trim();
             if (!/[.!?]$/.test(cleanedResponse) && cleanedResponse.length > minSalvageLength) {
-            cleanedResponse += '.';
-          }
+              cleanedResponse += '.';
+            }
 
             if (/[A-Za-zÀ-ÖØ-öø-ÿ0-9]/.test(cleanedResponse)) {
               const minUseLength = questionLength <= 5 ? 5 : (questionLength < 20 ? 10 : 20);
               const fallbackValidated = validateAndCleanResponse(cleanedResponse, minUseLength);
               if (fallbackValidated) {
                 isValid = fallbackValidated;
-          responseCache.set(cacheKey, {
+                responseCache.set(cacheKey, {
                   response: fallbackValidated,
-            timestamp: Date.now()
-          });
-        }
+                  timestamp: Date.now()
+                });
+              }
             }
           }
         }
-        
+
         // If still no valid response, send fallback (very lenient threshold)
         // For very short prompts like "hi", accept responses as short as 3-5 chars
         if (!isValid || isValid.length < minFallbackLength) {
@@ -1570,7 +1570,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           resolve();
           return;
         }
-        
+
         if (!res.writableEnded) {
           res.write('data: [DONE]\n\n');
           if (typeof res.flush === 'function') {
@@ -1578,19 +1578,19 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           }
           res.end();
         }
-        
+
         if (chatId && isValid && isValid.length > 50) {
           (async () => {
             try {
               await connectToDatabase();
-              const chat = await Chat.findOne({ 
-                _id: chatId, 
-                userEmail: session.user.email 
+              const chat = await Chat.findOne({
+                _id: chatId,
+                userEmail: session.user.email
               }).lean();
-              
+
               if (chat && chat.messages && chat.messages.length > 0) {
                 const conversationFacts = await extractConversationFacts(chat.messages, session.user.email);
-                
+
                 if (conversationFacts.facts && conversationFacts.facts.length > 0) {
                   const user = await User.findOne({ email: session.user.email });
                   if (user) {
@@ -1624,7 +1624,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             }
           })();
         }
-        
+
         resolve();
       });
 
@@ -1636,7 +1636,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
           res.setHeader('Connection', 'keep-alive');
         }
         if (!res.writableEnded) {
-          const errorMsg = error.response?.status === 401 
+          const errorMsg = error.response?.status === 401
             ? `${providerName === 'openai' ? 'OpenAI' : 'Perplexity'} rejected the request. Please verify API keys and quotas.`
             : 'An error occurred while processing your request.';
           res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
@@ -1649,7 +1649,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
   } catch (error) {
     console.error('Chat stream error:', error.message);
-    
+
     if (!res.headersSent) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');

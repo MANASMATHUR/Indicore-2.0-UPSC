@@ -87,8 +87,8 @@ Be encouraging but honest, specific but constructive. Focus on helping the stude
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { 
-        role: 'user', 
+      {
+        role: 'user',
         content: `Please evaluate this ${examName} exam paper for the subject "${subject}" written in ${langName}:
 
 **Exam Paper Content:**
@@ -106,8 +106,8 @@ Please provide a detailed evaluation following the format specified in your syst
       if (!openAIKey) {
         throw new Error('OpenAI API key not configured');
       }
-      
-      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
       evaluation = await callOpenAIAPI(
         messages,
         openAIModel,
@@ -121,7 +121,7 @@ Please provide a detailed evaluation following the format specified in your syst
     }
 
     if (evaluation && evaluation.trim().length > 0) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         evaluation: evaluation.trim(),
         examType,
         subject,
@@ -148,7 +148,7 @@ Please provide a detailed evaluation following the format specified in your syst
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }
 
-      return res.status(status).json({ 
+      return res.status(status).json({
         error: errorMessage,
         code: status === 401 || status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR',
         status

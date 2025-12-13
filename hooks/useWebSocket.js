@@ -11,8 +11,10 @@ export function useWebSocket() {
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-    
+    // Prioritize localhost if we are running locally to avoid connecting to prod socket
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const socketUrl = isLocal ? window.location.origin : (process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : ''));
+
     if (!socketUrl || typeof window === 'undefined') {
       return;
     }
@@ -64,7 +66,7 @@ export function useWebSocket() {
 
     return new Promise((resolve, reject) => {
       const { message: msg, chatId, model, provider, openAIModel, systemPrompt, language } = message;
-      
+
       let fullResponse = '';
       let isComplete = false;
 

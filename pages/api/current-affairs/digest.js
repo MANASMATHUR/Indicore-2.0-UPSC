@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/mongodb';
 import CurrentAffairsDigest from '@/models/CurrentAffairsDigest';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { translateText } from '@/pages/api/ai/translate';
+import { fetchGoogleNewsRSS } from '@/lib/newsService';
 
 /**
  * Parse date string in various formats (DD-MM-YYYY, YYYY-MM-DD, etc.) to Date object
@@ -537,7 +538,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ digests });
     }
 
-    const {
+    let {
       period = 'daily',
       startDate,
       endDate,
@@ -549,13 +550,20 @@ export default async function handler(req, res) {
       limitPerCategory = 3
     } = req.body;
 
+    // Normalize period input
+    if (period) {
+      period = String(period).toLowerCase().trim();
+    }
+    console.log(`[DigestAPI] Generating digest for period: "${period}"`);
+
     const preferences = session.user?.preferences || {};
     // For current affairs digest, prefer Perplexity for real-time web search capabilities if available
     // Otherwise fall back to OpenAI
-    const hasPerplexity = !!process.env.PERPLEXITY_API_KEY;
-    const preferredProvider = hasPerplexity ? 'perplexity' : 'openai';
-    const preferredModel = hasPerplexity ? 'sonar-pro' : (preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini');
-    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+    // User requested to use ONLY OpenAI for current affairs
+    const preferredProvider = 'openai';
+    const preferredOpenAIModel = preferences.openAIModel || process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
+    // Use the OpenAI model as the preferred model
+    const preferredModel = preferredOpenAIModel;
     const excludedProviders = preferences.excludedProviders || [];
 
     const start = startDate ? new Date(startDate) : new Date();
@@ -611,72 +619,39 @@ export default async function handler(req, res) {
 
     const systemPrompt = `You are an expert current affairs analyst specializing in competitive exam preparation (UPSC, PCS, SSC). Your task is to create comprehensive current affairs digests that are:
 
-CRITICAL REQUIREMENTS:
-1. **USE REAL-TIME DATA**: When real-time news data is provided, you MUST use it as the primary source. DO NOT rely on your training data cutoff. Today's date is ${new Date().toISOString().split('T')[0]}.
-2. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify from the provided news data or reliable sources.
-3. **CURRENT DATES**: All dates must be current (${new Date().toISOString().split('T')[0]} or recent). If you cannot provide current information, clearly state that verification is needed.
-4. **EXAM-RELEVANT**: Focus exclusively on topics likely to appear in competitive exams. Every item must have clear exam relevance.
-5. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
-6. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
-7. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
-8. **CONCISE**: Clear summaries with key points
-9. **ACTIONABLE**: Include exam relevance indicators, subject tags, GS paper references, and a short exam-focused note.
+REQUIREMENTS:
+1. **USE PROVIDED DATA**: When news data is provided, use it as the primary source. Supplement with your knowledge base as needed.
+2. **VERIFIABLE INFORMATION**: Only include information you are confident about. Provide sources when available.
+3. **EXAM-RELEVANT**: Focus exclusively on topics likely to appear in competitive exams. Every item must have clear exam relevance.
+4. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+5. **SOURCE ATTRIBUTION**: Mention sources for information: "According to [official source]" or "As reported by [reliable news source]".
+6. **WELL-ORGANIZED**: Categorized by topics (National, International, Science & Tech, Economy, etc.)
+7. **CONCISE**: Clear summaries with key points
+8. **ACTIONABLE**: Include exam relevance indicators, subject tags, GS paper references, and exam-focused notes.`;
 
-IMPORTANT: If real-time news data is provided in the user's message, prioritize that data over any information from your training. Always use the most recent dates and information available.`;
-
-    // First, fetch real-time news to ensure we have latest information
+    // First, fetch real-time news to base the digest on
     let realNewsData = [];
     try {
-      console.log('Fetching real-time news for digest...');
-      // Use Perplexity or OpenAI with web search for real-time news
+      console.log('Fetching recent news for digest via RSS...');
       const dateRangeDays = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
-      const newsQuery = `Get latest current affairs and news relevant for UPSC exam preparation from the last ${dateRangeDays} days. Focus on: ${requestedCategories.join(', ')}. Provide actual current dates and sources. Today's date is ${new Date().toISOString().split('T')[0]}.`;
 
-      // Try to get real-time news using Perplexity (which has web search) or OpenAI
-      const newsSystemPrompt = `You are a current affairs news aggregator. Fetch and provide REAL-TIME news from the last ${dateRangeDays} days relevant for competitive exams. Today is ${new Date().toISOString().split('T')[0]}. Include actual dates, sources, and current information. 
+      // Fetch from Google News RSS
+      const rssItems = await fetchGoogleNewsRSS(`"UPSC" India Current Affairs`, dateRangeDays);
 
-IMPORTANT: Return ONLY valid JSON wrapped in a markdown code block. Format as:
-\`\`\`json
-[{"title": "...", "summary": "...", "category": "...", "date": "YYYY-MM-DD", "source": "...", "relevance": "high|medium|low", "keyPoints": [...], "tags": [...]}]
-\`\`\`
-
-Do not include any text outside the JSON code block.`;
-
-      try {
-        const newsAIResult = await callAIWithFallback(
-          [{ role: 'user', content: newsQuery }],
-          newsSystemPrompt,
-          2000,
-          0.7,
-          {
-            model: preferredModel,
-            preferredProvider: preferredProvider, // Use dynamic provider
-            excludeProviders: [],
-            openAIModel: preferredOpenAIModel
-          }
-        );
-
-        const newsContent = newsAIResult?.content || '';
-        if (newsContent) {
-          const parsed = parseJSONSafely(newsContent, 'news data');
-          if (parsed) {
-            // Ensure it's an array
-            if (Array.isArray(parsed)) {
-              realNewsData = parsed;
-              console.log(`Fetched ${realNewsData.length} real-time news items`);
-            } else if (parsed.newsItems && Array.isArray(parsed.newsItems)) {
-              // Handle case where AI returns object with newsItems array
-              realNewsData = parsed.newsItems;
-              console.log(`Fetched ${realNewsData.length} real-time news items from newsItems property`);
-            } else {
-              console.warn('Parsed news data is not an array or does not contain newsItems array');
-            }
-          } else {
-            console.warn('Could not parse news data - parseJSONSafely returned null');
-          }
-        }
-      } catch (newsError) {
-        console.warn('Error fetching real-time news via AI:', newsError.message);
+      if (rssItems && rssItems.length > 0) {
+        realNewsData = rssItems.map(item => ({
+          title: item.title,
+          summary: item.description,
+          category: 'General', // We'll let the main AI categorize it better later
+          date: item.pubDate,
+          source: item.source,
+          relevance: 'high',
+          keyPoints: [],
+          tags: []
+        }));
+        console.log(`Fetched ${realNewsData.length} items from Google News RSS`);
+      } else {
+        console.warn('No items found in RSS feed, digest will rely on AI internal knowledge.');
       }
     } catch (error) {
       console.warn('Error in news fetching process:', error.message);
@@ -685,8 +660,8 @@ Do not include any text outside the JSON code block.`;
 
     // Build context from real news
     const realNewsContext = Array.isArray(realNewsData) && realNewsData.length > 0
-      ? `\n\nIMPORTANT: Use the following REAL-TIME NEWS DATA (fetched on ${new Date().toISOString().split('T')[0]}) as the PRIMARY SOURCE for this digest:\n\n${JSON.stringify(realNewsData.slice(0, 20), null, 2)}\n\nBase your digest on this real-time data. Include actual dates, sources, and facts from this data. DO NOT use outdated information from your training data.`
-      : `\n\nCRITICAL: You MUST provide CURRENT and REAL-TIME information. Today's date is ${new Date().toISOString().split('T')[0]}. Do NOT use information from your training data cutoff. Focus on recent developments that would be relevant for competitive exams. If you cannot provide current information, clearly state that the information may need verification.`;
+      ? `\n\nUSE THIS NEWS DATA as the primary source for your digest:\n\n${JSON.stringify(realNewsData.slice(0, 20), null, 2)}\n\nBase your digest on this data. Include dates, sources, and facts from this data.`
+      : `\n\nProvide a comprehensive current affairs digest based on recent developments relevant for competitive exams. Include the most recent information from your knowledge base with proper dates and sources.`;
 
     const userPrompt = `Create a ${period} current affairs digest for ${langName} readers covering ${start.toDateString()} to ${end.toDateString()}.${realNewsContext}
 
@@ -696,11 +671,9 @@ ${practiceInstruction}
 ${trendInstruction}
 
 IMPORTANT: 
-- Use ONLY the real-time news data provided above
-- Include actual dates from the news data
-- Reference actual sources mentioned in the news
-- Today's date is ${new Date().toISOString().split('T')[0]} - ensure all dates are current
-- If real news data is provided, prioritize it over any training data
+- Include actual dates and sources for all news items
+- Focus on exam-relevant developments
+- Provide proper subject tagging and GS paper references
 
 CRITICAL: Return ONLY valid JSON wrapped in a markdown code block. Do not include any explanatory text before or after the JSON.
 
@@ -770,8 +743,8 @@ Remember: ONLY return the JSON code block, nothing else.`;
         0.6,
         {
           model: preferredModel,
-          preferredProvider: preferredProvider, // Use dynamic provider based on availability
-          excludeProviders: [], // Allow fallback if Perplexity fails
+          preferredProvider: 'openai', // Force OpenAI
+          excludeProviders: ['perplexity'], // Explicitly exclude Perplexity
           openAIModel: preferredOpenAIModel
         }
       );
@@ -847,4 +820,3 @@ Remember: ONLY return the JSON code block, nothing else.`;
     return res.status(500).json({ error: 'Failed to generate digest', details: error.message });
   }
 }
-

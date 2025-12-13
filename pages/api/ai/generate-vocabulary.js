@@ -94,8 +94,8 @@ Return a JSON array of flashcards with the exact structure:
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { 
-        role: 'user', 
+      {
+        role: 'user',
         content: `Generate ${count || 10} vocabulary flashcards for ${categoryDesc} with ${sourceLangName} to ${targetLangName} translation. Difficulty: ${difficulty}. Return as JSON array.`
       }
     ];
@@ -108,8 +108,8 @@ Return a JSON array of flashcards with the exact structure:
       if (!openAIKey) {
         throw new Error('OpenAI API key not configured');
       }
-      
-      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
+
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
       content = await callOpenAIAPI(
         messages,
         openAIModel,
@@ -134,8 +134,8 @@ Return a JSON array of flashcards with the exact structure:
       } catch (parseError) {
         flashcards = generateFallbackFlashcards(category, sourceLanguage, targetLanguage, count || 10);
       }
-      
-      return res.status(200).json({ 
+
+      return res.status(200).json({
         flashcards,
         category,
         sourceLanguage,
@@ -163,7 +163,7 @@ Return a JSON array of flashcards with the exact structure:
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }
 
-      return res.status(status).json({ 
+      return res.status(status).json({
         error: errorMessage,
         code: status === 401 || status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR',
         status
@@ -177,7 +177,7 @@ Return a JSON array of flashcards with the exact structure:
       req.body.count || 10
     );
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       flashcards: fallbackFlashcards,
       category: req.body.category || 'general',
       sourceLanguage: req.body.sourceLanguage || 'en',

@@ -10,10 +10,11 @@ import Input from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { 
-  BookOpen, 
-  ChevronLeft, 
-  ChevronRight, 
+import SpeakButton from '@/components/ui/SpeakButton';
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
   RotateCcw,
   Eye,
   EyeOff,
@@ -161,7 +162,7 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
     try {
       setIsGenerating(true);
       setShowAnswer(false);
-      
+
       const response = await fetch('/api/ai/generate-vocabulary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,18 +184,18 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
         }
         throw new Error(errorData.error || 'Generation failed');
       }
-      
+
       let data;
       try {
         data = await response.json();
       } catch (e) {
         throw new Error('Invalid response format from server');
       }
-      
+
       if (!data.flashcards || !Array.isArray(data.flashcards) || data.flashcards.length === 0) {
         throw new Error('No flashcards generated');
       }
-      
+
       setFlashcards(data.flashcards);
       setCurrentCardIndex(0);
       setShowAnswer(false);
@@ -265,7 +266,7 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
 
   const filteredFlashcards = flashcards.filter((card, index) => {
     if (!card || typeof card !== 'object') return false;
-    
+
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const term = card.term?.toLowerCase() || '';
@@ -280,11 +281,11 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
     return true;
   });
 
-  const currentCard = flashcards.length > 0 && currentCardIndex >= 0 && currentCardIndex < flashcards.length 
-    ? flashcards[currentCardIndex] 
+  const currentCard = flashcards.length > 0 && currentCardIndex >= 0 && currentCardIndex < flashcards.length
+    ? flashcards[currentCardIndex]
     : null;
-  const progress = flashcards.length > 0 && currentCardIndex >= 0 
-    ? Math.min(100, Math.max(0, ((currentCardIndex + 1) / flashcards.length) * 100)) 
+  const progress = flashcards.length > 0 && currentCardIndex >= 0
+    ? Math.min(100, Math.max(0, ((currentCardIndex + 1) / flashcards.length) * 100))
     : 0;
   const knownCount = knownWords.size;
   const currentCategory = examCategories.find(c => c.code === selectedCategory);
@@ -357,11 +358,10 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                       return (
                         <Card
                           key={category.code}
-                          className={`group relative cursor-pointer transition-all duration-200 border-2 rounded-xl overflow-hidden ${
-                            isSelected
-                              ? `${category.selectedBorder} shadow-md bg-gradient-to-br ${category.selectedBg}`
-                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-900 hover:shadow-sm'
-                          }`}
+                          className={`group relative cursor-pointer transition-all duration-200 border-2 rounded-xl overflow-hidden ${isSelected
+                            ? `${category.selectedBorder} shadow-md bg-gradient-to-br ${category.selectedBg}`
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-900 hover:shadow-sm'
+                            }`}
                           onClick={() => setSelectedCategory(category.code)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -464,11 +464,10 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                                 <button
                                   key={count}
                                   onClick={() => setWordCount(count)}
-                                  className={`flex-1 h-11 rounded-lg border-2 text-base font-semibold transition-all ${
-                                    isActive
-                                      ? 'border-blue-500 bg-blue-500 text-white shadow-sm'
-                                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                  }`}
+                                  className={`flex-1 h-11 rounded-lg border-2 text-base font-semibold transition-all ${isActive
+                                    ? 'border-blue-500 bg-blue-500 text-white shadow-sm'
+                                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                    }`}
                                   type="button"
                                 >
                                   {count}
@@ -489,11 +488,10 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                                   key={level.code}
                                   onClick={() => setDifficulty(level.code)}
                                   type="button"
-                                  className={`p-2.5 rounded-lg border-2 transition-all text-center ${
-                                    isActive
-                                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 shadow-sm'
-                                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/10'
-                                  }`}
+                                  className={`p-2.5 rounded-lg border-2 transition-all text-center ${isActive
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 shadow-sm'
+                                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-900/10'
+                                    }`}
                                 >
                                   <div className="font-semibold text-sm">{level.name}</div>
                                 </button>
@@ -651,9 +649,17 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                               )}
                             </Button>
                           </div>
-                          <h4 className="text-6xl font-bold text-white mb-6">
-                            {currentCard?.term}
-                          </h4>
+                          <div className="flex items-center justify-center gap-4 mb-6">
+                            <h4 className="text-6xl font-bold text-white">
+                              {currentCard?.term}
+                            </h4>
+                            <SpeakButton
+                              text={currentCard?.term}
+                              language={sourceLanguage}
+                              variant="icon"
+                              className="bg-white/20 hover:bg-white/30 text-white p-3 rounded-full backdrop-blur-sm"
+                            />
+                          </div>
                           {currentCard?.pronunciation && (
                             <p className="text-2xl text-white/80 italic mb-8">
                               {currentCard.pronunciation}
@@ -666,31 +672,55 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                       ) : (
                         <div className="space-y-4 text-left max-w-3xl mx-auto">
                           <div className="bg-white/95 dark:bg-slate-950/95 rounded-xl p-6 shadow-lg">
-                            <h5 className="font-semibold mb-3 text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                              <Award className="h-5 w-5 text-blue-600" />
-                              Definition
-                            </h5>
+                            <div className="flex items-center justify-between mb-3">
+                              <h5 className="font-semibold text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                                <Award className="h-5 w-5 text-blue-600" />
+                                Definition
+                              </h5>
+                              <SpeakButton
+                                text={currentCard?.definition}
+                                language={sourceLanguage}
+                                variant="icon"
+                                className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              />
+                            </div>
                             <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-lg">
                               {currentCard?.definition}
                             </p>
                           </div>
-                          
+
                           <div className="bg-white/95 dark:bg-slate-950/95 rounded-xl p-6 shadow-lg">
-                            <h5 className="font-semibold mb-3 text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                              <Globe className="h-5 w-5 text-green-600" />
-                              Translation
-                            </h5>
+                            <div className="flex items-center justify-between mb-3">
+                              <h5 className="font-semibold text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                                <Globe className="h-5 w-5 text-green-600" />
+                                Translation
+                              </h5>
+                              <SpeakButton
+                                text={currentCard?.translation}
+                                language={targetLanguage}
+                                variant="icon"
+                                className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+                              />
+                            </div>
                             <p className="text-gray-700 dark:text-gray-300 text-2xl font-medium">
                               {currentCard?.translation}
                             </p>
                           </div>
-                          
+
                           {currentCard?.example && (
                             <div className="bg-white/95 dark:bg-slate-950/95 rounded-xl p-6 shadow-lg">
-                              <h5 className="font-semibold mb-3 text-lg flex items-center gap-2 text-gray-900 dark:text-white">
-                                <PlayCircle className="h-5 w-5 text-purple-600" />
-                                Example
-                              </h5>
+                              <div className="flex items-center justify-between mb-3">
+                                <h5 className="font-semibold text-lg flex items-center gap-2 text-gray-900 dark:text-white">
+                                  <PlayCircle className="h-5 w-5 text-purple-600" />
+                                  Example
+                                </h5>
+                                <SpeakButton
+                                  text={currentCard.example}
+                                  language={sourceLanguage}
+                                  variant="icon"
+                                  className="text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                                />
+                              </div>
                               <p className="text-gray-700 dark:text-gray-300 italic leading-relaxed">
                                 "{currentCard.example}"
                               </p>
@@ -766,6 +796,12 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                                 <h4 className="text-2xl font-bold text-gray-900 dark:text-white">
                                   {card.term}
                                 </h4>
+                                <SpeakButton
+                                  text={card.term}
+                                  language={sourceLanguage}
+                                  variant="icon"
+                                  className="text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                />
                                 {knownWords.has(actualIndex) && (
                                   <Badge variant="default" className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300">
                                     Known
@@ -810,19 +846,43 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                               </Button>
                             </div>
                           </div>
-                          <div className="space-y-2 text-sm">
-                            <div>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">Definition: </span>
-                              <span className="text-gray-600 dark:text-gray-400">{card.definition}</span>
+                          <div className="space-y-3 text-sm">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1">
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">Definition: </span>
+                                <span className="text-gray-600 dark:text-gray-400">{card.definition}</span>
+                              </div>
+                              <SpeakButton
+                                text={card.definition}
+                                language={sourceLanguage}
+                                variant="icon"
+                                className="flex-shrink-0 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              />
                             </div>
-                            <div>
-                              <span className="font-semibold text-gray-700 dark:text-gray-300">Translation: </span>
-                              <span className="text-gray-600 dark:text-gray-400 font-medium">{card.translation}</span>
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1">
+                                <span className="font-semibold text-gray-700 dark:text-gray-300">Translation: </span>
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">{card.translation}</span>
+                              </div>
+                              <SpeakButton
+                                text={card.translation}
+                                language={targetLanguage}
+                                variant="icon"
+                                className="flex-shrink-0 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+                              />
                             </div>
                             {card.example && (
-                              <div>
-                                <span className="font-semibold text-gray-700 dark:text-gray-300">Example: </span>
-                                <span className="text-gray-600 dark:text-gray-400 italic">"{card.example}"</span>
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1">
+                                  <span className="font-semibold text-gray-700 dark:text-gray-300">Example: </span>
+                                  <span className="text-gray-600 dark:text-gray-400 italic">"{card.example}"</span>
+                                </div>
+                                <SpeakButton
+                                  text={card.example}
+                                  language={sourceLanguage}
+                                  variant="icon"
+                                  className="flex-shrink-0 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                                />
                               </div>
                             )}
                           </div>

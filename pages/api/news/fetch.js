@@ -1,8 +1,9 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import axios from 'axios';
-import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
+import { callAIWithFallback, getOpenAIKey } from '@/lib/ai-providers';
 import { storeTrendingSnapshot } from '@/lib/cacheLayer';
+import { fetchGoogleNewsRSS } from '@/lib/newsService';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,11 +16,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { 
-      examType = 'UPSC', 
-      category = '', 
-      dateRange = '7', 
-      searchQuery = '' 
+    const {
+      examType = 'UPSC',
+      category = '',
+      dateRange = '7',
+      searchQuery = ''
     } = req.body;
 
     const openAIKey = getOpenAIKey();
@@ -28,11 +29,11 @@ export default async function handler(req, res) {
     }
 
     let query = `Get latest current affairs and news relevant for ${examType} exam preparation`;
-    
+
     if (category) {
       query += ` in the category: ${category}`;
     }
-    
+
     if (dateRange) {
       const days = parseInt(dateRange);
       if (days === 1) {
@@ -45,9 +46,24 @@ export default async function handler(req, res) {
         query += ` from the last 3 months`;
       }
     }
-    
+
     if (searchQuery) {
       query += `. Focus on topics related to: ${searchQuery}`;
+    }
+
+    // Fetch real-time news context via RSS to bypass AI cutoff
+    console.log(`[NewsAPI] Fetching external news for: ${query}`);
+    const days = parseInt(dateRange) || 7;
+    const rssNewsItems = await fetchGoogleNewsRSS(`${searchQuery} ${category} ${examType}`, days);
+
+    let newsContext = '';
+    if (rssNewsItems.length > 0) {
+      newsContext = rssNewsItems.map(item =>
+        `- Title: ${item.title}\n  Date: ${item.pubDate}\n  Source: ${item.source}\n  Summary: ${item.description}`
+      ).join('\n\n');
+      console.log(`[NewsAPI] Injected ${rssNewsItems.length} RSS items into context`);
+    } else {
+      console.log(`[NewsAPI] No RSS items found, falling back to AI internal knowledge`);
     }
 
     query += `. Provide a structured list of news items with:
@@ -62,40 +78,28 @@ Format the response as a JSON array of news items, where each item has: title, s
 
     const systemPrompt = `You are Indicore, an AI assistant specialized in providing current affairs and news relevant to competitive exams like UPSC, PCS, and SSC. 
 
+CRITICAL INSTRUCTION:
+I have provided REAL-TIME NEWS CONTEXT below. You MUST use this context as the primary source for your response to ensure the news is up-to-date (2024-2025). Do NOT rely solely on your internal training data if it is outdated.
+
+=== REAL-TIME NEWS CONTEXT ===
+${newsContext}
+==============================
+
 CRITICAL REQUIREMENTS:
-1. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verify. If uncertain, state it clearly or omit it.
-2. **SOURCE ATTRIBUTION**: When information is outside your direct knowledge, provide sources: "According to [official source]" or "As reported by [reliable news source]". For government schemes, mention official documents or ministry sources.
-3. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
+1. **ONLY VERIFIABLE INFORMATION**: NEVER make up facts, dates, names, or statistics. Only include information you can verified from the context or your high-confidence knowledge.
+2. **SOURCE ATTRIBUTION**: When using the provided context, cite the source mentioned.
+3. **PROPER SUBJECT TAGGING**: Tag each news item with subject areas (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and relevant GS papers.
 
 **EXAM-FOCUSED REQUIREMENTS:**
-1. **UPSC Relevance**: Focus on topics that appear in GS papers (GS-1, GS-2, GS-3, GS-4), Prelims, and Essay papers. Prioritize:
-   - Constitutional provisions, amendments, and judicial interpretations
-   - Government schemes, policies, and their implementation
-   - International relations, bilateral/multilateral agreements
-   - Economic policies, budget, fiscal measures
-   - Science & Technology developments with policy implications
-   - Environment and ecology (climate change, biodiversity, conservation)
-   - Social issues, governance, and administration
-
-2. **PCS Relevance**: Focus on state-specific policies, state government schemes, state-level governance, and regional current affairs relevant to state civil services.
-
-3. **SSC Relevance**: Focus on general awareness topics, government schemes, important appointments, awards, and national/international events.
-
-**Content Quality Standards:**
-- Provide precise, factual information with dates and context
-- Highlight exam-relevant aspects: constitutional articles, government schemes, policy implications
-- Include key points that can be used in answer writing
-- Mention relevant topics from syllabus (e.g., "Relevant for GS-2: Governance, Polity")
-- Avoid generic news; focus on what examiners ask about
-- Include recent developments (last 7-90 days based on dateRange parameter)
-- Every news item MUST include: subject tag, GS paper relevance, and source information when available
+1. **UPSC Relevance**: Focus on topics that appear in GS papers (GS-1, GS-2, GS-3, GS-4), Prelims, and Essay papers.
+2. **PCS Relevance**: Focus on state-specific policies, state government schemes, and regional current affairs.
+3. **SSC Relevance**: Focus on general awareness topics, government schemes, appointments, and awards.
 
 **Format Requirements:**
 - Format responses as valid JSON arrays when requested
 - Each news item must have: title, summary, category, date, relevance (High/Medium/Low), keyPoints (array), tags (array), and source
-- Tags should include exam-specific tags like "GS-2", "Prelims", "Governance", etc., and subject tags like "Polity", "Economics", etc.
 
-Always prioritize accuracy, exam relevance, verifiable information, and actionable insights for competitive exam preparation.`;
+Always prioritize accuracy, exam relevance, and actionable insights.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -105,24 +109,30 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
     let content = '';
 
     try {
-      // Use OpenAI for news fetching
-      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o-mini';
-      content = await callOpenAIAPI(
+      // Use AI with fallback, force OpenAI as requested by user
+      const openAIModel = process.env.OPENAI_MODEL || process.env.OPEN_AI_MODEL || 'gpt-4o';
+
+      const aiResult = await callAIWithFallback(
         messages,
-        openAIModel,
-        undefined, // No token limit for OpenAI
-        0.7
+        undefined, // systemPrompt is already in messages
+        4000,
+        0.7,
+        {
+          preferredProvider: 'openai', // STRICTLY OPENAI
+          model: openAIModel,
+          excludeProviders: ['perplexity'] // Explicitly exclude Perplexity
+        }
       );
-      content = content?.trim() || '';
+      content = aiResult?.content?.trim() || '';
     } catch (error) {
-      console.error('OpenAI API error for news fetch:', error.message);
+      console.error('AI API error for news fetch:', error.message);
       throw error;
     }
 
     if (!content) {
       throw new Error('AI provider returned an empty response');
     }
-    
+
     let newsItems = [];
     try {
       const jsonMatch = content.match(/```(?:json)?\s*(\[[\s\S]*\])\s*```/);
@@ -148,7 +158,7 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
       keyPoints: Array.isArray(item.keyPoints) ? item.keyPoints : [],
       tags: Array.isArray(item.tags) ? item.tags : [],
       exam: examType,
-        source: item.source || 'OpenAI',
+      source: item.source || 'OpenAI',
       ...item
     }));
 
@@ -177,23 +187,23 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
       let errorMessage = 'An error occurred while fetching news.';
 
       if (status === 401) {
-        errorMessage = 'API credits exhausted or invalid API key. Please check your OpenAI API key and add credits if needed.';
+        errorMessage = 'API credits exhausted or invalid API key.';
       } else if (status === 429) {
         errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
       } else if (status === 402) {
-        errorMessage = 'Insufficient API credits. Please add credits to your OpenAI account to continue using this feature.';
+        errorMessage = 'Insufficient API credits.';
       } else if (status === 403) {
         errorMessage = 'Access denied. Please verify your API key permissions.';
       }
 
-      return res.status(status).json({ 
+      return res.status(status).json({
         error: errorMessage,
         code: status === 401 || status === 402 ? 'API_CREDITS_EXHAUSTED' : 'API_ERROR',
         status
       });
     }
 
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: error.message || 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -203,13 +213,13 @@ Always prioritize accuracy, exam relevance, verifiable information, and actionab
 function parseTextResponse(text, examType, category) {
   const newsItems = [];
   const lines = text.split('\n').filter(line => line.trim());
-  
+
   let currentItem = null;
   let currentSection = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    
+
     if (line.match(/^\d+[\.\)]\s*(.+)/) || line.match(/^[-*]\s*(.+)/) || line.match(/^Title:/i)) {
       if (currentItem) {
         newsItems.push(currentItem);
@@ -318,5 +328,3 @@ function buildTrendingPayload(newsList = []) {
     totalItems: newsList.length
   };
 }
-
-

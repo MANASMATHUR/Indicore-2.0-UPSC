@@ -15,6 +15,15 @@ export default function ChatSearch({
   const [matches, setMatches] = useState([]);
   const inputRef = useRef(null);
 
+  const buildPreview = (text, matchIndex = 0, queryLength = 0) => {
+    const start = Math.max(0, matchIndex - 50);
+    const end = Math.min(text.length, matchIndex + queryLength + 50);
+    let preview = text.substring(start, end);
+    if (start > 0) preview = '...' + preview;
+    if (end < text.length) preview = preview + '...';
+    return preview;
+  };
+
   const normalizedMessages = useMemo(() => (Array.isArray(messages) ? messages : []), [messages]);
 
   useEffect(() => {
@@ -72,14 +81,7 @@ export default function ChatSearch({
     onSearchQueryChange?.(value);
   };
 
-  const buildPreview = (text, matchIndex = 0, queryLength = 0) => {
-    const start = Math.max(0, matchIndex - 50);
-    const end = Math.min(text.length, matchIndex + queryLength + 50);
-    let preview = text.substring(start, end);
-    if (start > 0) preview = '...' + preview;
-    if (end < text.length) preview = preview + '...';
-    return preview;
-  };
+
 
   const focusMatch = (match) => {
     if (!match) return;

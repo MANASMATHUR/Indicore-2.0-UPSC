@@ -14,6 +14,16 @@ import { extractUserInfo, updateUserProfile, formatProfileContext, detectSaveWor
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { updateUserPersonalization, generatePersonalizedPrompt } from '@/lib/personalizationService';
 import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
+import {
+  detectMemorySaveIntent,
+  isMemoryConfirmation,
+  isMemoryViewRequest,
+  detectMemoryDeleteIntent,
+  formatMemoriesForAI,
+  generateMemorySaveResponse,
+  generateMemoriesListResponse
+} from '@/lib/memoryService';
+import { smartExtractAndSave, shouldAutoSave } from '@/lib/smartMemoryExtractor';
 
 const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
@@ -350,8 +360,59 @@ async function chatHandler(req, res) {
       }
     })();
 
-    const extractedInfo = extractUserInfo(message);
     let userProfile = await userProfilePromise;
+
+    // CHECK FOR MEMORY COMMANDS FIRST
+    // View memories
+    if (isMemoryViewRequest(message)) {
+      const memories = userProfile?.memories || [];
+      const response = generateMemoriesListResponse(memories);
+      return res.status(200).json({
+        response,
+        source: 'memory_view',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Save to memory (explicit command)
+    const memorySaveIntent = detectMemorySaveIntent(message);
+    if (memorySaveIntent && memorySaveIntent.content) {
+      try {
+        const user = await User.findOne({ email: session.user.email });
+        if (user) {
+          if (!user.profile.memories) user.profile.memories = [];
+
+          const isDuplicate = user.profile.memories.some(m =>
+            m.content.toLowerCase().trim() === memorySaveIntent.content.toLowerCase().trim()
+          );
+
+          if (!isDuplicate) {
+            user.profile.memories.push({
+              content: memorySaveIntent.content,
+              category: 'general',
+              importance: 'normal',
+              savedAt: new Date(),
+              useCount: 0
+            });
+
+            await user.save();
+            userProfile = user.profile;
+
+            const response = generateMemorySaveResponse(memorySaveIntent.content, false);
+            return res.status(200).json({
+              response,
+              source: 'memory_save',
+              memorySaved: true
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to save memory:', err.message);
+      }
+    }
+
+    // Extract and update other user info
+    const extractedInfo = extractUserInfo(message);
     if (Object.keys(extractedInfo).length > 0) {
       try {
         await connectToDatabase();
@@ -366,6 +427,60 @@ async function chatHandler(req, res) {
         console.warn('Failed to update user profile:', err.message);
       }
     }
+
+    // AI-Powered Smart Memory Extraction
+    // Automatically detects important information without explicit "remember that" commands
+    try {
+      const extractedMemories = await smartExtractAndSave(message, userProfile, true);
+
+      if (extractedMemories && extractedMemories.length > 0) {
+        await connectToDatabase();
+        const userDoc = await User.findOne({ email: session.user.email });
+
+        if (userDoc) {
+          // Initialize memories array if needed
+          if (!userDoc.profile.memories) {
+            userDoc.profile.memories = [];
+          }
+
+          // Process each extracted memory
+          for (const memory of extractedMemories) {
+            // Check if should auto-save (high confidence memories)
+            if (shouldAutoSave(memory)) {
+              // Check for duplicates
+              const isDuplicate = userDoc.profile.memories.some(m =>
+                m.content.toLowerCase().trim() === memory.content.toLowerCase().trim()
+              );
+
+              if (!isDuplicate) {
+                // Auto-save high-confidence memory silently
+                userDoc.profile.memories.push({
+                  content: memory.content,
+                  category: memory.category || 'general',
+                  importance: memory.importance || 'normal',
+                  savedAt: new Date(),
+                  lastUsed: new Date(),
+                  useCount: 0
+                });
+                console.log('✓ Auto-saved memory:', memory.content.substring(0, 50));
+              }
+            }
+            // Medium confidence memories could be suggested to user (future enhancement)
+          }
+
+          if (userDoc.isModified('profile.memories')) {
+            userDoc.profile.lastUpdated = new Date();
+            await userDoc.save();
+            // Update userProfile for current request
+            userProfile = userDoc.profile;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Smart memory extraction failed:', err.message);
+      // Don't break the chat flow if extraction fails
+    }
+
 
     const saveWorthyInfo = detectSaveWorthyInfo(message);
 
@@ -501,7 +616,13 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     // Add user profile context to system prompt
     const profileContext = userProfile ? formatProfileContext(userProfile) : '';
     if (profileContext) {
-      finalSystemPrompt += `\n\nUSER CONTEXT (Remember this across all conversations):\n${profileContext}\n\nIMPORTANT: Use this user context to provide personalized responses. If the user asks about "my exam" or "prep me for exam", refer to their specific exam details from the context above. Ask follow-up questions if needed to clarify which exam they're referring to (e.g., "Are you referring to your ${userProfile.targetExam || 'exam'}?" or reference specific facts from their profile). Always remember user-specific information like exam names, subjects, dates, and preferences mentioned in previous conversations.`;
+      finalSystemPrompt += `\n\nUSER CONTEXT (Remember this across all conversations):\n${profileContext}\n\nIMPORTANT: Use this user context to provide personalized responses. If the user asks about "my exam" or "prep me for exam", refer to their specific exam details from the context above. Ask follow-up questions if needed to clarify which exam they're referring to (e.g., "Are you referring to your ${userProfile.targetExam || 'exam'}?\" or reference specific facts from their profile). Always remember user-specific information like exam names, subjects, dates, and preferences mentioned in previous conversations.`;
+    }
+
+    // Add EXPLICIT MEMORIES (ChatGPT-style) - HIGHEST PRIORITY
+    const memoriesContext = formatMemoriesForAI(userProfile?.memories || []);
+    if (memoriesContext) {
+      finalSystemPrompt += memoriesContext;
     }
 
     // Add personalized prompt based on user's behavior and preferences

@@ -38,29 +38,32 @@ export default async function handler(req, res) {
 
     try {
       if (fileType === 'application/pdf') {
-        // Extract text from PDF using pdfjs-dist (more reliable than pdf-parse)
+        // Extract text from PDF using pdf-parse (more reliable for Node.js)
         const dataBuffer = fs.readFileSync(filePath);
+        const pdf = (await import('pdf-parse/lib/pdf-parse.js')).default;
 
-        // Use pdfjs-dist legacy build for Node.js compatibility
-        const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+        const data = await pdf(dataBuffer);
+        extractedText = data.text;
 
-        // Convert buffer to Uint8Array for pdfjs
-        const uint8Array = new Uint8Array(dataBuffer);
+        // Clean up text - preserve paragraph breaks but normalize spacing
+        extractedText = extractedText
+          .replace(/\r\n/g, '\n')  // Normalize line endings
+          .replace(/[ \t]+/g, ' ')  // Normalize horizontal whitespace
+          .replace(/\n{3,}/g, '\n\n')  // Normalize multiple line breaks
+          .trim();
 
-        // Load the PDF document
-        const loadingTask = pdfjsLib.getDocument(uint8Array);
-        const pdfDocument = await loadingTask.promise;
-
-        // Extract text from all pages
-        let fullText = '';
-        for (let i = 1; i <= pdfDocument.numPages; i++) {
-          const page = await pdfDocument.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
-          fullText += pageText + '\n';
+        // More robust check for meaningful content
+        if (!extractedText || extractedText.length < 10) {
+          // PDF might be scanned or image-based
+          console.warn('PDF text extraction yielded minimal content. File might be scanned or image-based.');
+          return res.status(400).json({
+            error: 'Could not extract text from PDF',
+            details: 'The PDF appears to be scanned or image-based. Please ensure your DAF is a text-based PDF, or try converting it to a readable format.',
+            suggestion: 'If this is a scanned document, please use OCR software to convert it to a searchable PDF first.'
+          });
         }
 
-        extractedText = fullText;
+        console.log(`Successfully extracted ${extractedText.length} characters from PDF`);
       } else if (fileType.includes('text/')) {
         // Extract text from text file
         extractedText = fs.readFileSync(filePath, 'utf-8');
