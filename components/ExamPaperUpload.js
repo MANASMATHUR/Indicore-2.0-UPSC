@@ -78,52 +78,15 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
   };
 
   const extractTextFromPDF = async (file) => {
-    const arrayBuffer = await file.arrayBuffer();
-
     try {
-      // Use minified build to avoid node-specific dependencies like canvas
-      const pdfjsModule = await import('pdfjs-dist/build/pdf.min.js');
-      const pdfjsLib = pdfjsModule.default || pdfjsModule;
-
-      const workerSources = [
-        `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`,
-        `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`,
-        `//cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
-      ];
-
-      for (const workerSrc of workerSources) {
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-
-          const pdf = await pdfjsLib.getDocument({
-            data: arrayBuffer,
-            verbosity: 0
-          }).promise;
-
-          let fullText = '';
-
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items
-              .filter(item => item.str && item.str.trim())
-              .map(item => item.str.trim())
-              .join(' ');
-            fullText += pageText + '\n';
-          }
-
-          const extractedText = fullText.trim();
-          if (extractedText && extractedText.length > 10) {
-            return extractedText;
-          }
-        } catch (workerError) {
-          continue;
-        }
-      }
-    } catch (pdfjsError) {
+      // Use the PDF service module to avoid webpack canvas issues
+      const { extractPDFText } = await import('@/lib/pdfService');
+      const extractedText = await extractPDFText(file);
+      return extractedText;
+    } catch (error) {
+      console.error('PDF extraction failed:', error);
+      return `[PDF File: ${file.name}]\n\n⚠️ PDF text extraction failed. This PDF might be image-based or password-protected.\n\nPlease provide the exam paper content manually in the text area below for AI evaluation.`;
     }
-
-    return `[PDF File: ${file.name}]\n\n⚠️ PDF text extraction failed. This PDF might be image-based or password-protected.\n\nPlease provide the exam paper content manually in the text area below for AI evaluation.`;
   };
 
   const readFileAsText = (file) => {
@@ -246,8 +209,8 @@ export default function ExamPaperUpload({ isOpen, onClose, onEvaluate }) {
                     key={exam.code}
                     onClick={() => setExamType(exam.code)}
                     className={`p-3 rounded-lg border-2 transition-all duration-200 ${examType === exam.code
-                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                        : 'border-gray-200 dark:border-slate-600 hover:border-indigo-300'
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                      : 'border-gray-200 dark:border-slate-600 hover:border-indigo-300'
                       }`}
                   >
                     <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${exam.color}`}>

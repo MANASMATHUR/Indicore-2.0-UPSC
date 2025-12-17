@@ -1,6 +1,8 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import { callAIWithFallback } from '@/lib/ai-providers';
+import { trackInteraction } from '@/lib/personalizationHelpers';
+import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -78,6 +80,40 @@ export default async function handler(req, res) {
             } else {
                 throw new Error('Invalid response format from AI');
             }
+        }
+
+        // Track the flashcard generation
+        try {
+            // Get or create session ID
+            let sessionId = req.cookies.sessionId;
+            if (!sessionId) {
+                sessionId = uuidv4();
+                res.setHeader('Set-Cookie', `sessionId=${sessionId}; Path=/; Max-Age=${30 * 24 * 60 * 60}; HttpOnly; SameSite=Lax`);
+            }
+
+            await trackInteraction(
+                session?.user?.email || null,
+                sessionId,
+                'flashcard',
+                'flashcard_generate',
+                'generate',
+                {
+                    topic: 'Notes',
+                    category: 'flashcard',
+                    engagementScore: 7,
+                    customData: {
+                        flashcardCount: flashcards.length,
+                        textLength: truncatedText.length,
+                        requestedCount: count,
+                        source: 'notes'
+                    }
+                },
+                {
+                    userAgent: req.headers['user-agent']
+                }
+            );
+        } catch (trackError) {
+            console.error('Failed to track flashcard generation:', trackError);
         }
 
         return res.status(200).json({ flashcards });

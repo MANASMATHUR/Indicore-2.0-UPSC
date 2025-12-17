@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import Header from './layout/Header';
 import Sidebar from './layout/Sidebar';
 import ChatMessages from './chat/ChatMessages';
@@ -16,6 +17,8 @@ import ExamPaperUpload from './ExamPaperUpload';
 import EssayEnhancement from './EssayEnhancement';
 import VocabularyBuilder from './VocabularyBuilder';
 import MockEvaluation from './MockEvaluation';
+import SmartSuggestions from './chat/SmartSuggestions';
+import ResumeBanner from './chat/ResumeBanner';
 import { useChat } from '@/hooks/useChat';
 import { useSettings } from '@/hooks/useSettings';
 import { ToastProvider, useToast } from './ui/ToastProvider';
@@ -26,6 +29,10 @@ import { useLoadingState } from '@/lib/loadingStates';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 export default function ChatInterface({ user }) {
+  const searchParams = useSearchParams();
+  const initialQuestion = searchParams.get('question');
+  const [hasHandledInitialQuestion, setHasHandledInitialQuestion] = useState(false);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isVoiceDialogOpen, setIsVoiceDialogOpen] = useState(false);
@@ -702,6 +709,21 @@ export default function ChatInterface({ user }) {
     }
   }, [currentChatId, sendMessage, addAIMessage, useStreaming, settings.language, settings.model, settings.systemPrompt, settings.provider, settings.openAIModel, chatLoading, speechLoading, showToast, user.email, createNewChat, setCurrentChatId, setMessages, handleStreamingResponse, resetStreamingState]);
 
+  // Handle initial question from URL (e.g. from PYQ Archive)
+  // Handle initial question from URL (e.g. from PYQ Archive)
+  useEffect(() => {
+    // Only run if we have an initial question, haven't handled it yet, and aren't currently generating a response
+    if (initialQuestion && !hasHandledInitialQuestion && !isLoading) {
+      setHasHandledInitialQuestion(true);
+      // Short timeout to ensure UI is ready
+      setTimeout(() => {
+        handleSendMessage(`Please solve this previous year question:\n\n${initialQuestion}`, false, settings.language || 'en');
+        // Clear the query param to prevent re-triggering on refresh (optional, but good UX)
+        window.history.replaceState({}, '', '/chat');
+      }, 500);
+    }
+  }, [initialQuestion, hasHandledInitialQuestion, isLoading, handleSendMessage, settings.language]);
+
   const handleChatSelect = useCallback(async (chatId) => {
     setCurrentChatId(chatId);
     await loadChat(chatId);
@@ -896,6 +918,33 @@ export default function ChatInterface({ user }) {
   const handleMockEvaluation = (evaluation, language) => {
     const evaluationMessage = `📊 **Mock Evaluation Results**\n\n${evaluation}`;
     handleSendMessage(evaluationMessage, false, language);
+  };
+
+  const handleGenerateAutoFlashcards = async () => {
+    try {
+      chatLoading.setLoading('Generating flashcards from chats...');
+      const response = await fetch('/api/flashcards/from-chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10, minDays: 7 })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setFlashcards(prev => [...prev, ...data.flashcards]);
+        showToast(data.message, { type: 'success' });
+        // Optionally open flashcard viewer
+        // setIsFlashcardViewerOpen(true);
+      } else {
+        showToast(data.message || 'Failed to generate flashcards', { type: 'error' });
+      }
+    } catch (error) {
+      console.error('Error generating flashcards:', error);
+      showToast('Error generating flashcards', { type: 'error' });
+    } finally {
+      chatLoading.setSuccess('Flashcards check complete');
+    }
   };
 
   const handleGenerateFlashcards = async (text) => {

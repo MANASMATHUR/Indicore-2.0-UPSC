@@ -5,6 +5,8 @@ import CurrentAffairsDigest from '@/models/CurrentAffairsDigest';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { translateText } from '@/pages/api/ai/translate';
 import { fetchGoogleNewsRSS } from '@/lib/newsService';
+import { trackInteraction } from '@/lib/personalizationHelpers';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Parse date string in various formats (DD-MM-YYYY, YYYY-MM-DD, etc.) to Date object
@@ -813,6 +815,44 @@ Remember: ONLY return the JSON code block, nothing else.`;
 
     const digest = await CurrentAffairsDigest.create(digestData);
     const digestResponse = digest.toObject ? digest.toObject() : digest;
+
+    // Track the digest generation
+    try {
+      // Get or create session ID
+      let sessionId = req.cookies.sessionId;
+      if (!sessionId) {
+        sessionId = uuidv4();
+        res.setHeader('Set-Cookie', `sessionId=${sessionId}; Path=/; Max-Age=${30 * 24 * 60 * 60}; HttpOnly; SameSite=Lax`);
+      }
+
+      await trackInteraction(
+        session?.user?.email || null,
+        sessionId,
+        'current_affairs',
+        'digest_generate',
+        'generate',
+        {
+          topic: 'Current Affairs',
+          category: 'current_affairs',
+          engagementScore: 7,
+          customData: {
+            period,
+            timePeriod: period,
+            days: period === 'daily' ? 1 : period === 'weekly' ? 7 : 30,
+            newsCount: digestData.newsItems?.length || 0,
+            categoriesCount: digestData.categories?.length || 0,
+            practiceQuestionsCount: digestData.practiceQuestions?.length || 0,
+            language,
+            focusAreas
+          }
+        },
+        {
+          userAgent: req.headers['user-agent']
+        }
+      );
+    } catch (trackError) {
+      console.error('Failed to track digest generation:', trackError);
+    }
 
     return res.status(200).json({ digest: digestResponse, cached: false });
   } catch (error) {

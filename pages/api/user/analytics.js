@@ -3,6 +3,8 @@ import { authOptions } from '@/lib/getAuthOptions';
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
 import Chat from '@/models/Chat';
+import MockTest from '@/models/MockTest';
+import UserInteraction from '@/models/UserInteraction';
 
 /**
  * API endpoint for user analytics and insights
@@ -40,14 +42,88 @@ export default async function handler(req, res) {
                 .select('messages lastMessageAt createdAt')
                 .lean();
 
+            // Get ACTUAL mock test data from database
+            const mockTests = await MockTest.find({
+                createdBy: user._id
+            })
+                .select('totalMarks questions userAnswers score createdAt')
+                .lean();
+
+            // Calculate actual mock test stats
+            const mockTestsCompleted = mockTests.length;
+            const mockTestScores = mockTests
+                .map(test => {
+                    // Calculate score if not already stored
+                    if (test.score !== undefined) return test.score;
+
+                    // Calculate from userAnswers if available
+                    if (test.userAnswers && test.questions) {
+                        let correct = 0;
+                        test.questions.forEach((q, idx) => {
+                            if (q.questionType === 'mcq' && test.userAnswers[idx] === q.correctAnswer) {
+                                correct++;
+                            }
+                        });
+                        return test.questions.length > 0 ? (correct / test.questions.length) * 100 : 0;
+                    }
+                    return 0;
+                })
+                .filter(score => score > 0);
+
+            const averageScore = mockTestScores.length > 0
+                ? Math.round(mockTestScores.reduce((sum, score) => sum + score, 0) / mockTestScores.length)
+                : 0;
+
+            // Get chat interactions for study time calculation
+            console.log('Fetching interactions in analytics...');
+            const chatInteractions = await UserInteraction.find({
+                userEmail: session.user.email,
+                interactionType: 'chat',
+                timestamp: { $gte: startDate }
+            })
+                .limit(1000)
+                .lean();
+
+            console.log(`Fetched ${chatInteractions.length} interactions`);
+            const totalTimeSpent = chatInteractions.reduce((sum, interaction) => {
+                return sum + (interaction.metadata?.timeSpent || 5); // Estimate 5 min per chat if not tracked
+            }, 0);
+
+            // Calculate study streak (days with activity)
+            const activityDates = new Set();
+            [...recentChats, ...chatInteractions, ...mockTests].forEach(item => {
+                const date = new Date(item.createdAt || item.timestamp || item.lastMessageAt);
+                activityDates.add(date.toISOString().split('T')[0]);
+            });
+
+            // Calculate consecutive day streak
+            let studyStreak = 0;
+            const today = new Date().toISOString().split('T')[0];
+            const sortedDates = Array.from(activityDates).sort((a, b) => new Date(b) - new Date(a));
+
+            if (sortedDates.length > 0 && (sortedDates[0] === today || isYesterday(sortedDates[0]))) {
+                studyStreak = 1;
+                for (let i = 1; i < sortedDates.length; i++) {
+                    const prevDate = new Date(sortedDates[i - 1]);
+                    const currDate = new Date(sortedDates[i]);
+                    const diffDays = Math.floor((prevDate - currDate) / (1000 * 60 * 60 * 24));
+
+                    if (diffDays === 1) {
+                        studyStreak++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             // Calculate analytics
             const analytics = {
                 overview: {
-                    totalStudyTime: user.statistics?.totalStudyTime || 0,
-                    totalQuestions: user.statistics?.totalQuestions || 0,
-                    totalChats: user.statistics?.totalChats || 0,
-                    studyStreak: user.statistics?.studyStreak || 0,
-                    lastStudyDate: user.statistics?.lastStudyDate
+                    totalStudyTime: totalTimeSpent,
+                    totalQuestions: user.statistics?.totalQuestions || mockTests.reduce((sum, test) => sum + (test.questions?.length || 0), 0),
+                    totalChats: recentChats.length,
+                    studyStreak: studyStreak,
+                    lastStudyDate: sortedDates.length > 0 ? new Date(sortedDates[0]) : user.statistics?.lastStudyDate
                 },
 
                 studyPatterns: {
@@ -58,17 +134,20 @@ export default async function handler(req, res) {
                 },
 
                 performance: {
-                    overall: user.profile?.performanceMetrics?.overallScore || 0,
+                    overall: averageScore,
                     bySubject: user.profile?.performanceMetrics?.subjectWiseScores || [],
                     pyq: user.profile?.performanceMetrics?.pyqPerformance || {
                         totalAttempted: 0,
                         totalCorrect: 0,
                         accuracyRate: 0
                     },
-                    mockTests: user.profile?.performanceMetrics?.mockTestPerformance || {
-                        totalTests: 0,
-                        averageScore: 0,
-                        improvementTrend: 'stable'
+                    mockTests: {
+                        totalTests: mockTestsCompleted,
+                        averageScore: averageScore,
+                        improvementTrend: mockTestScores.length >= 2 ?
+                            (mockTestScores[mockTestScores.length - 1] > mockTestScores[0] ? 'improving' :
+                                mockTestScores[mockTestScores.length - 1] < mockTestScores[0] ? 'declining' : 'stable') :
+                            'stable'
                     },
                     essays: user.profile?.performanceMetrics?.essayPerformance || {
                         totalEssays: 0,
@@ -102,7 +181,19 @@ export default async function handler(req, res) {
                 insights: generateInsights(user, recentChats)
             };
 
-            return res.status(200).json(analytics);
+            // Return in the format expected by dashboard
+            return res.status(200).json({
+                success: true,
+                statistics: {
+                    studyStreak: studyStreak,
+                    mockTestsCompleted: mockTestsCompleted,
+                    averageScore: averageScore,
+                    totalTimeSpent: totalTimeSpent,
+                    totalChats: recentChats.length,
+                    totalQuestions: analytics.overview.totalQuestions
+                },
+                analytics // Include full analytics for backward compatibility
+            });
         }
 
         return res.status(405).json({ error: 'Method not allowed' });
@@ -113,6 +204,12 @@ export default async function handler(req, res) {
 }
 
 // Helper functions
+function isYesterday(dateStr) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return dateStr === yesterday.toISOString().split('T')[0];
+}
+
 function calculateConsistencyScore(weeklyStats) {
     if (!weeklyStats || weeklyStats.length === 0) return 0;
 

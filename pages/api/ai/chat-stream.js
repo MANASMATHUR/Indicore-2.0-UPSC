@@ -766,6 +766,21 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         : (cachedPyqContext?.offset ?? estimatedOffset);
       const followUpQuery = previousPyqContext.originalQuery || message;
       const pyqDb = await tryPyqFromDb(followUpQuery, contextWithOffset);
+
+      if (!pyqDb) {
+        // Stop the stream and inform user no more questions are found
+        const noMoreMsg = `No more questions found for **${previousPyqContext.theme || 'this topic'}** from **${previousPyqContext.fromYear || 'start'}** to **${previousPyqContext.toYear || 'present'}**. Try a different topic or year range.`;
+        const chunks = noMoreMsg.match(/[\s\S]{1,100}/g) || [noMoreMsg];
+        for (const chunk of chunks) {
+          res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+          if (typeof res.flush === 'function') res.flush();
+        }
+        res.write('data: [DONE]\n\n');
+        if (typeof res.flush === 'function') res.flush();
+        res.end();
+        return;
+      }
+
       if (pyqDb && pyqDb.trim().length > 50) {
         // CRITICAL: Preserve newlines - only clean artifacts, don't remove structure
         // Consistent with main PYQ handler above

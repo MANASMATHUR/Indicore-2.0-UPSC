@@ -5,6 +5,8 @@ import Essay from '@/models/Essay';
 import axios from 'axios';
 import { translateText } from '@/pages/api/ai/translate';
 import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
+import { trackInteraction } from '@/lib/personalizationHelpers';
+import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -212,6 +214,43 @@ Please provide the complete essay text only, without any additional explanations
       }
       // Re-throw if it's a different error
       throw error;
+    }
+
+    // Track the essay generation
+    try {
+      // Get or create session ID
+      let sessionId = req.cookies.sessionId;
+      if (!sessionId) {
+        sessionId = uuidv4();
+        res.setHeader('Set-Cookie', `sessionId=${sessionId}; Path=/; Max-Age=${30 * 24 * 60 * 60}; HttpOnly; SameSite=Lax`);
+      }
+
+      await trackInteraction(
+        session?.user?.email || null,
+        sessionId,
+        'essay',
+        'essay_generate',
+        'generate',
+        {
+          topic: topic,
+          category: 'essay',
+          engagementScore: 8,
+          wordCount: essayContent.length,
+          customData: {
+            topic,
+            wordCount,
+            language,
+            letter: essay.letter,
+            cached: false,
+            usedCachedBase
+          }
+        },
+        {
+          userAgent: req.headers['user-agent']
+        }
+      );
+    } catch (trackError) {
+      console.error('Failed to track essay generation:', trackError);
     }
 
     return res.status(200).json({

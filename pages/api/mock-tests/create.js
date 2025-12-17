@@ -5,7 +5,8 @@ import MockTest from '@/models/MockTest';
 import PYQ from '@/models/PYQ';
 import { callAIWithFallback } from '@/lib/ai-providers';
 import { translateText } from '@/pages/api/ai/translate';
-import { getUserPerformanceStats, getAdaptiveDifficultyMix } from '@/lib/personalizationHelpers';
+import { getUserPerformanceStats, getAdaptiveDifficultyMix, trackInteraction } from '@/lib/personalizationHelpers';
+import { v4 as uuidv4 } from 'uuid';
 
 const DEFAULT_DIFFICULTY_MIX = { easy: 0.3, medium: 0.5, hard: 0.2 };
 
@@ -514,6 +515,49 @@ Format as JSON array:
     };
 
     const mockTest = await MockTest.create(testData);
+
+    // Track the mock test creation
+    try {
+      // Get or create session ID
+      let sessionId = req.cookies.sessionId;
+      if (!sessionId) {
+        sessionId = uuidv4();
+        res.setHeader('Set-Cookie', `sessionId=${sessionId}; Path=/; Max-Age=${30 * 24 * 60 * 60}; HttpOnly; SameSite=Lax`);
+      }
+
+      await trackInteraction(
+        session?.user?.email || null,
+        sessionId,
+        'mock_test',
+        'mock_test_create',
+        'generate',
+        {
+          topic: subject || 'General',
+          subject: subject,
+          difficulty: adaptiveSuggestion ? 'adaptive' : 'custom',
+          category: 'mock_test',
+          engagementScore: 9,
+          customData: {
+            examType,
+            paperType,
+            totalQuestions: processedQuestions.length,
+            duration,
+            usePYQ,
+            useAdaptive,
+            difficultyMix,
+            pyqCount: processedQuestions.filter(q => q.source === 'pyq').length,
+            aiCount: processedQuestions.filter(q => q.source === 'ai').length,
+            subjectDistribution,
+            adaptiveSuggestion: adaptiveSuggestion ? adaptiveSuggestion.reason : null
+          }
+        },
+        {
+          userAgent: req.headers['user-agent']
+        }
+      );
+    } catch (trackError) {
+      console.error('Failed to track mock test creation:', trackError);
+    }
 
     // Return with personalization message if applicable
     const response = { mockTest };

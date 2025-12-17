@@ -1,7 +1,4 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/getAuthOptions';
-import axios from 'axios';
-import { callOpenAIAPI, getOpenAIKey } from '@/lib/ai-providers';
+import { getUserPerformanceStats } from '@/lib/personalizationHelpers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -42,10 +39,32 @@ export default async function handler(req, res) {
     const targetLangName = languageNames[targetLanguage];
     const categoryDesc = categoryFocus[category] || 'general studies and administration';
 
+    // FETCH USER STATS FOR TRUE PERSONALIZATION
+    let personalizationContext = "";
+    try {
+      const stats = await getUserPerformanceStats(session.user.email);
+      if (stats && stats.weakAreas && stats.weakAreas.length > 0) {
+        const relevantWeaknesses = stats.weakAreas.filter(area =>
+          area.toLowerCase().includes(category.toLowerCase()) ||
+          category.toLowerCase().includes(area.toLowerCase()) ||
+          category === 'general'
+        );
+
+        if (relevantWeaknesses.length > 0) {
+          personalizationContext = `\n**Personalization Note:** The user is weak in the following specific areas: ${relevantWeaknesses.join(', ')}. Please prioritize vocabulary related to these topics to help them improve.`;
+        } else if (stats.weakAreas.length > 0) {
+          // Even if not directly matching the category, general weak areas can inform difficulty or sub-topic selection
+          personalizationContext = `\n**Personalization Note:** The user has general weaknesses in: ${stats.weakAreas.slice(0, 3).join(', ')}. Keep this in mind when selecting complex terms.`;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch user stats for vocabulary personalization", err);
+    }
+
     const systemPrompt = `You are Indicore, an AI-powered vocabulary specialist for competitive exams like PCS, UPSC, and SSC. You excel at creating bilingual vocabulary flashcards for exam preparation.
 
 **Your Task:**
-Generate ${count || 10} vocabulary flashcards focused on ${categoryDesc} for competitive exam preparation.
+Generate ${count || 10} vocabulary flashcards focused on ${categoryDesc} for competitive exam preparation.${personalizationContext}
 
 **Requirements:**
 - Source Language: ${sourceLangName}

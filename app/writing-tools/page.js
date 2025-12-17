@@ -20,6 +20,7 @@ import {
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference } from '@/lib/translationUtils';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import PersonalizationIndicator from '@/components/PersonalizationIndicator';
 
 const essayTopics = [
     { letter: 'A', topics: ['Agriculture & Rural Development', 'Administrative Reforms', 'Arts & Culture', 'Awards & Honours', 'Accountability in Governance'] },
@@ -70,6 +71,25 @@ export default function WritingToolsPage() {
     const [selectedLetter, setSelectedLetter] = useState(null);
     const [isLoadingEssay, setIsLoadingEssay] = useState(false);
     const [preloadedEssay, setPreloadedEssay] = useState(null);
+    const [personalizedTopics, setPersonalizedTopics] = useState([]);
+
+    useEffect(() => {
+        if (session?.user && activeTab === 'essay') {
+            loadPersonalizedTopics();
+        }
+    }, [session, activeTab]);
+
+    const loadPersonalizedTopics = async () => {
+        try {
+            const response = await fetch('/api/personalization/recommendations?type=essay');
+            const data = await response.json();
+            if (data.success && data.recommendations?.essay) {
+                setPersonalizedTopics(data.recommendations.essay);
+            }
+        } catch (error) {
+            console.error('Error loading personalized essay topics:', error);
+        }
+    };
 
     const handleTopicSelect = async (topic, letter) => {
         setSelectedTopic(topic);
@@ -207,6 +227,45 @@ export default function WritingToolsPage() {
                                     Comprehensive essay topics organized alphabetically for UPSC, PCS, and SSC Mains preparation. Select a topic to begin writing with AI-powered enhancement.
                                 </p>
                             </div>
+
+                            {/* Personalized Topics */}
+                            {personalizedTopics.length > 0 && (
+                                <div className="mb-12">
+                                    <div className="flex items-center gap-3 mb-6 justify-center">
+                                        <PersonalizationIndicator
+                                            visible={true}
+                                            type="Essay"
+                                            reason="Topics matching your strengths"
+                                            size="md"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+                                        {personalizedTopics.map((item, idx) => (
+                                            <Card
+                                                key={`p-essay-${idx}`}
+                                                className="border-2 border-red-100 bg-red-50/30 hover:bg-red-50 hover:border-red-300 hover:shadow-md transition-all cursor-pointer group"
+                                                onClick={() => handleTopicSelect(item.topic, item.topic[0])}
+                                            >
+                                                <CardContent className="p-5 flex items-start gap-4">
+                                                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 text-red-600 font-bold">
+                                                        {item.topic[0]}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-semibold text-gray-900 group-hover:text-red-700 transition-colors mb-1">
+                                                            {item.topic}
+                                                        </h3>
+                                                        {item.reason && (
+                                                            <p className="text-xs text-red-600/80 capitalize">
+                                                                {item.reason.replace(/_/g, ' ')}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                 {essayTopics.map((section) => (

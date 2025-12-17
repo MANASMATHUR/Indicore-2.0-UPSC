@@ -1,0 +1,1159 @@
+{
+  "TNPSC": {
+    "code": "TNPSC",
+    "language": "Tamil",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "General Studies": 30,
+      "Aptitude and Mental Ability": 20,
+      "State Specific GK": 25,
+      "Current Affairs": 15,
+      "Science": 10
+    },
+    "syllabus": {
+      "General Studies": [
+        "Indian History - Ancient, Medieval, Modern",
+        "Indian National Movement",
+        "Geography - Physical, Social, Economic",
+        "Indian Polity and Governance",
+        "Economic Development in India",
+        "Environmental Science and Ecology",
+        "Basic Concepts of Science",
+        "Indian Culture and Heritage",
+        "International Organizations",
+        "Social Issues in India"
+      ],
+      "Aptitude and Mental Ability": [
+        "Number System",
+        "Simplification",
+        "Percentage",
+        "Ratio and Proportion",
+        "Average",
+        "Time and Work",
+        "Time, Speed and Distance",
+        "Logical Reasoning",
+        "Data Interpretation",
+        "Problem Solving"
+      ],
+      "State Specific GK": [
+        "History of Tamil Nadu",
+        "Tamil Nadu Culture and Heritage",
+        "Tamil Nadu Geography",
+        "Tamil Nadu Economy",
+        "Tamil Nadu Polity",
+        "Tamil Nadu Current Affairs",
+        "Important Personalities from Tamil Nadu",
+        "Tamil Nadu Literature",
+        "Tamil Nadu Festivals and Traditions",
+        "Social Reform Movements in Tamil Nadu"
+      ],
+      "Current Affairs": [
+        "National and International Events",
+        "Sports",
+        "Awards and Honors",
+        "Books and Authors",
+        "Science and Technology",
+        "Government Schemes",
+        "Economic Developments",
+        "Environmental Issues",
+        "Important Days and Events",
+        "Miscellaneous Current Affairs"
+      ],
+      "Science": [
+        "Physics - Basic Concepts",
+        "Chemistry - Basic Concepts",
+        "Biology - Basic Concepts",
+        "Human Physiology",
+        "Plant Physiology",
+        "Environmental Science",
+        "Scientific Inventions and Discoveries",
+        "Health and Hygiene",
+        "Nutrition",
+        "Science and Technology in Everyday Life"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "MPSC": {
+    "code": "MPSC",
+    "language": "Marathi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 20,
+      "Economics": 15,
+      "Environment": 10,
+      "Science and Technology": 10,
+      "State Specific GK": 10
+    },
+    "syllabus": {
+      "History": [
+        "Ancient Indian History",
+        "Medieval Indian History",
+        "Modern Indian History",
+        "Freedom Struggle",
+        "Post-Independence India",
+        "World History",
+        "Maharashtra History",
+        "Cultural Heritage",
+        "Important Historical Events",
+        "Historical Personalities"
+      ],
+      "Polity": [
+        "Constitution of India",
+        "Preamble and Features",
+        "Fundamental Rights and Duties",
+        "Directive Principles of State Policy",
+        "Union and State Government",
+        "Judiciary",
+        "Local Government",
+        "Public Policy",
+        "Governance and Administration",
+        "Political System in India"
+      ],
+      "Geography": [
+        "Physical Geography",
+        "World Geography",
+        "Indian Geography",
+        "Maharashtra Geography",
+        "Climate and Weather",
+        "Natural Resources",
+        "Agriculture",
+        "Urbanization",
+        "Environmental Issues",
+        "Geographical Phenomena"
+      ],
+      "Economics": [
+        "Basic Economic Concepts",
+        "Indian Economy",
+        "Maharashtra Economy",
+        "Economic Planning",
+        "Agriculture and Industry",
+        "Public Finance",
+        "Banking and Financial Institutions",
+        "International Trade",
+        "Economic Reforms",
+        "Current Economic Issues"
+      ],
+      "Environment": [
+        "Ecology and Ecosystem",
+        "Biodiversity",
+        "Environmental Conservation",
+        "Pollution and Control",
+        "Climate Change",
+        "Sustainable Development",
+        "Environmental Policies",
+        "Wildlife Protection",
+        "Renewable Energy",
+        "Environmental Impact Assessment"
+      ],
+      "Science and Technology": [
+        "Basic Concepts of Science",
+        "Physics",
+        "Chemistry",
+        "Biology",
+        "Space Technology",
+        "Information Technology",
+        "Biotechnology",
+        "Health and Medicine",
+        "Scientific Research",
+        "Current Developments in Science"
+      ],
+      "State Specific GK": [
+        "Maharashtra History",
+        "Maharashtra Geography",
+        "Maharashtra Economy",
+        "Maharashtra Culture",
+        "Maharashtra Politics",
+        "Maharashtra Administration",
+        "Maharashtra Current Affairs",
+        "Famous Personalities of Maharashtra",
+        "Maharashtra Festivals",
+        "Maharashtra Literature"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "RAS": {
+    "code": "RAS",
+    "language": "Hindi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 15,
+      "Economy": 10,
+      "Science and Technology": 10,
+      "Environment": 5,
+      "State Specific GK": 25
+    },
+    "syllabus": {
+      "History": [
+        "प्राचीन भारत का इतिहास",
+        "मध्यकालीन भारत का इतिहास",
+        "आधुनिक भारत का इतिहास",
+        "भारतीय राष्ट्रीय आंदोलन",
+        "राजस्थान का इतिहास",
+        "संस्कृति और विरासत",
+        "महत्वपूर्ण ऐतिहासिक घटनाएँ",
+        "महान व्यक्तित्व",
+        "इतिहास के स्रोत",
+        "वैदिक सभ्यता"
+      ],
+      "Polity": [
+        "भारतीय संविधान",
+        "संविधान की विशेषताएँ",
+        "संविधान संशोधन",
+        "केंद्र और राज्य सरकारें",
+        "पंचायती राज",
+        "राजस्थान की प्रशासनिक व्यवस्था",
+        "भारतीय न्यायपालिका",
+        "मौलिक अधिकार और कर्तव्य",
+        "संविधान के भाग और अनुसूचियाँ",
+        "राजनीतिक दल और चुनाव"
+      ],
+      "Geography": [
+        "भारत का भौतिक भूगोल",
+        "राजस्थान का भूगोल",
+        "जलवायु और मौसम",
+        "प्राकृतिक संसाधन",
+        "कृषि और फसलें",
+        "पर्यावरणीय मुद्दे",
+        "जनसंख्या और जनसांख्यिकी",
+        "भौगोलिक विशेषताएँ",
+        "खनिज और ऊर्जा संसाधन",
+        "जल संसाधन"
+      ],
+      "Economy": [
+        "भारतीय अर्थव्यवस्था की संरचना",
+        "अर्थव्यवस्था के क्षेत्र",
+        "राजस्थान की अर्थव्यवस्था",
+        "वित्तीय संस्थान",
+        "बजट और कर प्रणाली",
+        "विकास और नियोजन",
+        "कृषि और ग्रामीण विकास",
+        "उद्योग और व्यापार",
+        "गरीबी और बेरोजगारी",
+        "वर्तमान आर्थिक मुद्दे"
+      ],
+      "Science and Technology": [
+        "बुनियादी विज्ञान",
+        "प्रौद्योगिकी के अनुप्रयोग",
+        "सूचना प्रौद्योगिकी",
+        "अंतरिक्ष प्रौद्योगिकी",
+        "रक्षा प्रौद्योगिकी",
+        "स्वास्थ्य और चिकित्सा विज्ञान",
+        "पर्यावरण विज्ञान",
+        "नवीनतम वैज्ञानिक अनुसंधान",
+        "जैव प्रौद्योगिकी",
+        "भौतिकी, रसायन विज्ञान और जीवविज्ञान के मूल सिद्धांत"
+      ],
+      "Environment": [
+        "पर्यावरणीय पारिस्थितिकी",
+        "जैव विविधता",
+        "पर्यावरण संरक्षण अधिनियम",
+        "जलवायु परिवर्तन",
+        "प्राकृतिक आपदाएँ",
+        "पर्यावरणीय समस्याएँ",
+        "संरक्षण प्रयास",
+        "वन्यजीव संरक्षण",
+        "पर्यावरणीय नीतियाँ",
+        "स्थायी विकास"
+      ],
+      "State Specific GK": [
+        "राजस्थान की संस्कृति और परंपराएँ",
+        "राजस्थान की कला और शिल्प",
+        "राजस्थान के प्रमुख त्यौहार",
+        "राजस्थान के प्रमुख पर्यटन स्थल",
+        "राजस्थान की जनजातियाँ",
+        "राजस्थान की प्रमुख नदियाँ और झीलें",
+        "राजस्थान की प्रमुख परियोजनाएँ",
+        "राजस्थान की प्रमुख हस्तियाँ",
+        "राजस्थान की भाषा और साहित्य",
+        "राजस्थान की ऐतिहासिक धरोहर"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "BPSC": {
+    "code": "BPSC",
+    "language": "Hindi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 15,
+      "Economy": 15,
+      "General Science": 10,
+      "Current Affairs": 10,
+      "State Specific GK": 15
+    },
+    "syllabus": {
+      "History": [
+        "प्राचीन भारत का इतिहास",
+        "मध्यकालीन भारत का इतिहास",
+        "आधुनिक भारत का इतिहास",
+        "भारतीय राष्ट्रीय आंदोलन",
+        "महत्वपूर्ण ऐतिहासिक घटनाएँ",
+        "विश्व इतिहास की प्रमुख घटनाएँ",
+        "संस्कृति और विरासत",
+        "महत्वपूर्ण राजवंश और उनके योगदान",
+        "भारत का स्वतंत्रता संग्राम",
+        "सामाजिक और धार्मिक सुधार आंदोलन"
+      ],
+      "Polity": [
+        "भारतीय संविधान",
+        "संविधान के प्रमुख अनुच्छेद",
+        "संविधान सभा और संविधान का निर्माण",
+        "केंद्र और राज्य सरकार की संरचना",
+        "पंचायती राज व्यवस्था",
+        "संविधान संशोधन",
+        "मौलिक अधिकार और कर्तव्य",
+        "निर्वाचन आयोग",
+        "संवैधानिक और गैर-संवैधानिक निकाय",
+        "भारतीय न्यायपालिका"
+      ],
+      "Geography": [
+        "भारत का भौतिक भूगोल",
+        "विश्व का भूगोल",
+        "जलवायु और मौसम",
+        "प्राकृतिक संसाधन",
+        "भारत की कृषि",
+        "पर्यावरणीय मुद्दे",
+        "जनसंख्या और जनसांख्यिकी",
+        "भारत की प्रमुख नदियाँ",
+        "खनिज संसाधन",
+        "भारत के प्रमुख उद्योग"
+      ],
+      "Economy": [
+        "भारतीय अर्थव्यवस्था का अवलोकन",
+        "वित्तीय संस्थान और नीतियाँ",
+        "कृषि और ग्रामीण विकास",
+        "औद्योगिक विकास",
+        "बजट और कर प्रणाली",
+        "वाणिज्य और व्यापार",
+        "गरीबी और बेरोजगारी",
+        "भारत में आर्थिक सुधार",
+        "पंचवर्षीय योजनाएँ",
+        "मुद्रा और बैंकिंग"
+      ],
+      "General Science": [
+        "भौतिक विज्ञान के मूल सिद्धांत",
+        "रसायन विज्ञान के मूल सिद्धांत",
+        "जीव विज्ञान के मूल सिद्धांत",
+        "मानव शरीर और स्वास्थ्य",
+        "प्रौद्योगिकी और नवाचार",
+        "पर्यावरण विज्ञान",
+        "अंतरिक्ष विज्ञान",
+        "विज्ञान के क्षेत्र में नवीनतम खोजें",
+        "भारत में विज्ञान और प्रौद्योगिकी",
+        "विज्ञान के क्षेत्र में भारतीय योगदान"
+      ],
+      "Current Affairs": [
+        "राष्ट्रीय और अंतर्राष्ट्रीय घटनाएँ",
+        "खेल और पुरस्कार",
+        "विज्ञान और प्रौद्योगिकी में नवीनतम विकास",
+        "आर्थिक और वित्तीय समाचार",
+        "सरकारी योजनाएँ और नीतियाँ",
+        "महत्वपूर्ण व्यक्तित्व",
+        "पर्यावरणीय मुद्दे",
+        "भारत और विश्व के प्रमुख संगठन",
+        "सामाजिक मुद्दे",
+        "राजनीतिक घटनाएँ"
+      ],
+      "State Specific GK": [
+        "बिहार का इतिहास",
+        "बिहार की संस्कृति और विरासत",
+        "बिहार की भौगोलिक विशेषताएँ",
+        "बिहार की अर्थव्यवस्था",
+        "बिहार की प्रमुख नदियाँ और जल संसाधन",
+        "बिहार के प्रमुख पर्यटन स्थल",
+        "बिहार की प्रमुख जनजातियाँ और समुदाय",
+        "बिहार की प्रमुख हस्तियाँ",
+        "बिहार की कला और साहित्य",
+        "बिहार की वर्तमान राजनीतिक स्थिति"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "UPPSC": {
+    "code": "UPPSC",
+    "language": "Hindi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 15,
+      "Economics": 10,
+      "Environment": 10,
+      "General Science": 10,
+      "Current Affairs": 10,
+      "State Specific GK": 10
+    },
+    "syllabus": {
+      "History": [
+        "प्राचीन भारत का इतिहास",
+        "मध्यकालीन भारत का इतिहास",
+        "आधुनिक भारत का इतिहास",
+        "भारतीय राष्ट्रीय आंदोलन",
+        "विश्व इतिहास",
+        "संस्कृति और विरासत",
+        "महत्वपूर्ण ऐतिहासिक घटनाएँ",
+        "प्रमुख साम्राज्य और राजवंश",
+        "भारतीय स्वतंत्रता संग्राम",
+        "समाज सुधार आंदोलन"
+      ],
+      "Polity": [
+        "भारतीय संविधान",
+        "संविधान सभा",
+        "संविधान के स्रोत",
+        "संविधान की विशेषताएँ",
+        "संविधान संशोधन",
+        "केंद्र और राज्य सरकारें",
+        "पंचायती राज व्यवस्था",
+        "मौलिक अधिकार और कर्तव्य",
+        "संवैधानिक निकाय",
+        "राजनीतिक दल और चुनाव"
+      ],
+      "Geography": [
+        "भारत का भौतिक भूगोल",
+        "विश्व का भूगोल",
+        "जलवायु और मौसम",
+        "प्राकृतिक संसाधन",
+        "कृषि और फसलें",
+        "जनसंख्या और जनसांख्यिकी",
+        "पर्यावरणीय मुद्दे",
+        "भारत के प्रमुख भौगोलिक क्षेत्र",
+        "भूगोल में नवीनतम घटनाएँ",
+        "भूगोल के सिद्धांत"
+      ],
+      "Economics": [
+        "भारतीय अर्थव्यवस्था का अवलोकन",
+        "अर्थशास्त्र के सिद्धांत",
+        "वित्तीय संस्थान",
+        "वित्तीय नीति",
+        "विकास और नियोजन",
+        "गरीबी और बेरोजगारी",
+        "अंतर्राष्ट्रीय व्यापार",
+        "बजट और कराधान",
+        "उद्योग और बुनियादी ढाँचा",
+        "कृषि अर्थव्यवस्था"
+      ],
+      "Environment": [
+        "पर्यावरणीय पारिस्थितिकी",
+        "जैव विविधता",
+        "पर्यावरणीय प्रदूषण",
+        "जलवायु परिवर्तन",
+        "संरक्षण प्रयास",
+        "पर्यावरणीय कानून",
+        "वन्यजीव संरक्षण",
+        "पर्यावरणीय प्रभाव आकलन",
+        "पर्यावरणीय संगठन",
+        "पर्यावरणीय मुद्दे और समाधान"
+      ],
+      "General Science": [
+        "भौतिक विज्ञान के सिद्धांत",
+        "रसायन विज्ञान के सिद्धांत",
+        "जीव विज्ञान के सिद्धांत",
+        "मानव शरीर और स्वास्थ्य",
+        "प्रौद्योगिकी और नवाचार",
+        "अंतरिक्ष विज्ञान",
+        "विज्ञान में नवीनतम घटनाएँ",
+        "परमाणु विज्ञान",
+        "विज्ञान और समाज",
+        "विज्ञान के अनुप्रयोग"
+      ],
+      "Current Affairs": [
+        "राष्ट्रीय घटनाएँ",
+        "अंतर्राष्ट्रीय घटनाएँ",
+        "खेल और पुरस्कार",
+        "विज्ञान और प्रौद्योगिकी में नवीनतम",
+        "आर्थिक घटनाएँ",
+        "राजनीतिक घटनाएँ",
+        "पर्यावरणीय घटनाएँ",
+        "सामाजिक मुद्दे",
+        "महत्वपूर्ण व्यक्तित्व",
+        "सांस्कृतिक घटनाएँ"
+      ],
+      "State Specific GK": [
+        "उत्तर प्रदेश का इतिहास",
+        "उत्तर प्रदेश की संस्कृति",
+        "उत्तर प्रदेश की भूगोल",
+        "उत्तर प्रदेश की राजनीति",
+        "उत्तर प्रदेश की अर्थव्यवस्था",
+        "उत्तर प्रदेश की प्रमुख घटनाएँ",
+        "उत्तर प्रदेश के प्रमुख व्यक्तित्व",
+        "उत्तर प्रदेश की भाषा और साहित्य",
+        "उत्तर प्रदेश की कला और वास्तुकला",
+        "उत्तर प्रदेश की सामाजिक संरचना"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "MPPSC": {
+    "code": "MPPSC",
+    "language": "Hindi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Geography": 20,
+      "Polity": 15,
+      "Economy": 15,
+      "Environment": 10,
+      "Science and Technology": 10,
+      "State Specific GK": 10
+    },
+    "syllabus": {
+      "History": [
+        "प्राचीन भारत का इतिहास",
+        "मध्यकालीन भारत का इतिहास",
+        "आधुनिक भारत का इतिहास",
+        "भारतीय स्वतंत्रता संग्राम",
+        "विश्व इतिहास के प्रमुख घटनाक्रम",
+        "भारतीय संस्कृति और धरोहर",
+        "महत्वपूर्ण ऐतिहासिक व्यक्तित्व",
+        "भारत में सामाजिक और धार्मिक सुधार आंदोलन",
+        "भारत का औपनिवेशिक इतिहास",
+        "भारत का संविधान और ऐतिहासिक पृष्ठभूमि"
+      ],
+      "Geography": [
+        "भारत का भौतिक भूगोल",
+        "विश्व का भौतिक भूगोल",
+        "भारत की जलवायु और मौसम",
+        "भारत की कृषि और फसलें",
+        "भारत की नदियाँ और जल संसाधन",
+        "भारत के खनिज और ऊर्जा संसाधन",
+        "पर्यावरणीय मुद्दे और संरक्षण",
+        "भारत की जनसंख्या और जनसांख्यिकी",
+        "भारत के प्रमुख उद्योग",
+        "भारत के परिवहन और संचार"
+      ],
+      "Polity": [
+        "भारतीय संविधान की विशेषताएँ",
+        "संविधान की प्रस्तावना और मौलिक अधिकार",
+        "संविधान के निर्देशक सिद्धांत",
+        "भारतीय संसद और विधानमंडल",
+        "भारत का कार्यपालिका और राष्ट्रपति",
+        "भारत का न्यायपालिका और सर्वोच्च न्यायालय",
+        "संविधान संशोधन प्रक्रिया",
+        "भारत में पंचायती राज व्यवस्था",
+        "भारत में संघीय व्यवस्था",
+        "भारत के प्रमुख संवैधानिक पदाधिकारी"
+      ],
+      "Economy": [
+        "भारतीय अर्थव्यवस्था का अवलोकन",
+        "भारत की आर्थिक योजना और विकास",
+        "भारत में कृषि और ग्रामीण विकास",
+        "भारत में उद्योग और सेवा क्षेत्र",
+        "भारत का वित्तीय क्षेत्र और बैंकिंग",
+        "भारत की मुद्रा और वित्तीय नीति",
+        "भारत में गरीबी और बेरोजगारी",
+        "भारत में आर्थिक सुधार और उदारीकरण",
+        "भारत में अंतर्राष्ट्रीय व्यापार",
+        "भारत में कर प्रणाली और बजट"
+      ],
+      "Environment": [
+        "पर्यावरणीय पारिस्थितिकी और जैव विविधता",
+        "पर्यावरणीय प्रदूषण और नियंत्रण",
+        "जलवायु परिवर्तन और वैश्विक तापमान",
+        "पर्यावरणीय संरक्षण और नीतियाँ",
+        "भारत के राष्ट्रीय उद्यान और वन्यजीव अभयारण्य",
+        "पर्यावरणीय प्रभाव आकलन",
+        "पर्यावरणीय कानून और अधिनियम",
+        "भारत में वन और वन्यजीव संरक्षण",
+        "पर्यावरणीय शिक्षा और जागरूकता",
+        "भारत में पर्यावरणीय आंदोलन"
+      ],
+      "Science and Technology": [
+        "भारत में विज्ञान और प्रौद्योगिकी का विकास",
+        "भारत के अंतरिक्ष कार्यक्रम",
+        "भारत में जैव प्रौद्योगिकी",
+        "भारत में सूचना प्रौद्योगिकी",
+        "भारत में स्वास्थ्य और चिकित्सा विज्ञान",
+        "भारत में ऊर्जा और नवीकरणीय संसाधन",
+        "भारत में रक्षा प्रौद्योगिकी",
+        "भारत में अनुसंधान और विकास",
+        "भारत में विज्ञान और प्रौद्योगिकी नीति",
+        "भारत में वैज्ञानिक संस्थान और संगठन"
+      ],
+      "State Specific GK": [
+        "मध्य प्रदेश का इतिहास",
+        "मध्य प्रदेश की संस्कृति और धरोहर",
+        "मध्य प्रदेश की भौगोलिक विशेषताएँ",
+        "मध्य प्रदेश की अर्थव्यवस्था",
+        "मध्य प्रदेश की प्रमुख नदियाँ और जलाशय",
+        "मध्य प्रदेश के प्रमुख पर्यटन स्थल",
+        "मध्य प्रदेश के प्रमुख त्योहार और मेले",
+        "मध्य प्रदेश की जनजातियाँ और समाज",
+        "मध्य प्रदेश की राजनीति और प्रशासन",
+        "मध्य प्रदेश के प्रमुख व्यक्तित्व"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "GPSC": {
+    "code": "GPSC",
+    "language": "Gujarati",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 15,
+      "Economics": 15,
+      "Science and Technology": 10,
+      "State Specific GK": 25
+    },
+    "syllabus": {
+      "History": [
+        "Ancient Indian History",
+        "Medieval Indian History",
+        "Modern Indian History",
+        "Freedom Struggle",
+        "Post-Independence India",
+        "World History",
+        "Cultural Heritage of India",
+        "Important Historical Events",
+        "Historical Personalities",
+        "Art and Architecture"
+      ],
+      "Polity": [
+        "Constitution of India",
+        "Preamble and its significance",
+        "Fundamental Rights and Duties",
+        "Directive Principles of State Policy",
+        "Union and State Government",
+        "Judiciary System",
+        "Local Government",
+        "Public Policy",
+        "Governance and Administration",
+        "Important Amendments"
+      ],
+      "Geography": [
+        "Physical Geography of India",
+        "World Geography",
+        "Climatology",
+        "Indian Agriculture",
+        "Natural Resources",
+        "Environmental Issues",
+        "Geographical Phenomena",
+        "Population and Urbanization",
+        "Economic Geography",
+        "Geographical Mapping"
+      ],
+      "Economics": [
+        "Indian Economy Overview",
+        "Economic Planning in India",
+        "Agriculture and Industry",
+        "Banking and Finance",
+        "Public Finance",
+        "Economic Reforms",
+        "International Trade",
+        "Poverty and Unemployment",
+        "Inflation and Deflation",
+        "Economic Policies"
+      ],
+      "Science and Technology": [
+        "Basic Concepts of Physics",
+        "Basic Concepts of Chemistry",
+        "Biology Fundamentals",
+        "Space Technology",
+        "Information Technology",
+        "Environmental Science",
+        "Scientific Developments",
+        "Health and Medicine",
+        "Biotechnology",
+        "Nanotechnology"
+      ],
+      "State Specific GK": [
+        "History of Gujarat",
+        "Geography of Gujarat",
+        "Culture and Heritage of Gujarat",
+        "Economy of Gujarat",
+        "Political Scenario of Gujarat",
+        "Important Personalities from Gujarat",
+        "Festivals and Traditions",
+        "Gujarat's Contribution to Freedom Struggle",
+        "Current Affairs related to Gujarat",
+        "Gujarat's Administrative Structure"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "KPSC": {
+    "code": "KPSC",
+    "language": "Kannada",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 15,
+      "Economy": 15,
+      "Environment": 10,
+      "Science and Technology": 10,
+      "State Specific GK": 15
+    },
+    "syllabus": {
+      "History": [
+        "Ancient Indian History",
+        "Medieval Indian History",
+        "Modern Indian History",
+        "Freedom Struggle",
+        "Post-Independence India",
+        "World History",
+        "Karnataka History",
+        "Cultural Heritage",
+        "Historical Monuments in Karnataka",
+        "Important Historical Events"
+      ],
+      "Polity": [
+        "Constitution of India",
+        "Preamble and its significance",
+        "Fundamental Rights and Duties",
+        "Directive Principles of State Policy",
+        "Union and State Government",
+        "Judiciary System",
+        "Local Governance",
+        "Public Policy",
+        "Constitutional Amendments",
+        "Political System in India"
+      ],
+      "Geography": [
+        "Physical Geography of India",
+        "World Geography",
+        "Indian Climate",
+        "Soil and Vegetation",
+        "Natural Resources",
+        "Agriculture in India",
+        "Urbanization and Migration",
+        "Geographical Features of Karnataka",
+        "Environmental Issues",
+        "Disaster Management"
+      ],
+      "Economy": [
+        "Indian Economy Overview",
+        "Economic Planning in India",
+        "Agricultural Economics",
+        "Industrial Development",
+        "Banking and Finance",
+        "Public Finance",
+        "Economic Reforms",
+        "Karnataka Economy",
+        "Poverty and Unemployment",
+        "International Trade"
+      ],
+      "Environment": [
+        "Ecology and Ecosystem",
+        "Biodiversity and Conservation",
+        "Environmental Pollution",
+        "Climate Change",
+        "Sustainable Development",
+        "Environmental Policies and Laws",
+        "Renewable Energy",
+        "Wildlife Protection",
+        "Natural Disasters",
+        "Environmental Impact Assessment"
+      ],
+      "Science and Technology": [
+        "Basic Concepts of Physics",
+        "Basic Concepts of Chemistry",
+        "Biology and Human Health",
+        "Information Technology",
+        "Space Technology",
+        "Biotechnology",
+        "Nanotechnology",
+        "Scientific Research in India",
+        "Innovations and Discoveries",
+        "Current Developments in Science"
+      ],
+      "State Specific GK": [
+        "Karnataka Geography",
+        "Karnataka History",
+        "Karnataka Culture",
+        "Karnataka Economy",
+        "Karnataka Polity",
+        "Famous Personalities of Karnataka",
+        "Karnataka Festivals",
+        "Karnataka Art and Literature",
+        "Karnataka Current Affairs",
+        "Karnataka Government Schemes"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "WBPSC": {
+    "code": "WBPSC",
+    "language": "Bengali",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Geography": 15,
+      "Polity": 15,
+      "Economy": 10,
+      "Science and Technology": 10,
+      "Environment": 5,
+      "State Specific GK": 25
+    },
+    "syllabus": {
+      "History": [
+        "প্রাচীন ভারতীয় ইতিহাস",
+        "মধ্যযুগীয় ভারতীয় ইতিহাস",
+        "আধুনিক ভারতীয় ইতিহাস",
+        "ভারতীয় স্বাধীনতা আন্দোলন",
+        "বিশ্ব ইতিহাসের প্রধান ঘটনা",
+        "বাঙালি সংস্কৃতি ও ঐতিহ্য",
+        "বঙ্গভঙ্গ ও স্বদেশী আন্দোলন",
+        "ভারতীয় জাতীয় কংগ্রেসের ইতিহাস",
+        "গান্ধীজীর আন্দোলন",
+        "ভারত বিভাজন ও স্বাধীনতা"
+      ],
+      "Geography": [
+        "ভারতের ভৌগোলিক বৈশিষ্ট্য",
+        "পৃথিবীর ভৌগোলিক বৈশিষ্ট্য",
+        "ভারতের জলবায়ু",
+        "প্রাকৃতিক সম্পদ ও তাদের বিতরণ",
+        "ভারতের কৃষি ও শিল্প",
+        "পরিবহন ও যোগাযোগ ব্যবস্থা",
+        "ভারতের নদী ব্যবস্থা",
+        "পরিবেশ ও বাস্তুতন্ত্র",
+        "বন ও বন্যপ্রাণী সংরক্ষণ",
+        "ভূমিকম্প ও প্রাকৃতিক দুর্যোগ"
+      ],
+      "Polity": [
+        "ভারতের সংবিধান",
+        "সংবিধানের মৌলিক অধিকার",
+        "রাষ্ট্রপতি ও উপরাষ্ট্রপতি",
+        "মন্ত্রিসভা ও প্রধানমন্ত্রী",
+        "সংসদ ও তার কার্যাবলী",
+        "নির্বাচন প্রক্রিয়া",
+        "রাজ্যপাল ও রাজ্য সরকার",
+        "পঞ্চায়েত রাজ ব্যবস্থা",
+        "বিচার ব্যবস্থা",
+        "ভারতের রাজনৈতিক দল ও নির্বাচন"
+      ],
+      "Economy": [
+        "ভারতের অর্থনৈতিক উন্নয়ন",
+        "অর্থনৈতিক পরিকল্পনা ও নীতি",
+        "ভারতের কৃষি ও শিল্পনীতি",
+        "ব্যাংকিং ও আর্থিক প্রতিষ্ঠান",
+        "ভারতের বাণিজ্য ও বাণিজ্যনীতি",
+        "বাজেট ও কর ব্যবস্থা",
+        "দারিদ্র্য ও বেকারত্ব",
+        "ভারতের অর্থনৈতিক সংস্কার",
+        "মুদ্রাস্ফীতি ও মুদ্রানীতি",
+        "আন্তর্জাতিক অর্থনৈতিক সংস্থা"
+      ],
+      "Science and Technology": [
+        "বিজ্ঞান ও প্রযুক্তির মৌলিক ধারণা",
+        "জীববিজ্ঞান ও মানবদেহ",
+        "রসায়ন ও পদার্থবিজ্ঞান",
+        "কম্পিউটার ও তথ্যপ্রযুক্তি",
+        "পরমাণু বিজ্ঞান ও মহাকাশ গবেষণা",
+        "পরিবেশ বিজ্ঞান",
+        "জলবায়ু পরিবর্তন ও তার প্রভাব",
+        "জেনেটিক্স ও বায়োটেকনোলজি",
+        "নবায়নযোগ্য শক্তি",
+        "বিজ্ঞান ও প্রযুক্তির সাম্প্রতিক উন্নয়ন"
+      ],
+      "Environment": [
+        "পরিবেশ ও বাস্তুতন্ত্র",
+        "জলবায়ু পরিবর্তন",
+        "প্রাকৃতিক সম্পদ সংরক্ষণ",
+        "বায়ু ও জল দূষণ",
+        "বন ও বন্যপ্রাণী সংরক্ষণ",
+        "পরিবেশ আইন ও নীতি",
+        "জলবায়ু পরিবর্তনের প্রভাব",
+        "টেকসই উন্নয়ন",
+        "জলবায়ু পরিবর্তন মোকাবিলায় উদ্যোগ",
+        "জলবায়ু পরিবর্তন ও আন্তর্জাতিক সহযোগিতা"
+      ],
+      "State Specific GK": [
+        "পশ্চিমবঙ্গের ইতিহাস",
+        "পশ্চিমবঙ্গের ভৌগোলিক বৈশিষ্ট্য",
+        "পশ্চিমবঙ্গের সংস্কৃতি ও ঐতিহ্য",
+        "পশ্চিমবঙ্গের অর্থনীতি",
+        "পশ্চিমবঙ্গের রাজনৈতিক ইতিহাস",
+        "পশ্চিমবঙ্গের শিল্প ও কৃষি",
+        "পশ্চিমবঙ্গের বিখ্যাত ব্যক্তিত্ব",
+        "পশ্চিমবঙ্গের ভাষা ও সাহিত্য",
+        "পশ্চিমবঙ্গের উৎসব ও অনুষ্ঠান",
+        "পশ্চিমবঙ্গের পরিবেশ ও বাস্তুতন্ত্র"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "PPSC": {
+    "code": "PPSC",
+    "language": "Punjabi",
+    "stages": [
+      "Prelims",
+      "Mains"
+    ],
+    "subjects": {
+      "History": 20,
+      "Polity": 15,
+      "Geography": 10,
+      "Economics": 10,
+      "Environment": 10,
+      "Science and Technology": 10,
+      "State Specific GK": 25
+    },
+    "syllabus": {
+      "History": [
+        "Ancient Indian History",
+        "Medieval Indian History",
+        "Modern Indian History",
+        "Freedom Struggle",
+        "Post-Independence Consolidation",
+        "World History",
+        "Indian Culture and Heritage",
+        "Important Historical Events",
+        "Art and Architecture",
+        "Historical Personalities",
+        "Historical Movements",
+        "History of Punjab"
+      ],
+      "Polity": [
+        "Constitution of India",
+        "Preamble and its significance",
+        "Fundamental Rights and Duties",
+        "Directive Principles of State Policy",
+        "Union and State Government",
+        "Judiciary in India",
+        "Local Government",
+        "Public Policy",
+        "Governance and Administration",
+        "Amendments and Constitutional Provisions",
+        "Political System in India",
+        "Election Commission"
+      ],
+      "Geography": [
+        "Physical Geography of India",
+        "World Geography",
+        "Climate and Weather",
+        "Soil and Vegetation",
+        "Natural Resources",
+        "Agriculture and Irrigation",
+        "Industries and Infrastructure",
+        "Urbanization and Population",
+        "Environmental Issues",
+        "Geographical Features of Punjab",
+        "Economic Geography",
+        "Geopolitical Issues"
+      ],
+      "Economics": [
+        "Basic Economic Concepts",
+        "Indian Economy",
+        "Economic Planning in India",
+        "Agriculture and Rural Development",
+        "Industrial Policy",
+        "Banking and Finance",
+        "Public Finance",
+        "International Trade",
+        "Economic Reforms",
+        "Poverty and Unemployment",
+        "Economic Survey and Budget",
+        "Economic Issues of Punjab"
+      ],
+      "Environment": [
+        "Ecology and Ecosystem",
+        "Biodiversity and Conservation",
+        "Environmental Pollution",
+        "Climate Change",
+        "Environmental Policies and Laws",
+        "Sustainable Development",
+        "Natural Disasters and Management",
+        "Renewable Energy",
+        "Environmental Impact Assessment",
+        "Wildlife Conservation",
+        "Forestry and Deforestation",
+        "Environmental Issues in Punjab"
+      ],
+      "Science and Technology": [
+        "Basic Concepts of Science",
+        "Physics and Chemistry",
+        "Biology and Biotechnology",
+        "Space Technology",
+        "Information Technology",
+        "Nanotechnology",
+        "Health and Medicine",
+        "Scientific Research and Development",
+        "Environmental Science",
+        "Recent Developments in Science",
+        "Science and Technology in India",
+        "Technological Innovations"
+      ],
+      "State Specific GK": [
+        "History of Punjab",
+        "Geography of Punjab",
+        "Economy of Punjab",
+        "Culture and Heritage of Punjab",
+        "Famous Personalities of Punjab",
+        "Punjab's Contribution to Freedom Struggle",
+        "Important Events in Punjab",
+        "Government and Politics in Punjab",
+        "Current Affairs of Punjab",
+        "Fairs and Festivals of Punjab",
+        "Punjabi Literature",
+        "Social Issues in Punjab"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 150,
+      "options": 4,
+      "negativeMarking": true
+    }
+  },
+  "SSC": {
+    "code": "SSC",
+    "language": "English",
+    "stages": [
+      "Tier 1",
+      "Tier 2"
+    ],
+    "subjects": {
+      "General Intelligence and Reasoning": 25,
+      "General Awareness": 25,
+      "Quantitative Aptitude": 25,
+      "English Comprehension": 25
+    },
+    "syllabus": {
+      "General Intelligence and Reasoning": [
+        "Analogies",
+        "Similarities and Differences",
+        "Space Visualization",
+        "Spatial Orientation",
+        "Problem Solving",
+        "Analysis",
+        "Judgment",
+        "Decision Making",
+        "Visual Memory",
+        "Discrimination",
+        "Observation",
+        "Relationship Concepts",
+        "Arithmetical Reasoning",
+        "Figural Classification",
+        "Arithmetic Number Series"
+      ],
+      "General Awareness": [
+        "Current Events",
+        "India and its Neighboring Countries",
+        "History of India",
+        "Geography of India",
+        "Economic Scene",
+        "General Polity",
+        "Indian Constitution",
+        "Scientific Research",
+        "Culture",
+        "Awards and Honors",
+        "Books and Authors",
+        "Important Days",
+        "Sports",
+        "International Organizations",
+        "Environmental Issues"
+      ],
+      "Quantitative Aptitude": [
+        "Number Systems",
+        "Computation of Whole Numbers",
+        "Decimals and Fractions",
+        "Relationship between Numbers",
+        "Fundamental Arithmetical Operations",
+        "Percentages",
+        "Ratio and Proportion",
+        "Averages",
+        "Interest",
+        "Profit and Loss",
+        "Discount",
+        "Mensuration",
+        "Time and Distance",
+        "Ratio and Time",
+        "Time and Work"
+      ],
+      "English Comprehension": [
+        "Reading Comprehension",
+        "Fill in the Blanks",
+        "Spellings",
+        "Phrases and Idioms",
+        "One Word Substitution",
+        "Sentence Correction",
+        "Error Spotting",
+        "Synonyms",
+        "Antonyms",
+        "Active/Passive Voice",
+        "Direct/Indirect Speech",
+        "Cloze Test",
+        "Para Jumbles",
+        "Sentence Improvement",
+        "Vocabulary"
+      ]
+    },
+    "prelimsPattern": {
+      "questionCount": 100,
+      "options": 4,
+      "negativeMarking": true
+    }
+  }
+}

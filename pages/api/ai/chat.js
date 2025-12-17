@@ -24,6 +24,7 @@ import {
   generateMemoriesListResponse
 } from '@/lib/memoryService';
 import { smartExtractAndSave, shouldAutoSave } from '@/lib/smartMemoryExtractor';
+import { trackInteraction } from '@/lib/personalizationHelpers';
 
 const PYQ_PATTERN = /(pyq|pyqs|previous\s+year\s+(?:question|questions|paper|papers)|past\s+year\s+(?:question|questions)|search.*pyq|find.*pyq|(?:give|show|get|fetch|list|bring|tell|need|want)\s+(?:me\s+)?(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs|questions?|qs)|(?:eco|geo|hist|pol|sci|tech|env|economics|geography|history|polity|science|technology|environment)\s+(?:pyq|pyqs))/i;
 
@@ -85,6 +86,43 @@ function estimateTokenLength(messages) {
   }, 0);
   return Math.ceil(totalChars / 4);
 }
+
+/**
+ * Smart context window management
+ * Trims conversation history to fit within token budget while preserving recent context
+ */
+function trimHistoryToTokenBudget(messages, maxTokens = 6000) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  let totalTokens = 0;
+  const trimmedMessages = [];
+
+  // Process messages in reverse (most recent first)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const msgTokens = estimateTokenLength([msg]);
+
+    // Always keep at least the last 4 messages (2 exchanges) for context
+    if (trimmedMessages.length < 4 || totalTokens + msgTokens <= maxTokens) {
+      trimmedMessages.unshift(msg); // Add to beginning
+      totalTokens += msgTokens;
+    } else {
+      // Stop adding older messages once budget is exceeded
+      break;
+    }
+  }
+
+  console.log(`📊 Context window: ${trimmedMessages.length} messages, ~${totalTokens} tokens`);
+  return trimmedMessages;
+}
+
+// Context window configuration
+const CONTEXT_CONFIG = {
+  maxHistoryMessages: 12,      // Maximum messages to load from DB (reduced from 60)
+  maxHistoryTokens: 6000,      // Maximum tokens for conversation history
+  minHistoryMessages: 4,       // Minimum messages to keep (even if over budget)
+  preserveRecentContext: true  // Always prioritize recent messages
+};
 
 function validateChatRequest(req) {
   const { message, model, systemPrompt, language } = req.body;
@@ -216,10 +254,13 @@ function isResponseComplete(response) {
 
 const PYQ_FOLLOW_UP_REGEX = /^(?:more|another|additional|next|other|different|continue|keep going|show more|give me more|list more|fetch more|next set|next one|next ones)\b/i;
 const PYQ_FOLLOW_UP_COMMAND_REGEX = /(?:give|show|get|fetch|list|bring)\s+(?:me\s+)?(?:some\s+)?more\b/i;
-// Detect requests to solve/answer questions from previous PYQ context
-// Match patterns like "solve them", "solve these", "answer these questions", etc.
-// Also match standalone "solve" or "answer" when there's PYQ context (user likely referring to previous questions)
-const PYQ_SOLVE_REGEX = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
+
+// Enhanced PYQ solve detection - recognizes natural commands
+// Matches: "solve these", "answer these questions", "solve them", "solve all", "give me solutions", etc.
+const PYQ_SOLVE_REGEX = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?|me\s+(?:answers?|solutions?))|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|all|them|it|this|that|these\s+questions?|those\s+questions?|the\s+questions?|all\s+of\s+them|all\s+questions?|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed|displayed)|above|previous))?$/i;
+
+// Also match simple commands when there's PYQ context
+const SIMPLE_SOLVE_COMMANDS = /^(?:solve|answer|solutions?|answers?)$/i;
 
 function isPyqFollowUpMessage(message) {
   const normalized = message.trim().toLowerCase();
@@ -228,7 +269,23 @@ function isPyqFollowUpMessage(message) {
 
 function isPyqSolveRequest(message) {
   const normalized = message.trim().toLowerCase();
-  return PYQ_SOLVE_REGEX.test(normalized);
+
+  // Check main solve regex
+  if (PYQ_SOLVE_REGEX.test(normalized)) {
+    return true;
+  }
+
+  // Check simple commands (when there's PYQ context, these should trigger solving)
+  if (SIMPLE_SOLVE_COMMANDS.test(normalized)) {
+    return true;
+  }
+
+  // Check for variations like "solve these pyqs", "answer all questions"
+  if (/(?:solve|answer|explain)\s+(?:all|these|those|the)\s+(?:pyqs?|questions?)/i.test(normalized)) {
+    return true;
+  }
+
+  return false;
 }
 
 function extractPyqContextFromHistory(history, language) {
@@ -496,10 +553,11 @@ async function chatHandler(req, res) {
           .lean();
 
         if (chat && chat.messages && Array.isArray(chat.messages)) {
-          // Use a large window of recent messages so short follow-ups like
-          // "was he good?" still have plenty of context to resolve pronouns.
-          const recentMessages = chat.messages.slice(-60);
-          conversationHistory = recentMessages
+          // Smart context window: Load recent messages within token budget
+          // Reduced from 60 to 12 messages, then trim based on token count
+          const recentMessages = chat.messages.slice(-CONTEXT_CONFIG.maxHistoryMessages);
+
+          let rawHistory = recentMessages
             .filter(msg =>
               msg.sender &&
               msg.text &&
@@ -510,6 +568,12 @@ async function chatHandler(req, res) {
               role: msg.sender === 'user' ? 'user' : 'assistant',
               content: msg.text
             }));
+
+          // Apply token-based trimming to prevent context overflow
+          conversationHistory = trimHistoryToTokenBudget(
+            rawHistory,
+            CONTEXT_CONFIG.maxHistoryTokens
+          );
         }
       } catch (err) {
         console.warn('Failed to load conversation history:', err.message);
@@ -886,6 +950,14 @@ Requirements:
     // Only check for new PYQ queries if this is NOT a solve request
     // This prevents "solve the pyqs you just gave me" from being treated as a new PYQ search
     const pyqDb = !isSolveRequest ? await tryPyqFromDb(message, isPyqFollowUp ? previousPyqContext : null) : null;
+
+    // Fix: Handle empty results for follow-up queries to prevent falling back to generic AI with lost context
+    if (!isSolveRequest && isPyqFollowUp && !pyqDb && previousPyqContext) {
+      return res.status(200).json({
+        response: `No more questions found for **${previousPyqContext.theme || 'this topic'}** from **${previousPyqContext.fromYear || 'start'}** to **${previousPyqContext.toYear || 'present'}**. Try a different topic or year range.`,
+        source: 'pyq-db-empty'
+      });
+    }
     if (pyqDb) {
       // For PYQ responses, minimal cleaning to preserve formatting structure
       // Only remove obvious artifacts, preserve all newlines and structure
@@ -1168,6 +1240,89 @@ Requirements:
           responseCache.delete(key);
         }
       }
+    }
+
+    // Save conversation memory for cross-session context
+    // This allows the chatbot to remember previous conversations
+    try {
+      await saveConversationMemory({
+        userEmail: session.user.email,
+        chatId: chatId || null,
+        userMessage: message,
+        assistantResponse: validResponse
+      });
+      console.log('💾 Conversation memory saved for cross-session context');
+    } catch (memoryError) {
+      console.warn('Failed to save conversation memory:', memoryError.message);
+      // Don't fail the request if memory saving fails
+    }
+
+    // Track chat interaction for personalization and analytics
+    try {
+      // Extract topic from message (simple keyword detection)
+      const extractTopic = (msg) => {
+        const lowerMsg = msg.toLowerCase();
+
+        // Subject detection
+        if (lowerMsg.includes('polity') || lowerMsg.includes('constitution') || lowerMsg.includes('government')) return 'Polity';
+        if (lowerMsg.includes('history') || lowerMsg.includes('ancient') || lowerMsg.includes('medieval') || lowerMsg.includes('modern')) return 'History';
+        if (lowerMsg.includes('geography') || lowerMsg.includes('climate') || lowerMsg.includes('map')) return 'Geography';
+        if (lowerMsg.includes('economy') || lowerMsg.includes('economic') || lowerMsg.includes('finance') || lowerMsg.includes('gdp')) return 'Economics';
+        if (lowerMsg.includes('science') || lowerMsg.includes('technology') || lowerMsg.includes('physics') || lowerMsg.includes('chemistry')) return 'Science & Technology';
+        if (lowerMsg.includes('environment') || lowerMsg.includes('ecology') || lowerMsg.includes('biodiversity') || lowerMsg.includes('climate change')) return 'Environment';
+        if (lowerMsg.includes('current affairs') || lowerMsg.includes('news') || lowerMsg.includes('recent')) return 'Current Affairs';
+        if (lowerMsg.includes('ethics') || lowerMsg.includes('integrity') || lowerMsg.includes('moral')) return 'Ethics';
+        if (lowerMsg.includes('essay') || lowerMsg.includes('writing')) return 'Essay Writing';
+        if (lowerMsg.includes('interview') || lowerMsg.includes('daf') || lowerMsg.includes('personality')) return 'Interview Prep';
+
+        return 'General Discussion';
+      };
+
+      const topic = extractTopic(message);
+      const messageLength = message.length;
+      const responseLength = validResponse.length;
+
+      // Calculate engagement score based on conversation depth
+      let engagementScore = 5; // Base score
+
+      // Longer messages indicate deeper engagement
+      if (messageLength > 200) engagementScore += 2;
+      else if (messageLength > 100) engagementScore += 1;
+
+      // Longer responses indicate complex topics
+      if (responseLength > 500) engagementScore += 1;
+
+      // PYQ queries are high engagement
+      if (isPyqQuery(message)) engagementScore += 2;
+
+      // Follow-up questions indicate engagement
+      if (conversationHistory.length > 0) engagementScore += 1;
+
+      engagementScore = Math.min(10, engagementScore);
+
+      await trackInteraction(
+        session.user.email,
+        chatId || 'default-session',
+        'chat',
+        'ai_conversation',
+        'message_sent',
+        {
+          topic,
+          messageLength,
+          responseLength,
+          isPyqQuery: isPyqQuery(message),
+          isFollowUp: conversationHistory.length > 0,
+          engagementScore,
+          language: language || 'en',
+          model: model || 'sonar-pro'
+        },
+        {
+          userAgent: req.headers['user-agent']
+        }
+      );
+    } catch (trackingError) {
+      console.warn('Failed to track chat interaction:', trackingError.message);
+      // Don't fail the request if tracking fails
     }
 
     return res.status(200).json({

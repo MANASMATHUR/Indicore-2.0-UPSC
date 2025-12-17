@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import SpeakButton from '@/components/ui/SpeakButton';
+import PersonalizationIndicator from '@/components/PersonalizationIndicator';
 import {
   BookOpen,
   ChevronLeft,
@@ -308,6 +309,13 @@ export default function VocabularyBuilder({ isOpen, onClose, onAddToChat }) {
                 <DialogDescription className="text-gray-600 dark:text-gray-400 mt-1">
                   Master exam-relevant vocabulary with AI-powered flashcards
                 </DialogDescription>
+                <div className="mt-2">
+                  <PersonalizationIndicator
+                    visible={true}
+                    type="Vocabulary"
+                    reason="Targeting your weak topics"
+                  />
+                </div>
               </div>
             </div>
             <Button

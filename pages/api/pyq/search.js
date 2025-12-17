@@ -1,5 +1,9 @@
 import connectToDatabase from '@/lib/mongodb';
 import PYQ from '@/models/PYQ';
+import { trackInteraction } from '@/lib/personalizationHelpers';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../auth/[...nextauth]';
+import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -18,13 +22,13 @@ export default async function handler(req, res) {
     } = req.query;
 
     const filter = {};
-    
+
     // Normalize exam filter
     if (exam) {
       const examUpper = exam.toUpperCase().trim();
       filter.exam = examUpper;
     }
-    
+
     // Normalize level filter
     if (level) {
       const levelNormalized = level.trim();
@@ -32,7 +36,7 @@ export default async function handler(req, res) {
         filter.level = new RegExp(`^${levelNormalized}$`, 'i');
       }
     }
-    
+
     // Normalize paper filter
     if (paper) {
       const paperClean = paper.trim();
@@ -51,32 +55,35 @@ export default async function handler(req, res) {
 
     async function runQuery(useText) {
       const queryFilter = { ...filter };
-      
+
       // Add theme search
       if (theme && theme.trim()) {
         const themeClean = theme.trim();
         const or = useText
-          ? [ 
-              { $text: { $search: themeClean } }, 
-              { topicTags: { $regex: themeClean, $options: 'i' } }, 
-              { question: { $regex: themeClean, $options: 'i' } },
-              { theme: { $regex: themeClean, $options: 'i' } }
-            ]
-          : [ 
-              { topicTags: { $regex: themeClean, $options: 'i' } }, 
-              { question: { $regex: themeClean, $options: 'i' } },
-              { theme: { $regex: themeClean, $options: 'i' } }
-            ];
+          ? [
+            { $text: { $search: themeClean } },
+            { topicTags: { $regex: themeClean, $options: 'i' } },
+            { question: { $regex: themeClean, $options: 'i' } },
+            { theme: { $regex: themeClean, $options: 'i' } }
+          ]
+          : [
+            { topicTags: { $regex: themeClean, $options: 'i' } },
+            { question: { $regex: themeClean, $options: 'i' } },
+            { theme: { $regex: themeClean, $options: 'i' } }
+          ];
         queryFilter.$or = or;
       }
-      
+
       // Ensure we only get valid, user-friendly documents
       queryFilter.question = { $exists: true, $ne: '', $regex: /.{20,}/ }; // At least 20 chars for user-friendly display
       queryFilter.year = { $gte: 1990, $lte: new Date().getFullYear() + 1 };
-      queryFilter.exam = { $exists: true, $ne: '' }; // Must have exam
-      
+
+      if (!queryFilter.exam) {
+        queryFilter.exam = { $exists: true, $ne: '' }; // Must have exam
+      }
+
       return await PYQ.find(queryFilter)
-        .sort({ 
+        .sort({
           verified: -1, // Verified first
           analysis: -1, // Questions with analysis prioritized
           year: -1 // Then newest
@@ -94,13 +101,13 @@ export default async function handler(req, res) {
     }
 
     // Filter out invalid items - only show user-friendly, quality PYQs
-    const validItems = items.filter(item => 
-      item.question && 
+    const validItems = items.filter(item =>
+      item.question &&
       item.question.trim().length >= 20 && // Minimum 20 chars for readability
-      item.year && 
-      item.year >= 1990 && 
+      item.year &&
+      item.year >= 1990 &&
       item.year <= new Date().getFullYear() + 1 &&
-      item.exam && 
+      item.exam &&
       item.exam.trim().length > 0 // Must have exam name
     );
 
@@ -120,25 +127,25 @@ export default async function handler(req, res) {
     for (const q of sortedItems) {
       const decade = Math.floor((q.year || 0) / 10) * 10;
       if (!byDecade.has(decade)) byDecade.set(decade, []);
-      
+
       const isUnverified = q.verified === false && (!q.sourceLink || !q.sourceLink.includes('.gov.in'));
       const topicTags = q.topicTags && q.topicTags.length > 0 ? q.topicTags.join(', ') : null;
-      
+
       // Build the label with topic/theme information
       let label = `${q.year || '—'} – ${q.paper ? `${q.paper} – ` : ''}${q.question}`;
-      
+
       // Add topic/theme if available
       if (topicTags) {
         label += ` [Topic: ${topicTags}]`;
       }
-      
+
       // Add verification status
       if (isUnverified) {
         label += ' ⚠️ (unverified)';
       } else if (q.sourceLink && q.sourceLink.includes('.gov.in')) {
         label += ' ✅';
       }
-      
+
       byDecade.get(decade).push(label);
     }
 
@@ -149,7 +156,7 @@ export default async function handler(req, res) {
       for (const row of byDecade.get(d)) lines.push(`- ${row}`);
       lines.push('');
     }
-    
+
     // Summary with counts
     if (verifiedCount > 0 && unverifiedCount > 0) {
       lines.push(`Total listed: ${sortedItems.length} (${verifiedCount} ✅ verified, ${unverifiedCount} ⚠️ unverified)`);
@@ -157,6 +164,49 @@ export default async function handler(req, res) {
       lines.push(`Total listed: ${sortedItems.length} (✅ All verified from official sources)`);
     } else {
       lines.push(`Total listed: ${sortedItems.length} (⚠️ All unverified - please verify before use)`);
+    }
+
+    // Track the search interaction
+    try {
+      const session = await getServerSession(req, res, authOptions);
+
+      // Get or create session ID
+      let sessionId = req.cookies.sessionId;
+      if (!sessionId) {
+        sessionId = uuidv4();
+        res.setHeader('Set-Cookie', `sessionId=${sessionId}; Path=/; Max-Age=${30 * 24 * 60 * 60}; HttpOnly; SameSite=Lax`);
+      }
+
+      await trackInteraction(
+        session?.user?.email || null,
+        sessionId,
+        'pyq',
+        'pyq_search',
+        'search',
+        {
+          topic: theme || 'General',
+          subject: theme,
+          category: 'pyq_search',
+          engagementScore: sortedItems.length > 0 ? 8 : 5,
+          customData: {
+            exam,
+            theme,
+            fromYear,
+            toYear,
+            level,
+            paper,
+            resultsCount: sortedItems.length,
+            verifiedCount,
+            unverifiedCount
+          }
+        },
+        {
+          userAgent: req.headers['user-agent']
+        }
+      );
+    } catch (trackError) {
+      console.error('Failed to track PYQ search:', trackError);
+      // Don't fail the request if tracking fails
     }
 
     return res.status(200).json({

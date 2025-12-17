@@ -21,6 +21,13 @@ export default async function handler(req, res) {
         const { count = 5 } = req.query;
 
         // Get personalized essay topics
+        // Check if helper supports stats injection - adapting based on current file structure
+        // Assuming getPersonalizedEssayTopics can use stats internally or we need to pass them
+        // For now, relying on the existing helper but improving the downstream logic if possible
+        // Actually, let's just make sure we are calling it correctly. 
+        // NOTE: The previous view of personalizatoinHelpers.js showed getPersonalizedEssayTopics taking userId.
+        // We will rely on that function to internally fetch stats as it was designed.
+
         const topics = await getPersonalizedEssayTopics(
             session.user.email,
             parseInt(count, 10)

@@ -38,12 +38,41 @@ export default async function handler(req, res) {
 
     try {
       if (fileType === 'application/pdf') {
-        // Extract text from PDF using pdf-parse (more reliable for Node.js)
-        const dataBuffer = fs.readFileSync(filePath);
-        const pdf = (await import('pdf-parse/lib/pdf-parse.js')).default;
+        // Extract text from PDF using pdfjs-dist directly (legacy build for Node)
+        // This avoids the 'Object.defineProperty' error from pdf-parse/modern builds
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.js');
 
-        const data = await pdf(dataBuffer);
-        extractedText = data.text;
+        // Disable worker for Node.js info
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+
+        const dataBuffer = fs.readFileSync(filePath);
+
+        // Convert Buffer to Uint8Array for pdfjs
+        const uint8Array = new Uint8Array(dataBuffer);
+
+        const loadingTask = pdfjsLib.getDocument({
+          data: uint8Array,
+          useSystemFonts: true, // Try to use system fonts
+          disableFontFace: true, // Disable font face if needed to avoid canvas issues
+        });
+
+        const doc = await loadingTask.promise;
+        const numPages = doc.numPages;
+        let fullTextParts = [];
+
+        for (let i = 1; i <= numPages; i++) {
+          const page = await doc.getPage(i);
+          const textContent = await page.getTextContent();
+
+          // Join items with space, but respect some layout
+          const pageText = textContent.items
+            .map(item => item.str)
+            .join(' ');
+
+          fullTextParts.push(pageText);
+        }
+
+        extractedText = fullTextParts.join('\n\n');
 
         // Clean up text - preserve paragraph breaks but normalize spacing
         extractedText = extractedText
@@ -58,12 +87,12 @@ export default async function handler(req, res) {
           console.warn('PDF text extraction yielded minimal content. File might be scanned or image-based.');
           return res.status(400).json({
             error: 'Could not extract text from PDF',
-            details: 'The PDF appears to be scanned or image-based. Please ensure your DAF is a text-based PDF, or try converting it to a readable format.',
+            details: 'The PDF appears to be scanned or image-based or uses unsupported fonts. Please ensure your DAF is a text-based PDF.',
             suggestion: 'If this is a scanned document, please use OCR software to convert it to a searchable PDF first.'
           });
         }
 
-        console.log(`Successfully extracted ${extractedText.length} characters from PDF`);
+        console.log(`Successfully extracted ${extractedText.length} characters from PDF using pdfjs-dist`);
       } else if (fileType.includes('text/')) {
         // Extract text from text file
         extractedText = fs.readFileSync(filePath, 'utf-8');
@@ -71,10 +100,28 @@ export default async function handler(req, res) {
         // For images, return a placeholder - OCR can be added later
         extractedText = '[Image file detected. Please provide DAF content manually or convert to PDF/Text format.]';
       } else if (fileType.includes('wordprocessingml') || fileType.includes('msword')) {
-        // For Word documents, return a placeholder
-        extractedText = '[Word document detected. Please convert to PDF or provide DAF content manually.]';
+        // Extract text from Word document using mammoth (supports .docx)
+        try {
+          const mammoth = await import('mammoth');
+          const buffer = fs.readFileSync(filePath);
+          const result = await mammoth.extractRawText({ buffer });
+          extractedText = result.value;
+
+          if (result.messages && result.messages.length > 0) {
+            console.log('Mammoth messages:', result.messages);
+          }
+        } catch (docError) {
+          console.error('Word extraction failed:', docError);
+          return res.status(400).json({
+            error: 'Word document extraction failed',
+            details: 'Could not parse the .docx file. Please ensure it is a valid Word document or convert to PDF.'
+          });
+        }
       } else {
-        extractedText = '[Unsupported file type. Please upload PDF or text file.]';
+        return res.status(400).json({
+          error: 'Unsupported file type',
+          details: 'Please upload a PDF, Word (.docx), or text file.'
+        });
       }
 
       // Clean up uploaded file

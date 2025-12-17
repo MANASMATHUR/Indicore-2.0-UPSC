@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/getAuthOptions';
 import { callAIWithFallback } from '@/lib/ai-providers';
+import { getUserPerformanceStats } from '@/lib/personalizationHelpers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -90,6 +91,20 @@ Return ONLY a numbered list of questions. Do not include introductory or conclud
 
       const typeDescription = questionTypeDescriptions[questionType] || 'general interview questions';
 
+      // FETCH USER STATS FOR TRUE PERSONALIZATION
+      let personalizationContext = "";
+      try {
+        const stats = await getUserPerformanceStats(session.user.email);
+        if (stats) {
+          const weakAreas = stats.weakAreas?.join(', ') || "";
+          const strongAreas = stats.strongAreas?.join(', ') || "";
+          if (weakAreas) personalizationContext += `\n- The candidate has struggled in: ${weakAreas}. Include 1-2 questions testing these areas to help them improve.`;
+          if (strongAreas) personalizationContext += `\n- The candidate is strong in: ${strongAreas}. Include 1 challenging question in these areas to push their limits.`;
+        }
+      } catch (err) {
+        console.warn("Failed to fetch user stats for interview personalization", err);
+      }
+
       systemPrompt = `You are an expert interview coach specializing in ${sanitizedExamType} interviews.
 
 **Your Role:**
@@ -99,7 +114,7 @@ Return ONLY a numbered list of questions. Do not include introductory or conclud
 - For personality questions: Focus on values, ethics, motivations, and character assessment.
 - For current affairs: Cover recent events (last 6-12 months), government policies, and socio-economic issues.
 - For situational questions: Present realistic scenarios that test decision-making, leadership, and problem-solving.
-- For technical questions: Cover the candidate's educational background and relevant subject knowledge.
+- For technical questions: Cover the candidate's educational background and relevant subject knowledge.${personalizationContext}
 
 **Response Format:**
 Return a JSON array of question objects. Each object should have:
@@ -116,7 +131,19 @@ Example:
   }
 ]`;
 
-      userPrompt = `Generate ${questionCount} ${typeDescription} for ${sanitizedExamType} interview in JSON format.`;
+      // Add random focus to ensure variety
+      const focusAreas = {
+        personality: ['integrity', 'leadership', 'resilience', 'empathy', 'decision making', 'ethics', 'work-life balance', 'motivation'],
+        current_affairs: ['economy', 'international relations', 'environment', 'science & tech', 'social issues', 'governance', 'defence', 'culture'],
+        situational: ['conflict resolution', 'crisis management', 'resource allocation', 'ethical dilemma', 'team management', 'public service delivery'],
+        technical: ['core concepts', 'recent developments', 'application based', 'theory vs practice', 'interdisciplinary']
+      };
+
+      const areas = focusAreas[questionType] || [];
+      const randomFocus = areas.length > 0 ? areas[Math.floor(Math.random() * areas.length)] : '';
+      const variationPrompt = randomFocus ? ` Focus particularly on ${randomFocus}.` : '';
+
+      userPrompt = `Generate ${questionCount} ${typeDescription} for ${sanitizedExamType} interview in JSON format.${variationPrompt} Ensure questions are distinct from previous sets.`;
 
       // Call AI to generate questions
       const aiResult = await callAIWithFallback(
