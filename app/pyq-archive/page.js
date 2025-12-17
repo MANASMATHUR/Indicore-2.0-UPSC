@@ -6,9 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import { 
-  Database, 
-  ArrowLeft, 
+import {
+  Database,
+  ArrowLeft,
   Search,
   Filter,
   Calendar,
@@ -23,8 +23,11 @@ import {
   FileText,
   GraduationCap,
   Target,
-  X
+  X,
+  Sparkles as SparklesIcon,
+  MessageSquare
 } from 'lucide-react';
+import PersonalizationIndicator from '@/components/PersonalizationIndicator';
 
 const examTypes = ['UPSC', 'PCS', 'MPSC', 'TNPSC', 'BPSC', 'UPPSC', 'MPPSC', 'RAS', 'GPSC', 'KPSC', 'WBPSC', 'SSC'];
 const examLevels = ['Prelims', 'Mains', 'Interview'];
@@ -49,14 +52,14 @@ function PYQArchiveContent() {
   const { data: session } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // View mode: 'archive' or 'subject-wise'
   // Check URL query parameter for initial view mode
   const [viewMode, setViewMode] = useState(() => {
     const view = searchParams?.get('view');
     return view === 'subject-wise' ? 'subject-wise' : 'archive';
   });
-  
+
   // Archive view state
   const [selectedExam, setSelectedExam] = useState('UPSC');
   const [selectedLevel, setSelectedLevel] = useState('');
@@ -68,7 +71,7 @@ function PYQArchiveContent() {
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(null);
   const [archiveViewMode, setArchiveViewMode] = useState('subject'); // 'subject' or 'year'
-  
+
   // Subject-wise view state
   const [selectedExamSW, setSelectedExamSW] = useState('UPSC');
   const [selectedLevelSW, setSelectedLevelSW] = useState('Mains');
@@ -83,6 +86,10 @@ function PYQArchiveContent() {
   const [mostProbableQuestions, setMostProbableQuestions] = useState([]);
   const [loadingProbable, setLoadingProbable] = useState(false);
   const [showMostProbable, setShowMostProbable] = useState(false);
+
+  // Personalization state
+  const [recommendations, setRecommendations] = useState([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   // Generate year options
   const currentYear = new Date().getFullYear();
@@ -134,6 +141,30 @@ function PYQArchiveContent() {
     }
   };
 
+  const loadRecommendations = async () => {
+    if (!session?.user) return;
+
+    setLoadingRecommendations(true);
+    try {
+      const response = await fetch('/api/personalization/recommendations?type=pyq');
+      const data = await response.json();
+
+      if (data.success && data.recommendations?.pyq) {
+        setRecommendations(data.recommendations.pyq);
+      }
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
+
+  useEffect(() => {
+    if (session?.user && viewMode === 'archive') {
+      loadRecommendations();
+    }
+  }, [session, viewMode]);
+
   const handleSearch = async () => {
     setLoading(true);
     try {
@@ -158,15 +189,15 @@ function PYQArchiveContent() {
 
       const response = await fetch(`/api/pyq/search?${params.toString()}`);
       const data = await response.json();
-      
+
       if (data.ok) {
         // Filter out any invalid items on frontend as well
-        const validResults = (data.items || []).filter(item => 
-          item && 
-          item.question && 
-          item.question.trim().length >= 10 && 
-          item.year && 
-          item.year >= 1990 && 
+        const validResults = (data.items || []).filter(item =>
+          item &&
+          item.question &&
+          item.question.trim().length >= 10 &&
+          item.year &&
+          item.year >= 1990 &&
           item.year <= new Date().getFullYear() + 1
         );
         setResults(validResults);
@@ -194,7 +225,7 @@ function PYQArchiveContent() {
 
   const loadAvailablePapers = async () => {
     if (!selectedExamSW) return;
-    
+
     setLoadingPapers(true);
     try {
       const params = new URLSearchParams({
@@ -203,10 +234,10 @@ function PYQArchiveContent() {
       if (selectedLevelSW && selectedLevelSW.trim()) {
         params.append('level', selectedLevelSW.trim());
       }
-      
+
       const response = await fetch(`/api/pyq/papers?${params.toString()}`);
       const data = await response.json();
-      
+
       if (data.ok) {
         const papers = (data.papers || []).filter(p => p && p.paper && p.paper.trim() && p.count > 0);
         setAvailablePapers(papers);
@@ -236,7 +267,7 @@ function PYQArchiveContent() {
 
   const loadThemes = async () => {
     if (!selectedPaper || !selectedExamSW || !selectedLevelSW) return;
-    
+
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -246,16 +277,16 @@ function PYQArchiveContent() {
       if (selectedPaper && selectedPaper.trim()) {
         params.append('paper', selectedPaper.trim());
       }
-      
+
       const response = await fetch(`/api/pyq/themes?${params.toString()}`);
       const data = await response.json();
-      
+
       if (data.ok) {
-        const validThemes = (data.themes || []).filter(theme => 
-          theme && 
-          theme.theme && 
-          theme.questions && 
-          Array.isArray(theme.questions) && 
+        const validThemes = (data.themes || []).filter(theme =>
+          theme &&
+          theme.theme &&
+          theme.questions &&
+          Array.isArray(theme.questions) &&
           theme.questions.length > 0
         );
         setThemes(validThemes);
@@ -270,10 +301,15 @@ function PYQArchiveContent() {
     }
   };
 
+  const handleSolve = (e, questionText) => {
+    e.stopPropagation();
+    router.push(`/chat?question=${encodeURIComponent(questionText)}`);
+  };
+
   const handleQuestionClick = async (question, theme) => {
     setSelectedQuestion({ ...question, theme });
     setQuestionAnalysis(null);
-    
+
     const themeQuestions = themes.find(t => t.theme === theme)?.questions || [];
     const relatedQuestions = themeQuestions
       .filter(q => q._id !== question._id)
@@ -291,7 +327,7 @@ function PYQArchiveContent() {
       });
 
       const analysisData = await analysisResponse.json();
-      
+
       // Also get answer structure analysis
       const structureResponse = await fetch('/api/ai/analyze-question', {
         method: 'POST',
@@ -305,7 +341,7 @@ function PYQArchiveContent() {
       });
 
       const structureData = await structureResponse.json();
-      
+
       // Combine both analyses
       setQuestionAnalysis({
         ...analysisData,
@@ -359,7 +395,7 @@ function PYQArchiveContent() {
     results.forEach(item => {
       const year = item.year || 'Unknown';
       if (!grouped[year]) grouped[year] = {};
-      
+
       let subject = 'General';
       if (item.topicTags && item.topicTags.length > 0) {
         const tags = item.topicTags.join(' ').toLowerCase();
@@ -371,7 +407,7 @@ function PYQArchiveContent() {
         else if (tags.includes('environment')) subject = 'environment';
         else subject = item.topicTags[0] || 'General';
       }
-      
+
       if (!grouped[year][subject]) grouped[year][subject] = [];
       grouped[year][subject].push(item);
     });
@@ -433,11 +469,10 @@ function PYQArchiveContent() {
           <div className="flex gap-2">
             <button
               onClick={() => setViewMode('archive')}
-              className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 ${
-                viewMode === 'archive'
-                  ? 'border-red-600 text-red-600 bg-red-50'
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+              className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 ${viewMode === 'archive'
+                ? 'border-red-600 text-red-600 bg-red-50'
+                : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
             >
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4" />
@@ -446,11 +481,10 @@ function PYQArchiveContent() {
             </button>
             <button
               onClick={() => setViewMode('subject-wise')}
-              className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 ${
-                viewMode === 'subject-wise'
-                  ? 'border-red-600 text-red-600 bg-red-50'
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+              className={`px-6 py-3 font-semibold text-sm transition-colors border-b-2 ${viewMode === 'subject-wise'
+                ? 'border-red-600 text-red-600 bg-red-50'
+                : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
             >
               <div className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
@@ -474,6 +508,42 @@ function PYQArchiveContent() {
                 <p className="text-lg text-gray-600 max-w-3xl mx-auto">
                   Comprehensive database of verified previous year questions organized by subject and year for systematic preparation.
                 </p>
+
+                {/* Personalized Recommendations */}
+                {recommendations.length > 0 && (
+                  <div className="mt-8 mb-4 max-w-4xl mx-auto">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <PersonalizationIndicator
+                        visible={true}
+                        type="PYQ"
+                        reason="Based on your performance analysis"
+                        size="md"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {recommendations.map((rec, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setSearchQuery(rec.topic);
+                            handleSearch();
+                          }}
+                          className="text-left p-3 rounded-lg border border-red-100 bg-red-50/50 hover:bg-red-50 hover:border-red-300 transition-all group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-red-900 line-clamp-1">{rec.topic}</span>
+                            <ChevronRight className="h-4 w-4 text-red-400 group-hover:text-red-600" />
+                          </div>
+                          {rec.reason && (
+                            <p className="text-xs text-red-600/80 mt-1 capitalize">
+                              {rec.reason.replace(/_/g, ' ')}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
@@ -596,11 +666,10 @@ function PYQArchiveContent() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleSubjectFilter('')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      !selectedSubject 
-                        ? 'bg-red-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${!selectedSubject
+                      ? 'bg-red-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     All Subjects
                   </button>
@@ -608,11 +677,10 @@ function PYQArchiveContent() {
                     <button
                       key={subject.value}
                       onClick={() => handleSubjectFilter(subject.value)}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        selectedSubject === subject.value
-                          ? 'bg-red-600 text-white'
-                          : `${subject.color} hover:opacity-80`
-                      }`}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedSubject === subject.value
+                        ? 'bg-red-600 text-white'
+                        : `${subject.color} hover:opacity-80`
+                        }`}
                     >
                       {subject.label}
                     </button>
@@ -702,7 +770,7 @@ function PYQArchiveContent() {
                         return parseInt(b) - parseInt(a);
                       });
                       const totalQuestions = years.reduce((sum, year) => sum + groupedData[subject][year].length, 0);
-                      
+
                       return (
                         <Card key={subject} className="p-6 border border-gray-200">
                           <div className="flex items-center justify-between mb-6">
@@ -713,7 +781,7 @@ function PYQArchiveContent() {
                               <span className="text-sm text-gray-600">({totalQuestions} questions)</span>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-6">
                             {years.map(year => (
                               <div key={year} className="border-l-4 border-red-200 pl-4">
@@ -781,6 +849,13 @@ function PYQArchiveContent() {
                                             </div>
                                           ) : null}
                                         </div>
+                                        <button
+                                          onClick={(e) => handleSolve(e, item.question)}
+                                          className="flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors mr-2"
+                                          title="Solve with AI"
+                                        >
+                                          <MessageSquare className="h-4 w-4" />
+                                        </button>
                                         {item.sourceLink && (
                                           <a
                                             href={item.sourceLink}
@@ -818,7 +893,7 @@ function PYQArchiveContent() {
                     }).map(year => {
                       const subjects = Object.keys(groupedData[year]);
                       const totalQuestions = subjects.reduce((sum, subj) => sum + groupedData[year][subj].length, 0);
-                      
+
                       return (
                         <Card key={year} className="p-6 border border-gray-200">
                           <div className="flex items-center gap-3 mb-6">
@@ -826,7 +901,7 @@ function PYQArchiveContent() {
                             <h3 className="text-2xl font-bold text-gray-900">{year}</h3>
                             <span className="text-sm text-gray-600">({totalQuestions} questions)</span>
                           </div>
-                          
+
                           <div className="space-y-6">
                             {subjects.map(subject => (
                               <div key={subject} className="border-l-4 border-red-200 pl-4">
@@ -895,6 +970,13 @@ function PYQArchiveContent() {
                                             </div>
                                           ) : null}
                                         </div>
+                                        <button
+                                          onClick={(e) => handleSolve(e, item.question)}
+                                          className="flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors mr-2"
+                                          title="Solve with AI"
+                                        >
+                                          <MessageSquare className="h-4 w-4" />
+                                        </button>
                                         {item.sourceLink && (
                                           <a
                                             href={item.sourceLink}
@@ -967,11 +1049,10 @@ function PYQArchiveContent() {
                         setSelectedPaper('');
                         setThemes([]);
                       }}
-                      className={`p-4 rounded-lg border-2 transition-all duration-300 text-left hover-lift ${
-                        selectedLevelSW === level.id
-                          ? 'bg-gradient-to-br from-red-100 to-red-200 text-red-800 border-red-300 shadow-lg scale-105 animate-scale-bounce'
-                          : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md hover:scale-105'
-                      }`}
+                      className={`p-4 rounded-lg border-2 transition-all duration-300 text-left hover-lift ${selectedLevelSW === level.id
+                        ? 'bg-gradient-to-br from-red-100 to-red-200 text-red-800 border-red-300 shadow-lg scale-105 animate-scale-bounce'
+                        : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md hover:scale-105'
+                        }`}
                     >
                       <div className="text-2xl mb-1">{level.icon}</div>
                       <h3 className="font-bold text-sm mb-1">{level.name}</h3>
@@ -1000,11 +1081,10 @@ function PYQArchiveContent() {
                     <button
                       key={idx}
                       onClick={() => setSelectedPaper(paper)}
-                      className={`p-4 rounded-lg border-2 transition-all duration-300 text-left hover-lift ${
-                        isSelected
-                          ? `${getPaperColor(paper)} shadow-lg scale-105 animate-scale-bounce`
-                          : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md hover:scale-105'
-                      }`}
+                      className={`p-4 rounded-lg border-2 transition-all duration-300 text-left hover-lift ${isSelected
+                        ? `${getPaperColor(paper)} shadow-lg scale-105 animate-scale-bounce`
+                        : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md hover:scale-105'
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-bold text-sm">{paper}</h3>
@@ -1054,9 +1134,8 @@ function PYQArchiveContent() {
                       </div>
                     </div>
                     <ChevronRight
-                      className={`h-5 w-5 text-gray-400 transition-transform ${
-                        expandedTheme === idx ? 'rotate-90' : ''
-                      }`}
+                      className={`h-5 w-5 text-gray-400 transition-transform ${expandedTheme === idx ? 'rotate-90' : ''
+                        }`}
                     />
                   </div>
 
@@ -1112,7 +1191,13 @@ function PYQArchiveContent() {
                                 </div>
                               ) : null}
                             </div>
-                            <Sparkles className="h-5 w-5 text-red-600 flex-shrink-0" />
+                            <button
+                              onClick={(e) => handleSolve(e, question.question)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                              title="Solve with AI"
+                            >
+                              <MessageSquare className="h-5 w-5" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1290,7 +1375,7 @@ function PYQArchiveContent() {
                           <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                             <div className="font-medium text-green-900 mb-2">Introduction</div>
                             <div className="text-sm text-green-800">
-                              {typeof questionAnalysis.answerStructure.structure.introduction === 'string' 
+                              {typeof questionAnalysis.answerStructure.structure.introduction === 'string'
                                 ? questionAnalysis.answerStructure.structure.introduction
                                 : JSON.stringify(questionAnalysis.answerStructure.structure.introduction)}
                             </div>

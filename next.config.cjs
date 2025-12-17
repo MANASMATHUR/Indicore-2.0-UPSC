@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const webpack = require('webpack');
+
 const nextConfig = {
   async rewrites() {
     return [
@@ -42,6 +44,7 @@ const nextConfig = {
 
     // Fix for pdfjs-dist identifying as node-canvas dependency
     // Explicitly alias to a mock file
+    if (!config.resolve.alias) config.resolve.alias = {};
     config.resolve.alias.canvas = false;
     config.resolve.alias.encoding = false;
 
