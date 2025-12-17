@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import { useToast } from '@/components/ui/ToastProvider';
+import { extractPDFText } from '@/lib/pdfService';
 
 const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
   const [formData, setFormData] = useState({
@@ -34,6 +35,8 @@ const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
   };
 
   // Import Toast
+
+
 
 
   const handleFileSelect = async (e) => {
@@ -71,41 +74,66 @@ const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
     setErrorMessage('');
 
     try {
-      // Extract text from file
-      const formDataToSend = new FormData();
-      formDataToSend.append('file', file);
+      let text = '';
 
-      const response = await fetch('/api/contact/extract-daf', {
-        method: 'POST',
-        body: formDataToSend,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Check if it's a scanned PDF error
-        if (data.error === 'Could not extract text from PDF' || (data.details && data.details.includes('scanned'))) {
-          console.log('Server extraction failed (scanned PDF). Attempting client-side OCR...');
+      if (file.type === 'application/pdf') {
+        console.log('Extracting PDF text on client...');
+        try {
+          text = await extractPDFText(file);
+        } catch (pdfError) {
+          console.warn('Standard PDF extraction failed, trying OCR...', pdfError);
           await performOCR(file);
           return;
         }
-
-        // Build detailed error message
-        let errorMsg = data.error || 'Failed to extract text from DAF';
-        if (data.details) {
-          errorMsg += `\n${data.details}`;
-        }
-        if (data.suggestion) {
-          errorMsg += `\n\n💡 Suggestion: ${data.suggestion}`;
-        }
-        throw new Error(errorMsg);
+      } else if (file.type === 'text/plain') {
+        text = await file.text();
+      } else if (file.type.startsWith('image/')) {
+        await performOCR(file);
+        return;
+      } else {
+        // For Word docs or other formats, we rely on the server-side extraction
+        // leaving text empty will trigger the fallback logic below
+        console.log('Client-side extraction not supported, falling back to server...');
       }
 
-      setDafExtractedText(data.extractedText || '');
-      if (data.extractedText && data.extractedText.length > 0) {
-        setErrorMessage('');
-        setSubmitStatus(null);
+      if (!text || text.length < 10) {
+        if (file.type === 'application/pdf') {
+          console.log('Low text content, trying OCR...');
+          await performOCR(file);
+          return;
+        }
+        // For non-PDFs, throw error so it triggers server-side processing catch block? 
+        // Actually, the current flow catches errors and shows them. 
+        // We want to trigger a server-side extraction if client-side fails.
+        // But this component logic seems to assume extraction happens HERE before upload?
+        // Ah, handleFileSelect sets dafExtractedText.
+        // If we throw here, it goes to catch block which sets errorMessage.
+        // We need a way to say "upload to server to extract".
+        // But the current architecture expects text to be extracted BEFORE clicking "Generate".
+        // So we should modify this to call an extraction endpoint if client extraction fails/isn't supported.
+
+        // Let's call the extract-daf API endpoint directly here for Word docs!
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const extractRes = await fetch('/api/contact/extract-daf', {
+          method: 'POST',
+          body: formData
+        });
+
+        const extractData = await extractRes.json();
+
+        if (extractData.success && extractData.extractedText) {
+          text = extractData.extractedText;
+        } else {
+          throw new Error(extractData.error || 'Could not extract text from file.');
+        }
       }
+
+      setDafExtractedText(text);
+      setErrorMessage('');
+      setSubmitStatus(null);
+
     } catch (error) {
       console.error('Error extracting DAF:', error);
       setErrorMessage(error.message || 'Failed to extract text from DAF. Please try a different file format.');
@@ -131,8 +159,8 @@ const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
 
       if (file.type === 'application/pdf') {
         // Dynamic import PDFJS (works reliably with v3.11.174)
-        // Use minified build to avoid node-specific dependencies like canvas
-        const pdfjsModule = await import('pdfjs-dist/build/pdf.min.js');
+        // Use mjs build to assume module support
+        const pdfjsModule = await import('pdfjs-dist/build/pdf.mjs');
         const pdfjsLib = pdfjsModule.default || pdfjsModule;
 
         console.log('PDFJS Lib loaded (v3):', pdfjsLib.version);

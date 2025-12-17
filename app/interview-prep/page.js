@@ -16,6 +16,7 @@ import azureSpeechRecognition from '@/lib/azureSpeechRecognition';
 import speechService from '@/lib/speechService';
 import LanguageSelector from '@/components/LanguageSelector';
 import { getLanguagePreference, saveLanguagePreference, translateText } from '@/lib/translationUtils';
+import PersonalizationIndicator from '@/components/PersonalizationIndicator';
 
 export default function InterviewPrepPage() {
   const { data: session, status } = useSession();
@@ -444,6 +445,15 @@ export default function InterviewPrepPage() {
                         variant="primary"
                       />
                     </div>
+
+                    <div className="mb-2">
+                      <PersonalizationIndicator
+                        visible={true}
+                        type="Question"
+                        reason="Adapted to your performance"
+                      />
+                    </div>
+
                     <CardDescription>Answer the question using voice or text input</CardDescription>
                   </div>
                   <div className="flex gap-2">
