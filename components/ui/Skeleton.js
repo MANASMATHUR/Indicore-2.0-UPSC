@@ -102,4 +102,11 @@ export function SkeletonStat() {
   );
 }
 
+/**
+ * Skeleton for lines of text (backward compatibility)
+ */
+export function SkeletonLine({ className, ...props }) {
+  return <Skeleton variant="text" className={className} {...props} />;
+}
+
 export default Skeleton;
