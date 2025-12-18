@@ -146,11 +146,76 @@ indicore/
 - **Translation:** Azure + Google Translate
 - **Auth:** Google OAuth 2.0
 
+### 5. Essay Generation & Translation Engine
+**How we generate multilingual essays instantly.**
+
+```mermaid
+graph TD
+    User([User]) -->|Topic + Language| API[Essay API]
+    API -->|Check| DB{Has Cached Info?}
+    
+    DB -- Yes -->|Return Content| User
+    DB -- No -->|Generate English Base| OpenAI[OpenAI GPT-4]
+    
+    OpenAI -->|English Text| Trans{Target Language?}
+    
+    Trans -- English -->|Save| DB
+    Trans -- Other (Hindi/Tamil..) -->|Translate| Azure[Azure Translator]
+    
+    Azure -->|Localized Essay| DB
+    DB -->|Final Content| User
+
+    style OpenAI fill:#10a37f,stroke:#0d8c6d
+    style Azure fill:#0078d4,stroke:#005a9e
+```
+
+**Founder Note:** "Write Once, Read Everywhere" architecture saves 60% of API costs by caching.
+
+### 6. Smart Flashcard System
+**Turning conversations into study material.**
+
+```mermaid
+graph LR
+    Chat[Chat History] -->|Analyze| AI[Concept Extractor]
+    Note[User Notes] -->|Analyze| AI
+    
+    AI -->|Extract Key Terms| Logic[Flashcard Engine]
+    Logic -->|Create Front/Back| Card[New Flashcard]
+    Card -->|Save| DB[(MongoDB)]
+    
+    DB -->|Spaced Repetition| Review[Review Session]
+```
+
+**Value:** Automates note-taking so students focus on understanding.
+
+### 7. Secure Authentication Flow
+**Enterprise-grade security for user data.**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NextAuth
+    participant Google
+    participant DB as MongoDB
+
+    User->>NextAuth: Click "Login with Google"
+    NextAuth->>Google: OAuth Request
+    Google-->>User: Consent Screen
+    User->>Google: Approves
+    Google-->>NextAuth: Success Token
+    
+    NextAuth->>DB: Upsert User Profile
+    DB-->>NextAuth: User Data
+    NextAuth-->>User: Create Secure Session (JWT)
+```
+
+**Founder Note:** Zero password storage liability.
+
 ---
 
 ## 🏗️ System Architecture & Data Flows
 
-> **For Stakeholders:** These diagrams explain how Indicore's core features work to deliver value.
+> 
 
 ### 1. High-Level Architecture
 **The Big Picture: How users connect to our AI brain.**
@@ -196,7 +261,7 @@ graph TD
 *   **Intelligent:** Every feature is powered by advanced AI models.
 
 ### 2. AI Chatbot Flow
-**How we answer complex UPSC questions instantly.**
+**How we answer UPSC questions instantly.**
 
 ```mermaid
 sequenceDiagram
@@ -214,10 +279,9 @@ sequenceDiagram
     Note right of User: User sees answer < 2s
 ```
 
-**Founder Note:** Streaming ensures zero wait time, keeping engagement high.
 
 ### 3. DAF Interview Analysis
-**Our "Secret Sauce" for personalized interview prep.**
+**Our "data flow" for personalized interview prep.**
 
 ```mermaid
 graph TD
@@ -235,10 +299,6 @@ graph TD
     style AI fill:#f3e8ff,stroke:#9333ea
 ```
 
-**Value Proposition:**
-*   **Hyper-Personalized:** No two users get the same questions.
-*   **Automated:** Replaces expensive 1-on-1 coaching sessions.
-
 ### 4. Real-Time Voice Engine
 **How users can "talk" to Indicore.**
 
@@ -255,7 +315,6 @@ graph LR
     style AI fill:#f3e8ff,stroke:#9333ea
 ```
 
-**Founder Note:** Enables hands-free study for commuters and visually impaired aspirants.
 
 ---
 
@@ -322,63 +381,6 @@ graph LR
 
 ---
 
-## 🔗 API Reference
-
-See [API Reference](./docs/api-reference.md) for complete documentation.
-
-**Quick Links:**
-- [Chat APIs](./docs/api-reference.md#chat-apis)
-- [Mock Test APIs](./docs/api-reference.md#mock-test-apis)
-- [Memory APIs](./docs/api-reference.md#memory-apis)
-- [User APIs](./docs/api-reference.md#user-apis)
-
----
-
-## 🎯 Usage Examples
-
-### Chat with AI
-```javascript
-const response = await fetch('/api/ai/chat-stream', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    message: "Explain federalism in India",
-    chatId: "chat_123"
-  })
-});
-
-// Handle streaming response
-const reader = response.body.getReader();
-// ... read stream
-```
-
-### Save Memory
-```javascript
-await fetch('/api/user/memory', {
-  method: 'POST',
-  body: JSON.stringify({
-    memory: "My goal is to become an IPS officer",
-    category: "goal",
-    importance: "high"
-  })
-});
-```
-
-### Create Mock Test
-```javascript
-const test = await fetch('/api/mock-tests/create', {
-  method: 'POST',
-  body: JSON.stringify({
-    subject: "Polity",
-    difficulty: "medium",
-    questionCount: 25,
-    language: "en"
-  })
-});
-```
-
----
-
 ## 🧪 Testing
 
 ```bash
@@ -396,7 +398,7 @@ npm start
 
 ## 🚢 Deployment
 
-### Vercel (Recommended)
+### Vercel
 1. Push code to GitHub
 2. Import project in Vercel
 3. Add environment variables
@@ -467,14 +469,6 @@ npm run build
 
 ---
 
-## 📚 Documentation
-
-- [Architecture Guide](./docs/architecture.md)
-- [Features Guide](./docs/features-guide.md)
-- [API Reference](./docs/api-reference.md)
-- [Memory System Guide](./docs/smart-memory-extraction.md)
-
----
 
 ## 🤝 Contributing
 
@@ -487,29 +481,16 @@ Contributions are welcome! Please:
 
 ---
 
-## 📄 License
-
-[Add your license here]
 
 ---
 
 ## 📞 Support
 
-- **Documentation:** `/docs` folder
-- **Issues:** GitHub Issues
-- **Email:** [your-email]
+
+- **Email:** indicoreai1@gmail.com
 
 ---
 
-## 🙏 Acknowledgments
-
-- Perplexity AI for LLM capabilities
-- Azure Cognitive Services for speech & translation
-- Google for authentication & translation
-- Next.js team for the amazing framework
-- UPSC aspirants community for feedback
-
----
 
 ## 🗺️ Roadmap
 
@@ -522,20 +503,12 @@ Contributions are welcome! Please:
 - Multi-language support
 - Learning analytics
 
-### Planned 🔮
-- Mobile app (React Native)
-- Offline mode
-- Study groups & collaboration
-- Video explanations
-- Advanced gamification
-- Expert Q&A sessions
-- Performance predictions
 
 ---
 
 **Version:** 2.0  
-**Last Updated:** December 11, 2024  
-**Status:** Production Ready ✅
+**Last Updated:** December 18, 2025
+**Status:** Production Ready 
 
 ---
 
