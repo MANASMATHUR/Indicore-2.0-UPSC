@@ -25,9 +25,8 @@
 
 - Node.js 18+ installed
 - MongoDB database (local or Atlas)
-- Redis (optional, for caching)
 - API Keys for:
-  - Perplexity AI
+  - OpenAI
   - Azure Cognitive Services (Speech + Translator)
   - Google Cloud (OAuth + Translate)
 
@@ -68,7 +67,7 @@ GOOGLE_CLIENT_ID=<your-google-client-id>
 GOOGLE_CLIENT_SECRET=<your-google-client-secret>
 
 # AI Services
-PERPLEXITY_API_KEY=<your-perplexity-key>
+OPENAI_API_KEY=<your-openai-key>
 
 # Azure Services
 AZURE_SPEECH_KEY=<your-azure-speech-key>
@@ -141,77 +140,14 @@ indicore/
 - **Cache:** Redis (optional)
 
 ### AI & Services
-- **LLM:** Perplexity AI (Sonar Pro)
+- **LLM:** OpenAI (GPT-4)
 - **Speech:** Azure Cognitive Services
 - **Translation:** Azure + Google Translate
 - **Auth:** Google OAuth 2.0
 
-### 5. Essay Generation & Translation Engine
-**How we generate multilingual essays instantly.**
-
-```mermaid
-graph TD
-    User([User]) -->|Topic + Language| API[Essay API]
-    API -->|Check| DB{Has Cached Info?}
-    
-    DB -- Yes -->|Return Content| User
-    DB -- No -->|Generate English Base| OpenAI[OpenAI GPT-4]
-    
-    OpenAI -->|English Text| Trans{Target Language?}
-    
-    Trans -- English -->|Save| DB
-    Trans -- Other (Hindi/Tamil..) -->|Translate| Azure[Azure Translator]
-    
-    Azure -->|Localized Essay| DB
-    DB -->|Final Content| User
-
-    style OpenAI fill:#10a37f,stroke:#0d8c6d
-    style Azure fill:#0078d4,stroke:#005a9e
-```
-
-**Founder Note:** "Write Once, Read Everywhere" architecture saves 60% of API costs by caching.
-
-### 6. Smart Flashcard System
-**Turning conversations into study material.**
-
-```mermaid
-graph LR
-    Chat[Chat History] -->|Analyze| AI[Concept Extractor]
-    Note[User Notes] -->|Analyze| AI
-    
-    AI -->|Extract Key Terms| Logic[Flashcard Engine]
-    Logic -->|Create Front/Back| Card[New Flashcard]
-    Card -->|Save| DB[(MongoDB)]
-    
-    DB -->|Spaced Repetition| Review[Review Session]
-```
-
-**Value:** Automates note-taking so students focus on understanding.
-
-### 7. Secure Authentication Flow
-**Enterprise-grade security for user data.**
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant NextAuth
-    participant Google
-    participant DB as MongoDB
-
-    User->>NextAuth: Click "Login with Google"
-    NextAuth->>Google: OAuth Request
-    Google-->>User: Consent Screen
-    User->>Google: Approves
-    Google-->>NextAuth: Success Token
-    
-    NextAuth->>DB: Upsert User Profile
-    DB-->>NextAuth: User Data
-    NextAuth-->>User: Create Secure Session (JWT)
-```
-
-**Founder Note:** Zero password storage liability.
 
 ---
+
 
 ## 🏗️ System Architecture & Data Flows
 
@@ -316,7 +252,95 @@ graph LR
 ```
 
 
+### 5. Essay Generation & Translation Engine
+**How we generate multilingual essays instantly.**
+
+```mermaid
+graph TD
+    User([User]) -->|Topic + Language| API[Essay API]
+    API -->|Check| DB{Has Cached Info?}
+    
+    DB -->|Yes: Return Content| User
+    DB -->|No: Generate English Base| OpenAI[OpenAI GPT-4]
+    
+    OpenAI -->|English Text| Trans{Target Language?}
+    
+    Trans -->|English: Save| DB
+    Trans -->|Other: Translate| Azure[Azure Translator]
+    
+    Azure -->|Localized Essay| DB
+    DB -->|Final Content| User
+
+    style OpenAI fill:#10a37f,stroke:#0d8c6d
+    style Azure fill:#0078d4,stroke:#005a9e
+```
+
+**Founder Note:** "Write Once, Read Everywhere" architecture saves 60% of API costs by caching.
+
+### 6. Smart Flashcard System
+**Turning conversations into study material.**
+
+```mermaid
+graph LR
+    Chat[Chat History] -->|Analyze| AI[Concept Extractor]
+    Note[User Notes] -->|Analyze| AI
+    
+    AI -->|Extract Key Terms| Logic[Flashcard Engine]
+    Logic -->|Create Front/Back| Card[New Flashcard]
+    Card -->|Save| DB[(MongoDB)]
+    
+    DB -->|Spaced Repetition| Review[Review Session]
+```
+
+**Value:** Automates note-taking so students focus on understanding.
+
+### 7. Secure Authentication Flow
+**Enterprise-grade security for user data.**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NextAuth
+    participant Google
+    participant DB as MongoDB
+
+    User->>NextAuth: Click "Login with Google"
+    NextAuth->>Google: OAuth Request
+    Google-->>User: Consent Screen
+    User->>Google: Approves
+    Google-->>NextAuth: Success Token
+    
+    NextAuth->>DB: Upsert User Profile
+    DB-->>NextAuth: User Data
+    NextAuth-->>User: Create Secure Session (JWT)
+```
+
+**Founder Note:** Zero password storage liability.
+
+### 8. Mock Test Lifecycle
+**End-to-end flow from generation to performance insights.**
+
+```mermaid
+graph TD
+    User([User]) -->|1. Setup| Create[Test Creator]
+    Create -->|2. Generate JSON| AI[AI Subject Expert]
+    AI -->|3. Save Schema| DB[(MongoDB)]
+    
+    DB -->|4. Serve| FE[Exam Interface]
+    FE -->|5. Answers| Submit[Submission Engine]
+    
+    Submit -->|6. Grade| Evaluator[AI Evaluator]
+    Evaluator -->|7. Insights| Analytics[Performance Dashboard]
+    Analytics -->|8. Recommend| User
+
+    style AI fill:#f3e8ff,stroke:#9333ea
+    style Evaluator fill:#fee2e2,stroke:#ef4444
+```
+
+**Value:** Provides instant feedback that usually takes human tutors days to provide.
+
 ---
+
 
 ## 🎨 Core Features
 
@@ -494,7 +518,7 @@ Contributions are welcome! Please:
 
 ## 🗺️ Roadmap
 
-### Completed ✅
+### Completed 
 - AI Chat with streaming
 - Memory system (explicit + automatic)
 - Mock tests with AI evaluation
