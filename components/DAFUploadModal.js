@@ -158,19 +158,29 @@ const DAFUploadModal = ({ isOpen, onClose, onQuestionsGenerated }) => {
       let extractedText = '';
 
       if (file.type === 'application/pdf') {
-        // Dynamic import PDFJS (works reliably with v3.11.174)
-        // Use mjs build to assume module support
-        const pdfjsModule = await import('pdfjs-dist/build/pdf.mjs');
-        const pdfjsLib = pdfjsModule.default || pdfjsModule;
+        // Load PDF.js from CDN to avoid webpack issues
+        const PDFJS_VERSION = '3.11.174';
+        const PDFJS_CDN_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
+        const WORKER_CDN_URL = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
 
+        // Load PDF.js if not already loaded
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = PDFJS_CDN_URL;
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load PDF.js'));
+            document.head.appendChild(script);
+          });
+        }
+
+        const pdfjsLib = window.pdfjsLib;
         console.log('PDFJS Lib loaded (v3):', pdfjsLib.version);
-
-        // Explicitly use version 3.11.174
-        const workerVersion = '3.11.174';
 
         // Set worker source
         if (pdfjsLib.GlobalWorkerOptions) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${workerVersion}/build/pdf.worker.min.js`;
+          pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_CDN_URL;
           console.log(`PDFJS Worker configured: ${pdfjsLib.GlobalWorkerOptions.workerSrc}`);
         }
 

@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const webpack = require('webpack');
+const path = require('path');
 
 const nextConfig = {
   async rewrites() {
@@ -47,6 +48,13 @@ const nextConfig = {
     if (!config.resolve.alias) config.resolve.alias = {};
     config.resolve.alias.canvas = false;
     config.resolve.alias.encoding = false;
+
+    // Externalize canvas for both client and server
+    // This tells webpack not to bundle canvas at all
+    if (!isServer) {
+      config.externals = config.externals || {};
+      config.externals.canvas = 'canvas';
+    }
 
     // Use IgnorePlugin as backup
     config.plugins.push(
