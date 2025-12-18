@@ -148,6 +148,117 @@ indicore/
 
 ---
 
+## 🏗️ System Architecture & Data Flows
+
+> **For Stakeholders:** These diagrams explain how Indicore's core features work to deliver value.
+
+### 1. High-Level Architecture
+**The Big Picture: How users connect to our AI brain.**
+
+```mermaid
+graph TD
+    %% Styling
+    classDef user fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
+    classDef app fill:#f0fdf4,stroke:#16a34a,stroke-width:2px;
+    classDef ai fill:#f3e8ff,stroke:#9333ea,stroke-width:2px;
+
+    User([User Device]) -->|1. Request| App[Indicore Platform]
+    
+    subgraph "Core Engine"
+        App -->|2. Verify| Auth[Secure Auth]
+        App -->|3. Route| Router{Feature Router}
+        
+        Router -->|Chat| Chat[AI Chatbot]
+        Router -->|Study| Quiz[Mock Tests]
+        Router -->|Speak| Voice[Voice Engine]
+        Router -->|Upload| DAF[DAF Analyzer]
+    end
+
+    subgraph "Intelligence Layer"
+        Chat <-->|Context| DB[(Database)]
+        Chat <-->|Reasoning| LLM[AI Model]
+        Voice <-->|Process| Speech[Speech AI]
+        DAF -->|Read| OCR[Text Extractor]
+    end
+
+    LLM -->|4. Smart Answer| App
+    Speech -->|4. Voice Response| App
+    App -->|5. Personalized Result| User
+
+    class User user;
+    class App,Auth,Router,Chat,Quiz,Voice,DAF app;
+    class LLM,Speech,OCR,DB ai;
+```
+
+**Value Proposition:**
+*   **Scalable:** Built to handle thousands of concurrent users.
+*   **Secure:** Enterprise-grade authentication protects user data.
+*   **Intelligent:** Every feature is powered by advanced AI models.
+
+### 2. AI Chatbot Flow
+**How we answer complex UPSC questions instantly.**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as Indicore Chat
+    participant Brain as AI Brain (Ctx + LLM)
+
+    User->>App: Asks: "Explain Article 21"
+    App->>App: Checks User History
+    App->>Brain: Send Question + History
+    Brain->>Brain: Retrieving Legal Context...
+    Brain->>Brain: Formulating Answer...
+    Brain-->>App: Streams Answer Token-by-Token
+    App-->>User: Displays Answer in Real-time
+    Note right of User: User sees answer < 2s
+```
+
+**Founder Note:** Streaming ensures zero wait time, keeping engagement high.
+
+### 3. DAF Interview Analysis
+**Our "Secret Sauce" for personalized interview prep.**
+
+```mermaid
+graph TD
+    User([User]) -->|Uploads PDF| DAF[DAF Upload]
+    DAF -->|Extract| Text[Raw Text]
+    Text -->|Analyze| AI[AI Profiler]
+    
+    AI -->|Detect| Weak[Weaknesses]
+    AI -->|Identify| Strong[Strengths]
+    AI -->|Map| Hobbies[Hobbies & Interests]
+    
+    Weak & Strong & Hobbies -->|Generate| Q[Personalized Questions]
+    Q -->|Display| User
+
+    style AI fill:#f3e8ff,stroke:#9333ea
+```
+
+**Value Proposition:**
+*   **Hyper-Personalized:** No two users get the same questions.
+*   **Automated:** Replaces expensive 1-on-1 coaching sessions.
+
+### 4. Real-Time Voice Engine
+**How users can "talk" to Indicore.**
+
+```mermaid
+graph LR
+    User([User Voice]) -->|Audio| App[Mic Input]
+    App -->|Stream| STT[Speech-to-Text]
+    STT -->|Text| AI[AI Processor]
+    AI -->|Response| TTS[Text-to-Speech]
+    TTS -->|Audio| Speaker([User Speaker])
+    
+    style STT fill:#fff7ed,stroke:#c2410c
+    style TTS fill:#fff7ed,stroke:#c2410c
+    style AI fill:#f3e8ff,stroke:#9333ea
+```
+
+**Founder Note:** Enables hands-free study for commuters and visually impaired aspirants.
+
+---
+
 ## 🎨 Core Features
 
 ### 1. Intelligent Chat Assistant
