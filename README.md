@@ -58,7 +58,6 @@ Create `.env.local` based on dotenv requirements:
 ```env
 # Database
 MONGODB_URI=mongodb://localhost:27017/indicore
-REDIS_URL=redis://localhost:6379 (optional)
 
 # Authentication
 NEXTAUTH_URL=http://localhost:3000
@@ -137,7 +136,6 @@ indicore/
 - **Runtime:** Node.js
 - **API:** Next.js API Routes
 - **Database:** MongoDB + Mongoose
-- **Cache:** Redis (optional)
 
 ### AI & Services
 - **LLM:** OpenAI (GPT-4)
@@ -145,13 +143,9 @@ indicore/
 - **Translation:** Azure + Google Translate
 - **Auth:** Google OAuth 2.0
 
-
 ---
 
-
 ## 🏗️ System Architecture & Data Flows
-
-> 
 
 ### 1. High-Level Architecture
 **The Big Picture: How users connect to our AI brain.**
@@ -215,7 +209,6 @@ sequenceDiagram
     Note right of User: User sees answer < 2s
 ```
 
-
 ### 3. DAF Interview Analysis
 **Our "data flow" for personalized interview prep.**
 
@@ -250,7 +243,6 @@ graph LR
     style TTS fill:#fff7ed,stroke:#c2410c
     style AI fill:#f3e8ff,stroke:#9333ea
 ```
-
 
 ### 5. Essay Generation & Translation Engine
 **How we generate multilingual essays instantly.**
@@ -340,7 +332,6 @@ graph TD
 **Value:** Provides instant feedback that usually takes human tutors days to provide.
 
 ---
-
 
 ## 🎨 Core Features
 
@@ -493,7 +484,6 @@ npm run build
 
 ---
 
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
@@ -505,16 +495,11 @@ Contributions are welcome! Please:
 
 ---
 
-
----
-
 ## 📞 Support
-
 
 - **Email:** indicoreai1@gmail.com
 
 ---
-
 
 ## 🗺️ Roadmap
 
@@ -526,7 +511,6 @@ Contributions are welcome! Please:
 - Interview preparation
 - Multi-language support
 - Learning analytics
-
 
 ---
 
