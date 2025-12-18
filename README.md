@@ -255,7 +255,6 @@ graph LR
     style AI fill:#f3e8ff,stroke:#9333ea
 ```
 
-**Founder Note:** Enables hands-free study for commuters and visually impaired aspirants.
 
 ---
 
