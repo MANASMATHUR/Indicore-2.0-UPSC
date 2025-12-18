@@ -559,8 +559,29 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     // Use fullConversationHistory (uncompressed) to ensure PYQ keywords aren't lost from long queries
     const historyPyqContextForSolve = extractPyqContextFromHistory(fullConversationHistory);
     const previousPyqContextForSolve = cachedPyqContextForSolve || historyPyqContextForSolve;
-    const PYQ_SOLVE_REGEX_EARLY = /^(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|these\s+questions?|those\s+questions?|the\s+questions?|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
-    const isSolveRequestEarly = previousPyqContextForSolve && PYQ_SOLVE_REGEX_EARLY.test(message.trim());
+    // Improved solve request detection function
+    const isDirectQuestionToSolve = (msg) => {
+      const trimmedMsg = msg.trim();
+
+      // Pattern 1: "solve/answer/explain this [previous year] question: <actual question text>"
+      // This catches embedded questions after colons
+      if (/(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain)\s+(?:this|the)\s+(?:previous\s+year\s+)?question\s*:\s*.{20,}/i.test(trimmedMsg)) {
+        return true;
+      }
+
+      // Pattern 2: Solve requests with previous context (for follow-up questions)
+      if (previousPyqContextForSolve) {
+        // Allow polite prefixes before solve commands
+        const PYQ_SOLVE_REGEX_WITH_CONTEXT = /^(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|this|these\s+questions?|those\s+questions?|the\s+questions?|this\s+question|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
+        if (PYQ_SOLVE_REGEX_WITH_CONTEXT.test(trimmedMsg)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    const isSolveRequestEarly = isDirectQuestionToSolve(message);
 
     // Only treat as new PYQ query if it's NOT a solve request
     const isPyqQueryResult = !isSolveRequestEarly && initialMessageIsPyq;
