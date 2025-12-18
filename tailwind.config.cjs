@@ -73,11 +73,18 @@ module.exports = {
 			animation: {
 				'fade-in': 'fadeIn 0.5s ease-in-out',
 				'slide-in': 'slideIn 0.3s ease-out',
+				'slide-up': 'slideUp 0.4s ease-out',
+				'slide-down': 'slideDown 0.4s ease-out',
 				'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
 				'float': 'float 6s ease-in-out infinite',
 				'glow': 'glow 2s ease-in-out infinite alternate',
 				'shimmer': 'shimmer 2s linear infinite',
 				'spin-slow': 'spin 12s linear infinite',
+				'ripple': 'ripple 0.6s ease-out',
+				'loading-progress': 'loadingProgress 2s ease-in-out infinite',
+				'bounce-in': 'bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+				'scale-in': 'scaleIn 0.3s ease-out',
+				'toast-progress': 'toastProgress linear forwards',
 			},
 			keyframes: {
 				fadeIn: {
@@ -87,6 +94,14 @@ module.exports = {
 				slideIn: {
 					'0%': { transform: 'translateX(-20px)', opacity: '0' },
 					'100%': { transform: 'translateX(0)', opacity: '1' }
+				},
+				slideUp: {
+					'0%': { transform: 'translateY(20px)', opacity: '0' },
+					'100%': { transform: 'translateY(0)', opacity: '1' }
+				},
+				slideDown: {
+					'0%': { transform: 'translateY(-20px)', opacity: '0' },
+					'100%': { transform: 'translateY(0)', opacity: '1' }
 				},
 				float: {
 					'0%, 100%': { transform: 'translateY(0)' },
@@ -99,7 +114,29 @@ module.exports = {
 				shimmer: {
 					'from': { backgroundPosition: '0 0' },
 					'to': { backgroundPosition: '-200% 0' },
-				}
+				},
+				ripple: {
+					'0%': { transform: 'scale(0)', opacity: '1' },
+					'100%': { transform: 'scale(4)', opacity: '0' },
+				},
+				loadingProgress: {
+					'0%': { backgroundPosition: '200% 0' },
+					'100%': { backgroundPosition: '-200% 0' },
+				},
+				bounceIn: {
+					'0%': { transform: 'scale(0.3)', opacity: '0' },
+					'50%': { transform: 'scale(1.05)' },
+					'70%': { transform: 'scale(0.9)' },
+					'100%': { transform: 'scale(1)', opacity: '1' },
+				},
+				scaleIn: {
+					'0%': { transform: 'scale(0.95)', opacity: '0' },
+					'100%': { transform: 'scale(1)', opacity: '1' },
+				},
+				toastProgress: {
+					'0%': { width: '100%' },
+					'100%': { width: '0%' },
+				},
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

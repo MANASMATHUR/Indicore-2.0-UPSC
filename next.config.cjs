@@ -49,13 +49,6 @@ const nextConfig = {
     config.resolve.alias.canvas = false;
     config.resolve.alias.encoding = false;
 
-    // Externalize canvas for both client and server
-    // This tells webpack not to bundle canvas at all
-    if (!isServer) {
-      config.externals = config.externals || {};
-      config.externals.canvas = 'canvas';
-    }
-
     // Use IgnorePlugin as backup
     config.plugins.push(
       new webpack.IgnorePlugin({
@@ -112,7 +105,7 @@ const nextConfig = {
     return config;
   },
 
-  // Headers for performance
+  // Headers for performance and security
   async headers() {
     return [
       {
@@ -133,6 +126,28 @@ const nextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin'
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(self), geolocation=(), interest-cohort=()'
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://vercel.live https://cdnjs.cloudflare.com https://unpkg.com https://cdn.jsdelivr.net blob:",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "img-src 'self' data: https: blob:",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "connect-src 'self' https://api.perplexity.ai https://api.openai.com https://api.cognitive.microsofttranslator.com https://cdnjs.cloudflare.com https://unpkg.com https://cdn.jsdelivr.net wss: ws: https://tessdata.projectnaptha.com",
+              "worker-src 'self' blob: https://unpkg.com https://cdn.jsdelivr.net",
+              "media-src 'self' blob:",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'self'",
+              "upgrade-insecure-requests"
+            ].join('; ')
           },
         ],
       },

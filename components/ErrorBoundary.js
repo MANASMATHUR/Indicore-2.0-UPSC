@@ -13,6 +13,39 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // Log error to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error caught by ErrorBoundary:', error, errorInfo);
+    }
+
+    // Log to error tracking service in production (e.g., Sentry)
+    if (typeof window !== 'undefined' && window.Sentry) {
+      window.Sentry.captureException(error, {
+        extra: errorInfo,
+        tags: {
+          errorBoundary: true,
+        },
+      });
+    }
+
+    // You can also send errors to your own logging endpoint
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        fetch('/api/log-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: error.toString(),
+            errorInfo: errorInfo,
+            timestamp: new Date().toISOString(),
+          }),
+        }).catch(() => {
+          // Silently fail if logging endpoint is unavailable
+        });
+      } catch (e) {
+        // Prevent logging errors from causing issues
+      }
+    }
   }
 
   render() {
