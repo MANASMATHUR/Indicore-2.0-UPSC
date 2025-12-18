@@ -25,9 +25,8 @@
 
 - Node.js 18+ installed
 - MongoDB database (local or Atlas)
-- Redis (optional, for caching)
 - API Keys for:
-  - Perplexity AI
+  - OpenAI
   - Azure Cognitive Services (Speech + Translator)
   - Google Cloud (OAuth + Translate)
 
@@ -59,7 +58,7 @@ Create `.env.local` based on dotenv requirements:
 ```env
 # Database
 MONGODB_URI=mongodb://localhost:27017/indicore
-REDIS_URL=redis://localhost:6379 (optional)
+
 
 # Authentication
 NEXTAUTH_URL=http://localhost:3000
@@ -68,7 +67,7 @@ GOOGLE_CLIENT_ID=<your-google-client-id>
 GOOGLE_CLIENT_SECRET=<your-google-client-secret>
 
 # AI Services
-PERPLEXITY_API_KEY=<your-perplexity-key>
+OPEN_AI_API_KEY=<your-openai-key>
 
 # Azure Services
 AZURE_SPEECH_KEY=<your-azure-speech-key>
@@ -138,10 +137,9 @@ indicore/
 - **Runtime:** Node.js
 - **API:** Next.js API Routes
 - **Database:** MongoDB + Mongoose
-- **Cache:** Redis (optional)
 
 ### AI & Services
-- **LLM:** Perplexity AI (Sonar Pro)
+- **LLM:** OpenAI 
 - **Speech:** Azure Cognitive Services
 - **Translation:** Azure + Google Translate
 - **Auth:** Google OAuth 2.0
