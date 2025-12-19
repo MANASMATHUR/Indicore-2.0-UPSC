@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
 import Chat from '@/models/Chat';
 import MockTest from '@/models/MockTest';
+import MockTestResult from '@/models/MockTestResult';
 import UserInteraction from '@/models/UserInteraction';
 
 /**
@@ -42,33 +43,17 @@ export default async function handler(req, res) {
                 .select('messages lastMessageAt createdAt')
                 .lean();
 
-            // Get ACTUAL mock test data from database
-            const mockTests = await MockTest.find({
-                createdBy: user._id
+            // Get ACTUAL mock test results from database
+            const mockTestResults = await MockTestResult.find({
+                userId: user._id
             })
-                .select('totalMarks questions userAnswers score createdAt')
+                .select('percentage marksObtained totalMarks createdAt testTitle subjectWisePerformance topicWisePerformance')
+                .sort({ createdAt: -1 })
                 .lean();
 
             // Calculate actual mock test stats
-            const mockTestsCompleted = mockTests.length;
-            const mockTestScores = mockTests
-                .map(test => {
-                    // Calculate score if not already stored
-                    if (test.score !== undefined) return test.score;
-
-                    // Calculate from userAnswers if available
-                    if (test.userAnswers && test.questions) {
-                        let correct = 0;
-                        test.questions.forEach((q, idx) => {
-                            if (q.questionType === 'mcq' && test.userAnswers[idx] === q.correctAnswer) {
-                                correct++;
-                            }
-                        });
-                        return test.questions.length > 0 ? (correct / test.questions.length) * 100 : 0;
-                    }
-                    return 0;
-                })
-                .filter(score => score > 0);
+            const mockTestsCompleted = mockTestResults.length;
+            const mockTestScores = mockTestResults.map(r => r.percentage);
 
             const averageScore = mockTestScores.length > 0
                 ? Math.round(mockTestScores.reduce((sum, score) => sum + score, 0) / mockTestScores.length)
@@ -91,8 +76,8 @@ export default async function handler(req, res) {
 
             // Calculate study streak (days with activity)
             const activityDates = new Set();
-            [...recentChats, ...chatInteractions, ...mockTests].forEach(item => {
-                const date = new Date(item.createdAt || item.timestamp || item.lastMessageAt);
+            [...recentChats, ...chatInteractions, ...mockTestResults].forEach(item => {
+                const date = new Date(item.createdAt || item.timestamp || item.lastMessageAt || item.completedAt);
                 activityDates.add(date.toISOString().split('T')[0]);
             });
 
@@ -120,7 +105,7 @@ export default async function handler(req, res) {
             const analytics = {
                 overview: {
                     totalStudyTime: totalTimeSpent,
-                    totalQuestions: user.statistics?.totalQuestions || mockTests.reduce((sum, test) => sum + (test.questions?.length || 0), 0),
+                    totalQuestions: user.statistics?.totalQuestions || mockTestResults.reduce((sum, result) => sum + (result.totalQuestions || 0), 0),
                     totalChats: recentChats.length,
                     studyStreak: studyStreak,
                     lastStudyDate: sortedDates.length > 0 ? new Date(sortedDates[0]) : user.statistics?.lastStudyDate
