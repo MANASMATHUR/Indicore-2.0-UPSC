@@ -47,7 +47,7 @@ export default async function handler(req, res) {
             const mockTestResults = await MockTestResult.find({
                 userId: user._id
             })
-                .select('percentage marksObtained totalMarks createdAt testTitle subjectWisePerformance topicWisePerformance')
+                .select('percentage marksObtained totalMarks createdAt testTitle subjectWisePerformance topicWisePerformance timeSpent totalQuestions')
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -70,9 +70,25 @@ export default async function handler(req, res) {
                 .lean();
 
             console.log(`Fetched ${chatInteractions.length} interactions`);
-            const totalTimeSpent = chatInteractions.reduce((sum, interaction) => {
-                return sum + (interaction.metadata?.timeSpent || 5); // Estimate 5 min per chat if not tracked
-            }, 0);
+
+            // Calculate total study time
+            // 1. Time from tracked interactions (UserInteraction model)
+            const chatInteractionTime = chatInteractions.reduce((sum, interaction) => {
+                return sum + (interaction.metadata?.timeSpent || 0); // UserInteraction metadata.timeSpent is in seconds? 
+                // Wait, UserInteraction schema says metadata.timeSpent is in seconds.
+            }, 0) / 60; // Convert to minutes
+
+            // 2. Time from mock tests
+            const mockTestTime = mockTestResults.reduce((sum, r) => sum + (r.timeSpent || 0), 0) / 60;
+
+            // 3. Estimate time for chats that didn't have tracked interactions (5 mins per chat)
+            // We'll just use a simpler approach: use max(trackedTime, chats * 5) or similar
+            // Better: use user.statistics.totalStudyTime as a base if it's larger
+            const estimatedChatTime = recentChats.length * 5;
+
+            const totalTimeSpent = Math.round(
+                Math.max(estimatedChatTime, chatInteractionTime) + mockTestTime
+            );
 
             // Calculate study streak (days with activity)
             const activityDates = new Set();
@@ -105,7 +121,7 @@ export default async function handler(req, res) {
             const analytics = {
                 overview: {
                     totalStudyTime: totalTimeSpent,
-                    totalQuestions: user.statistics?.totalQuestions || mockTestResults.reduce((sum, result) => sum + (result.totalQuestions || 0), 0),
+                    totalQuestions: user.statistics?.totalQuestions || (mockTestResults.reduce((sum, r) => sum + (r.totalQuestions || 0), 0) + (recentChats.length * 2)), // Estimate 2 questions per chat
                     totalChats: recentChats.length,
                     studyStreak: studyStreak,
                     lastStudyDate: sortedDates.length > 0 ? new Date(sortedDates[0]) : user.statistics?.lastStudyDate
