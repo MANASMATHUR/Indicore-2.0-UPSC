@@ -28,6 +28,7 @@ export default function UnifiedDashboard() {
     const [isOpen, setIsOpen] = useState(false);
     const [recommendations, setRecommendations] = useState(null);
     const [userStats, setUserStats] = useState(null);
+    const [resumableChat, setResumableChat] = useState(null);
     const [loading, setLoading] = useState(true);
     const dropdownRef = useRef(null);
 
@@ -55,10 +56,11 @@ export default function UnifiedDashboard() {
 
     const fetchDashboardData = async () => {
         try {
-            // Fetch recommendations and user stats in parallel
-            const [recsRes, statsRes] = await Promise.all([
+            // Fetch recommendations, user stats, and resume conversation in parallel
+            const [recsRes, statsRes, resumeRes] = await Promise.all([
                 fetch('/api/personalization/recommendations?type=all'),
-                fetch('/api/user/analytics')
+                fetch('/api/user/analytics'),
+                fetch('/api/personalization/resume-conversation')
             ]);
 
             if (recsRes.ok) {
@@ -72,6 +74,13 @@ export default function UnifiedDashboard() {
                 const statsData = await statsRes.json();
                 if (statsData.success) {
                     setUserStats(statsData.statistics);
+                }
+            }
+
+            if (resumeRes.ok) {
+                const resumeData = await resumeRes.json();
+                if (resumeData.success && resumeData.hasResumable) {
+                    setResumableChat(resumeData);
                 }
             }
         } catch (error) {
@@ -150,104 +159,130 @@ export default function UnifiedDashboard() {
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
                                 Loading insights...
                             </div>
-                        ) : hasRecommendations ? (
+                        ) : (
                             <div className="space-y-4">
-                                {/* PYQ Recommendations */}
-                                {recommendations.pyq && recommendations.pyq.length > 0 && (
-                                    <div>
+                                {/* Resume Conversation (NEW) */}
+                                {resumableChat && (
+                                    <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-100 dark:border-indigo-900/40 relative overflow-hidden group">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <Target className="w-4 h-4 text-red-600" />
-                                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Practice Areas</h4>
-                                            <Badge variant="outline" className="ml-auto text-[10px] border-red-200 text-red-600 bg-red-50">
-                                                Priority
-                                            </Badge>
+                                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Unfinished Session</span>
+                                            <span className="text-[10px] text-gray-500 ml-auto">{resumableChat.conversation.timeSince}</span>
                                         </div>
-                                        <div className="space-y-2">
-                                            {recommendations.pyq.slice(0, 2).map((item, i) => (
-                                                <Link key={i} href={`/pyq-archive?search=${encodeURIComponent(item.topic)}`}>
-                                                    <div className="p-2.5 rounded-lg bg-red-50/50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors cursor-pointer border border-red-100 dark:border-red-900/30 group">
-                                                        <div className="flex items-start justify-between gap-2">
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-red-700 dark:group-hover:text-red-300">
-                                                                    {item.topic}
+                                        <h5 className="text-[13px] font-bold text-gray-900 dark:text-white line-clamp-1 mb-1">
+                                            "{resumableChat.conversation.lastMessage}"
+                                        </h5>
+                                        <p className="text-[11px] text-gray-600 dark:text-gray-400 mb-3 truncate">
+                                            {resumableChat.recommendedAction.suggestion}
+                                        </p>
+                                        <Link href={`/chat?id=${resumableChat.conversation.chatId}`}>
+                                            <Button size="sm" className="w-full h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-0 shadow-sm">
+                                                Resume Discussion
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                )}
+
+                                {hasRecommendations ? (
+                                    <>
+                                        {/* PYQ Recommendations */}
+                                        {recommendations.pyq && recommendations.pyq.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <Target className="w-4 h-4 text-red-600" />
+                                                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Practice Areas</h4>
+                                                    <Badge variant="outline" className="ml-auto text-[10px] border-red-200 text-red-600 bg-red-50">
+                                                        Priority
+                                                    </Badge>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {recommendations.pyq.slice(0, 2).map((item, i) => (
+                                                        <Link key={i} href={`/pyq-archive?search=${encodeURIComponent(item.topic)}`}>
+                                                            <div className="p-2.5 rounded-lg bg-red-50/50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors cursor-pointer border border-red-100 dark:border-red-900/30 group">
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-red-700 dark:group-hover:text-red-300">
+                                                                            {item.topic}
+                                                                        </p>
+                                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                                            {item.reason ? item.reason.replace(/_/g, ' ') : 'Recommended'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-red-500 flex-shrink-0 mt-0.5" />
+                                                                </div>
+                                                            </div>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Mock Test Recommendations */}
+                                        {recommendations.mock_test && recommendations.mock_test.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <BarChart3 className="w-4 h-4 text-purple-600" />
+                                                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Recommended Tests</h4>
+                                                </div>
+                                                <Link href="/mock-tests">
+                                                    <div className="p-3 rounded-lg bg-purple-50/50 dark:bg-purple-900/10 hover:bg-purple-100 dark:hover:bg-purple-900/20 transition-colors cursor-pointer border border-purple-100 dark:border-purple-900/30 group">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                                                                    {recommendations.mock_test[0].title}
                                                                 </p>
                                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                                    {item.reason ? item.reason.replace(/_/g, ' ') : 'Recommended'}
+                                                                    {recommendations.mock_test[0].difficulty} • {recommendations.mock_test[0].reason?.replace(/_/g, ' ') || 'Tailored for you'}
                                                                 </p>
                                                             </div>
-                                                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-red-500 flex-shrink-0 mt-0.5" />
+                                                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-purple-500" />
                                                         </div>
                                                     </div>
                                                 </Link>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Mock Test Recommendations */}
-                                {recommendations.mock_test && recommendations.mock_test.length > 0 && (
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <BarChart3 className="w-4 h-4 text-purple-600" />
-                                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Recommended Tests</h4>
-                                        </div>
-                                        <Link href="/mock-tests">
-                                            <div className="p-3 rounded-lg bg-purple-50/50 dark:bg-purple-900/10 hover:bg-purple-100 dark:hover:bg-purple-900/20 transition-colors cursor-pointer border border-purple-100 dark:border-purple-900/30 group">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                                                            {recommendations.mock_test[0].title}
-                                                        </p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                            {recommendations.mock_test[0].difficulty} • {recommendations.mock_test[0].reason?.replace(/_/g, ' ') || 'Tailored for you'}
-                                                        </p>
-                                                    </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-purple-500" />
-                                                </div>
                                             </div>
-                                        </Link>
-                                    </div>
-                                )}
+                                        )}
 
-                                {/* Essay Topics */}
-                                {recommendations.essay && recommendations.essay.length > 0 && (
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <FileText className="w-4 h-4 text-emerald-600" />
-                                            <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Essay Topics</h4>
-                                        </div>
-                                        <Link href={`/writing-tools?tab=essay&topic=${encodeURIComponent(recommendations.essay[0].topic)}`}>
-                                            <div className="p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-colors cursor-pointer border border-emerald-100 dark:border-emerald-900/30 group">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
-                                                            {recommendations.essay[0].topic}
-                                                        </p>
-                                                    </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-emerald-500 flex-shrink-0 mt-0.5" />
+                                        {/* Essay Topics */}
+                                        {recommendations.essay && recommendations.essay.length > 0 && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <FileText className="w-4 h-4 text-emerald-600" />
+                                                    <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Essay Topics</h4>
                                                 </div>
+                                                <Link href={`/writing-tools?tab=essay&topic=${encodeURIComponent(recommendations.essay[0].topic)}`}>
+                                                    <div className="p-2.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-colors cursor-pointer border border-emerald-100 dark:border-emerald-900/30 group">
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
+                                                                    {recommendations.essay[0].topic}
+                                                                </p>
+                                                            </div>
+                                                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-emerald-500 flex-shrink-0 mt-0.5" />
+                                                        </div>
+                                                    </div>
+                                                </Link>
                                             </div>
-                                        </Link>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <BookOpen className="w-8 h-8 text-purple-600" />
+                                        </div>
+                                        <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Start Your Journey</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 max-w-[280px] mx-auto">
+                                            Complete activities to get personalized recommendations!
+                                        </p>
+                                        <div className="flex gap-2 justify-center">
+                                            <Link href="/mock-tests">
+                                                <Button size="sm" variant="outline" className="text-xs">Take a Test</Button>
+                                            </Link>
+                                            <Link href="/pyq-archive">
+                                                <Button size="sm" variant="outline" className="text-xs">Browse PYQs</Button>
+                                            </Link>
+                                        </div>
                                     </div>
                                 )}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8">
-                                <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <BookOpen className="w-8 h-8 text-purple-600" />
-                                </div>
-                                <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Start Your Journey</h4>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 max-w-[280px] mx-auto">
-                                    Complete activities to get personalized recommendations!
-                                </p>
-                                <div className="flex gap-2 justify-center">
-                                    <Link href="/mock-tests">
-                                        <Button size="sm" variant="outline" className="text-xs">Take a Test</Button>
-                                    </Link>
-                                    <Link href="/pyq-archive">
-                                        <Button size="sm" variant="outline" className="text-xs">Browse PYQs</Button>
-                                    </Link>
-                                </div>
                             </div>
                         )}
                     </div>
