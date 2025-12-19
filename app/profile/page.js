@@ -29,8 +29,12 @@ import {
     Zap,
     Trophy,
     Star,
-    TrendingDown
+    TrendingDown,
+    Lightbulb,
+    HelpCircle
 } from 'lucide-react';
+import AnimatedCard from '@/components/AnimatedCard';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function DashboardPage() {
     const { data: session, status } = useSession();
@@ -39,6 +43,7 @@ export default function DashboardPage() {
     const [userStats, setUserStats] = useState(null);
     const [recentActivity, setRecentActivity] = useState([]);
     const [chatInsights, setChatInsights] = useState(null);
+    const [resumableChat, setResumableChat] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -54,10 +59,11 @@ export default function DashboardPage() {
 
     const fetchDashboardData = async () => {
         try {
-            const [recsRes, statsRes, chatRes] = await Promise.all([
+            const [recsRes, statsRes, chatRes, resumeRes] = await Promise.all([
                 fetch('/api/personalization/recommendations?type=all'),
                 fetch('/api/user/analytics'),
-                fetch('/api/personalization/chat-insights')
+                fetch('/api/personalization/chat-insights'),
+                fetch('/api/personalization/resume-conversation')
             ]);
 
             if (recsRes.ok) {
@@ -78,6 +84,13 @@ export default function DashboardPage() {
                 const chatData = await chatRes.json();
                 if (chatData.success && chatData.hasData) {
                     setChatInsights(chatData.insights);
+                }
+            }
+
+            if (resumeRes.ok) {
+                const resumeData = await resumeRes.json();
+                if (resumeData.success && resumeData.hasResumable) {
+                    setResumableChat(resumeData);
                 }
             }
         } catch (error) {
@@ -119,20 +132,139 @@ export default function DashboardPage() {
         100
     );
 
+    // AI COACH  - Mapping weak areas to features
+    const getAICoachRecommendation = () => {
+        if (!chatInsights || !chatInsights.difficultyLevel) return [];
+
+        const streak = studyStreak;
+        const score = averageScore;
+
+        const isWeakInTopic = (topic) => {
+            return topic && score < 40;
+        };
+
+        const coachInsights = [];
+
+        // 1. Streak Motivation
+        if (streak > 0) {
+            coachInsights.push({
+                type: 'motivation',
+                title: 'Keep the momentum!',
+                text: `You've studied for ${streak} consecutive days. Consistency is the secret to UPSC success.`,
+                icon: <Zap className="w-5 h-5 text-yellow-500" />,
+                action: 'Continue Session'
+            });
+        }
+
+        // 2. Feature Mapping (History/Polity/etc)
+        const historyData = chatInsights.topTopics?.find(t => t.topic === 'History');
+        if (historyData && isWeakInTopic('History')) {
+            coachInsights.push({
+                type: 'feature_map',
+                title: 'History Deep Dive',
+                text: 'History seems to be a focus area but could use more practice. Try writing a History Essay or practicing specific PYQs.',
+                icon: <FileText className="w-5 h-5 text-purple-500" />,
+                links: [
+                    { label: 'History Essay', href: '/writing-tools?tab=essay&topic=Modern Indian History' },
+                    { label: 'History PYQs', href: '/pyq-archive?search=History' }
+                ]
+            });
+        }
+
+        // 3. General "Weak Area" detection from chatInsights (if available)
+        const favoriteSubject = chatInsights.favoriteSubjects?.[0]?.subject;
+        if (favoriteSubject && score < 50) {
+            coachInsights.push({
+                type: 'improvement',
+                title: `Master ${favoriteSubject}`,
+                text: `You're discussing ${favoriteSubject} a lot. Turn that interest into results with a targeted Mock Test.`,
+                icon: <Target className="w-5 h-5 text-red-500" />,
+                links: [{ label: 'Practice Test', href: '/mock-tests' }]
+            });
+        }
+
+        // Fallback for new users
+        if (coachInsights.length === 0) {
+            coachInsights.push({
+                type: 'onboarding',
+                title: 'Ready to Start?',
+                text: 'Take your first Mock Test to see where you stand and get personalized study tips.',
+                icon: <Sparkles className="w-5 h-5 text-purple-500" />,
+                links: [{ label: 'First Mock Test', href: '/mock-tests' }]
+            });
+        }
+
+        return coachInsights;
+    };
+
+    const coachInsights = getAICoachRecommendation();
+
+    // Dynamic Greeting Logic
+    const getDynamicGreeting = () => {
+        const hour = new Date().getHours();
+        let timeGreeting = "Good Morning";
+        if (hour >= 12 && hour < 17) timeGreeting = "Good Afternoon";
+        else if (hour >= 17) timeGreeting = "Good Evening";
+
+        const topTopic = chatInsights?.topTopics?.[0]?.topic;
+
+        if (studyStreak >= 3) {
+            return {
+                title: `You're on fire, ${userName.split(' ')[0]}! 🔥`,
+                subtitle: `${studyStreak} days streak and counting. Ready to conquer ${topTopic || 'the syllabus'} today?`
+            };
+        }
+
+        if (topTopic) {
+            return {
+                title: `${timeGreeting}, ${userName.split(' ')[0]}! 👋`,
+                subtitle: `Continuing your study in ${topTopic}? You're making great progress.`
+            };
+        }
+
+        return {
+            title: `Welcome back, ${userName.split(' ')[0]}! 👋`,
+            subtitle: userEmail
+        };
+    };
+
+    const greeting = getDynamicGreeting();
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-indigo-50/20 dark:from-gray-950 dark:via-purple-950/20 dark:to-indigo-950/10">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white py-12 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-7xl mx-auto">
-                    <div className="flex items-start justify-between">
+            {/* Header / Hero */}
+            <div className="relative bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-700 text-white py-14 px-4 sm:px-6 lg:px-8 overflow-hidden">
+                {/* Decorative background elements */}
+                <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+                    <div className="absolute -top-24 -left-24 w-96 h-96 bg-white rounded-full blur-3xl animate-pulse"></div>
+                    <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-purple-400 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+                </div>
+
+                <div className="max-w-7xl mx-auto relative z-10">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6 }}
+                        className="flex items-start justify-between"
+                    >
                         <div>
-                            <h1 className="text-4xl font-bold mb-2">
-                                Welcome back, {userName.split(' ')[0]}! 👋
+                            <h1 className="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight">
+                                {greeting.title}
                             </h1>
-                            <p className="text-purple-100 text-lg">{userEmail}</p>
+                            <p className="text-purple-100 text-xl font-medium opacity-90 max-w-2xl">
+                                {greeting.subtitle}
+                            </p>
                         </div>
-                        <Sparkles className="w-12 h-12 text-purple-200 animate-pulse" />
-                    </div>
+                        <motion.div
+                            animate={{
+                                scale: [1, 1.1, 1],
+                                rotate: [0, 5, -5, 0]
+                            }}
+                            transition={{ duration: 4, repeat: Infinity }}
+                        >
+                            <Sparkles className="w-14 h-14 text-purple-200" />
+                        </motion.div>
+                    </motion.div>
 
                     {/* Quick Stats Bar */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
@@ -177,12 +309,91 @@ export default function DashboardPage() {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Column - Main Content */}
-                    <div className="lg:col-span-2 space-y-6">
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* AI Coach Insights (Personalized Section) */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 px-1">
+                                <Brain className="w-5 h-5 text-purple-600" />
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">AI Coach Insights</h2>
+                                <Badge variant="secondary" className="ml-2 bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">New</Badge>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <AnimatePresence mode="popLayout">
+                                    {coachInsights.map((insight, idx) => (
+                                        <AnimatedCard
+                                            key={idx}
+                                            delay={idx * 0.1}
+                                            className="h-full bg-white dark:bg-gray-900 border border-purple-100 dark:border-purple-900/30 rounded-2xl shadow-md overflow-hidden"
+                                        >
+                                            <div className="p-5 flex flex-col h-full">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+                                                        {insight.icon}
+                                                    </div>
+                                                    <h3 className="font-bold text-gray-900 dark:text-gray-100">{insight.title}</h3>
+                                                </div>
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 flex-grow leading-relaxed">
+                                                    {insight.text}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2 mt-auto pt-4 border-t border-gray-50 dark:border-gray-800">
+                                                    {insight.links ? insight.links.map((link, lIdx) => (
+                                                        <Link key={lIdx} href={link.href} className="flex-1">
+                                                            <Button size="sm" variant="outline" className="w-full text-xs font-semibold py-1 hover:bg-purple-600 hover:text-white transition-all">
+                                                                {link.label}
+                                                            </Button>
+                                                        </Link>
+                                                    )) : (
+                                                        <Button size="sm" className="w-full text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white">
+                                                            {insight.action}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </AnimatedCard>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        </section>
+
+                        {/* Pick Up Where You Left Off */}
+                        {resumableChat && (
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 px-1">
+                                    <Clock className="w-5 h-5 text-indigo-600" />
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Pick Up Where You Left Off</h2>
+                                </div>
+                                <AnimatedCard className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-200 dark:border-indigo-900/40 rounded-2xl overflow-hidden glassmorphism">
+                                    <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Badge className="bg-indigo-600 text-white border-0">{resumableChat.conversation.topic}</Badge>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">{resumableChat.conversation.timeSince}</span>
+                                            </div>
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 line-clamp-1">
+                                                "{resumableChat.conversation.lastMessage}"
+                                            </h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                {resumableChat.recommendedAction.suggestion}
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-3 w-full md:w-auto">
+                                            <Link href={`/chat?id=${resumableChat.conversation.chatId}`} className="flex-1 md:flex-none">
+                                                <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 px-8">
+                                                    Resume Discussion
+                                                </Button>
+                                            </Link>
+                                        </div>
+                                    </div>
+                                </AnimatedCard>
+                            </section>
+                        )}
+
                         {/* Study Progress */}
-                        <Card className="border-purple-100 dark:border-purple-900/30 shadow-lg">
+                        <Card className="border-purple-100 dark:border-purple-900/30 shadow-xl rounded-2xl overflow-hidden glassmorphism">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <TrendingUp className="w-5 h-5 text-purple-600" />
@@ -208,6 +419,28 @@ export default function DashboardPage() {
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Predictive Score Trend */}
+                                    <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-900/30 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-white dark:bg-purple-900/40 rounded-lg shadow-sm">
+                                                <TrendingUp className="w-4 h-4 text-purple-600" />
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Score Trend</div>
+                                                <div className="text-sm font-bold text-gray-900 dark:text-white">
+                                                    {averageScore > 0 ? `Target: ${Math.min(100, Math.round(averageScore * 1.1))}% next test` : 'Start mock tests to see trend'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {averageScore > 0 && (
+                                            <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0 flex items-center gap-1">
+                                                <Sparkles className="w-3 h-3" />
+                                                Improving
+                                            </Badge>
+                                        )}
+                                    </div>
+
                                     <div className="grid grid-cols-3 gap-4 pt-4">
                                         <div className="text-center">
                                             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -495,6 +728,51 @@ export default function DashboardPage() {
                                             Start studying today to begin your streak!
                                         </p>
                                     )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Predictive Milestone */}
+                        <Card className="border-purple-100 dark:border-purple-900/30 shadow-lg bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 rounded-2xl">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Trophy className="w-5 h-5 text-yellow-600" />
+                                    Next Milestone
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1.5 font-medium">
+                                            <span className="text-gray-600 dark:text-gray-400">7-Day Streak Badge</span>
+                                            <span className="text-purple-600">{studyStreak}/7 days</span>
+                                        </div>
+                                        <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 transition-all duration-1000"
+                                                style={{ width: `${(studyStreak / 7) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    {mockTestsCompleted < 10 && (
+                                        <div>
+                                            <div className="flex justify-between text-xs mb-1.5 font-medium">
+                                                <span className="text-gray-600 dark:text-gray-400">PYQ Explorer Badge</span>
+                                                <span className="text-indigo-600">{mockTestsCompleted}/10 tests</span>
+                                            </div>
+                                            <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-indigo-400 to-purple-500 transition-all duration-1000"
+                                                    style={{ width: `${(mockTestsCompleted / 10) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="pt-2">
+                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 italic text-center">
+                                            "You're remarkably consistent. The next milestone is just {7 - (studyStreak % 7)} days away!"
+                                        </p>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
