@@ -267,7 +267,7 @@ graph TD
     style Azure fill:#0078d4,stroke:#005a9e
 ```
 
-**Founder Note:** "Write Once, Read Everywhere" architecture saves 60% of API costs by caching.
+
 
 ### 6. Smart Flashcard System
 **Turning conversations into study material.**
@@ -307,7 +307,6 @@ sequenceDiagram
     NextAuth-->>User: Create Secure Session (JWT)
 ```
 
-**Founder Note:** Zero password storage liability.
 
 ### 8. Mock Test Lifecycle
 **End-to-end flow from generation to performance insights.**
