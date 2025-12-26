@@ -15,18 +15,18 @@ function parseDate(dateString) {
   if (!dateString) return new Date();
   if (dateString instanceof Date) return dateString;
 
-  // Try ISO format first
+
   const isoDate = new Date(dateString);
   if (!isNaN(isoDate.getTime())) return isoDate;
 
-  // Try DD-MM-YYYY format
+  //  DD-MM-YYYY format
   const ddmmyyyy = dateString.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
 
-  // Try YYYY-MM-DD format
+  //  YYYY-MM-DD format
   const yyyymmdd = dateString.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (yyyymmdd) {
     const [, year, month, day] = yyyymmdd;

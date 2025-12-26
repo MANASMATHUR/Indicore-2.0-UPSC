@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card';
 import {
   Database,
   ArrowLeft,
+  ArrowRight,
   Search,
   Filter,
   Calendar,
@@ -25,9 +26,14 @@ import {
   Target,
   X,
   Sparkles as SparklesIcon,
-  MessageSquare
+  MessageSquare,
+  TrendingUp,
+  Zap
 } from 'lucide-react';
 import PersonalizationIndicator from '@/components/PersonalizationIndicator';
+import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PYQQuestionCard from '@/components/PYQQuestionCard';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const examTypes = ['UPSC', 'PCS', 'MPSC', 'TNPSC', 'BPSC', 'UPPSC', 'MPPSC', 'RAS', 'GPSC', 'KPSC', 'WBPSC', 'SSC'];
 const examLevels = ['Prelims', 'Mains', 'Interview'];
@@ -301,9 +307,27 @@ function PYQArchiveContent() {
     }
   };
 
-  const handleSolve = (e, questionText) => {
+  const handleSolve = (e, item) => {
     e.stopPropagation();
-    router.push(`/chat?question=${encodeURIComponent(questionText)}`);
+    const questionText = typeof item === 'string' ? item : item.question;
+    const params = new URLSearchParams({
+      question: questionText
+    });
+
+    if (typeof item === 'object') {
+      if (item.year) params.append('year', item.year);
+      if (item.paper) params.append('paper', item.paper);
+      const examVal = item.exam || selectedExam || selectedExamSW;
+      if (examVal) params.append('exam', examVal);
+
+      const levelVal = item.level || selectedLevel || selectedLevelSW;
+      if (levelVal) params.append('level', levelVal);
+
+      const themeVal = item.theme || selectedSubject;
+      if (themeVal) params.append('theme', themeVal);
+    }
+
+    router.push(`/chat?${params.toString()}`);
   };
 
   const handleQuestionClick = async (question, theme) => {
@@ -508,42 +532,6 @@ function PYQArchiveContent() {
                 <p className="text-lg text-gray-600 max-w-3xl mx-auto">
                   Comprehensive database of verified previous year questions organized by subject and year for systematic preparation.
                 </p>
-
-                {/* Personalized Recommendations */}
-                {recommendations.length > 0 && (
-                  <div className="mt-8 mb-4 max-w-4xl mx-auto">
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                      <PersonalizationIndicator
-                        visible={true}
-                        type="PYQ"
-                        reason="Based on your performance analysis"
-                        size="md"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {recommendations.map((rec, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setSearchQuery(rec.topic);
-                            handleSearch();
-                          }}
-                          className="text-left p-3 rounded-lg border border-red-100 bg-red-50/50 hover:bg-red-50 hover:border-red-300 transition-all group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-red-900 line-clamp-1">{rec.topic}</span>
-                            <ChevronRight className="h-4 w-4 text-red-400 group-hover:text-red-600" />
-                          </div>
-                          {rec.reason && (
-                            <p className="text-xs text-red-600/80 mt-1 capitalize">
-                              {rec.reason.replace(/_/g, ' ')}
-                            </p>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Stats */}
@@ -689,6 +677,8 @@ function PYQArchiveContent() {
               </div>
             </div>
           </section>
+
+          {/* Heat Map Visualization - Removed */}
 
           {/* Most Probable Questions Section */}
           {showMostProbable && mostProbableQuestions.length > 0 && (

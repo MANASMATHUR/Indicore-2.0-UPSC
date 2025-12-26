@@ -71,7 +71,7 @@ const userInteractionSchema = new mongoose.Schema({
         category: String,
         difficulty: {
             type: String,
-            enum: ['easy', 'medium', 'hard', '']
+            enum: ['easy', 'medium', 'hard', 'adaptive', '']
         },
 
         // Time tracking

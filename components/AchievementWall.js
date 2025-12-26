@@ -11,14 +11,14 @@ export default function AchievementWall({ achievements }) {
     const displayItems = [...(achievements || []), ...placeholders];
 
     return (
-        <Card className="border border-purple-100 dark:border-purple-900/30 bg-white dark:bg-gray-900 shadow-xl shadow-purple-500/5 h-full">
-            <CardHeader className="pb-3 border-b border-purple-50 dark:border-purple-900/20 bg-purple-50/20 dark:bg-purple-900/5">
+        <Card className="border border-rose-100 dark:border-rose-900/30 bg-white dark:bg-gray-900 shadow-xl shadow-rose-500/5 h-full">
+            <CardHeader className="pb-3 border-b border-rose-50 dark:border-rose-900/20 bg-rose-50/20 dark:bg-rose-900/5">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                        <Award className="w-4 h-4 text-purple-600" />
+                        <Award className="w-4 h-4 text-rose-600" />
                         Hall of Fame
                     </CardTitle>
-                    <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                    <span className="text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
                         {achievements?.length || 0} Unlocked
                     </span>
                 </div>

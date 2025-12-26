@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -60,7 +61,7 @@ export default function PersonalizedDashboard() {
 
     if (loading) {
         return (
-            <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-purple-50/30 border-y border-purple-100">
+            <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-rose-50/30 border-y border-rose-100">
                 <div className="max-w-7xl mx-auto text-center">
                     <div className="animate-pulse space-y-4">
                         <div className="h-8 bg-gray-200 rounded w-1/4 mx-auto"></div>
@@ -86,11 +87,11 @@ export default function PersonalizedDashboard() {
     }
 
     return (
-        <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-purple-50/30 dark:from-gray-950 dark:to-purple-900/10 border-y border-purple-100 dark:border-purple-900/20">
+        <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-rose-50/30 dark:from-gray-950 dark:to-rose-900/10 border-y border-rose-100 dark:border-rose-900/20">
             <div className="max-w-7xl mx-auto">
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg shadow-lg shadow-purple-500/20 text-white">
+                        <div className="p-2 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg shadow-lg shadow-rose-500/20 text-white">
                             <Sparkles className="w-5 h-5" />
                         </div>
                         <div>
@@ -118,8 +119,8 @@ export default function PersonalizedDashboard() {
                     {/* Empty State */}
                     {!hasRecommendations && (
                         <div className="col-span-full bg-white dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center">
-                            <div className="w-16 h-16 bg-purple-50 dark:bg-purple-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Sparkles className="w-8 h-8 text-purple-600" />
+                            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Sparkles className="w-8 h-8 text-rose-600" />
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                                 Start Your Journey
@@ -204,21 +205,49 @@ export default function PersonalizedDashboard() {
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-3">
-                                {recommendations.pyq.slice(0, 3).map((item, i) => (
-                                    <Link key={i} href={`/pyq-archive?search=${encodeURIComponent(item.topic)}`}>
-                                        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group cursor-pointer border border-transparent hover:border-red-100 dark:hover:border-red-900/30 mb-2">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="font-medium text-sm text-gray-900 dark:text-gray-100 group-hover:text-red-700 dark:group-hover:text-red-300 line-clamp-1">
-                                                    {item.topic}
-                                                </span>
-                                                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-red-500 transition-transform group-hover:translate-x-0.5" />
-                                            </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-                                                {item.reason ? item.reason.replace(/_/g, ' ') : 'Recommended based on analysis'}
-                                            </p>
-                                        </div>
-                                    </Link>
-                                ))}
+                                <AnimatePresence>
+                                    {recommendations.pyq.slice(0, 3).map((item, i) => (
+                                        <motion.div
+                                            key={i}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: i * 0.1 }}
+                                        >
+                                            <Link href={`/pyq-archive?search=${encodeURIComponent(item.topic)}`}>
+                                                <div className="p-3.5 rounded-xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 hover:to-red-50 dark:hover:to-red-900/10 transition-all duration-300 group cursor-pointer border border-gray-100 dark:border-gray-700 hover:border-red-200 dark:hover:border-red-800 shadow-sm hover:shadow-md mb-2 relative overflow-hidden">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest ${item.intelligenceLabel === 'Critical Area' ? 'bg-red-600 text-white' :
+                                                                item.intelligenceLabel === 'High Yield' ? 'bg-amber-500 text-white' :
+                                                                    'bg-indigo-600 text-white'
+                                                                }`}>
+                                                                {item.intelligenceLabel || 'Topic'}
+                                                            </span>
+                                                            {item.relevanceScore > 90 && (
+                                                                <Badge variant="outline" className="text-[9px] border-red-500/20 text-red-600 bg-red-500/5">
+                                                                    MOST RELEVANT
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-gray-400 tabular-nums">{item.relevanceScore}%</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="font-bold text-sm text-gray-900 dark:text-gray-100 group-hover:text-red-700 dark:group-hover:text-red-300 line-clamp-1">
+                                                            {item.topic}
+                                                        </span>
+                                                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-red-500 transition-all group-hover:translate-x-1" />
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 italic">
+                                                        {item.reason ? item.reason.replace(/_/g, ' ') : 'Analysis suggests this is a high-priority area.'}
+                                                    </p>
+
+                                                    {/* Micro-sparkle decor */}
+                                                    <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-red-500/5 blur-lg rounded-full group-hover:bg-red-500/10 transition-colors" />
+                                                </div>
+                                            </Link>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
                                 <Link href="/pyq-archive" className="inline-flex items-center text-xs font-medium text-red-600 hover:text-red-700 mt-2">
                                     View all recommendations <ArrowRight className="w-3 h-3 ml-1" />
                                 </Link>
@@ -228,23 +257,23 @@ export default function PersonalizedDashboard() {
 
                     {/* Mock Test Recommendations */}
                     {hasRecommendations && recommendations.mock_test && recommendations.mock_test.length > 0 && (
-                        <Card className="border border-purple-100 dark:border-purple-900/30 bg-white dark:bg-gray-900 shadow-xl shadow-purple-500/5 hover:shadow-purple-500/10 transition-all duration-300">
-                            <CardHeader className="pb-3 border-b border-purple-50 dark:border-purple-900/20 bg-purple-50/30 dark:bg-purple-900/10">
+                        <Card className="border border-lime-100 dark:border-lime-900/30 bg-white dark:bg-gray-900 shadow-xl shadow-lime-500/5 hover:shadow-lime-500/10 transition-all duration-300">
+                            <CardHeader className="pb-3 border-b border-lime-50 dark:border-lime-900/20 bg-lime-50/30 dark:bg-lime-900/10">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <BarChart3 className="w-4 h-4 text-purple-600" />
-                                        <CardTitle className="text-base text-purple-900 dark:text-purple-100">Recommended Tests</CardTitle>
+                                        <BarChart3 className="w-4 h-4 text-lime-600" />
+                                        <CardTitle className="text-base text-lime-900 dark:text-lime-100">Recommended Tests</CardTitle>
                                     </div>
-                                    <Badge variant="outline" className="text-[10px] border-purple-200 text-purple-600 bg-purple-50">Adaptive</Badge>
+                                    <Badge variant="outline" className="text-[10px] border-lime-200 text-lime-600 bg-lime-50">Adaptive</Badge>
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-4 space-y-3">
                                 {recommendations.mock_test.slice(0, 2).map((test, i) => (
-                                    <div key={i} className="p-3 rounded-lg border border-purple-100 dark:border-purple-900/30 bg-purple-50/20 dark:bg-purple-900/10">
+                                    <div key={i} className="p-3 rounded-lg border border-lime-100 dark:border-lime-900/30 bg-lime-50/20 dark:bg-lime-900/10">
                                         <div className="flex justify-between items-start mb-2">
-                                            <h4 className="font-semibold text-sm text-purple-900 dark:text-purple-100">{test.title}</h4>
+                                            <h4 className="font-semibold text-sm text-lime-900 dark:text-lime-100">{test.title}</h4>
                                             {test.difficulty && (
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white dark:bg-black/20 border border-purple-200 text-purple-700 capitalize">
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white dark:bg-black/20 border border-lime-200 text-lime-700 capitalize">
                                                     {test.difficulty}
                                                 </span>
                                             )}
@@ -253,7 +282,7 @@ export default function PersonalizedDashboard() {
                                             {test.reason ? test.reason.replace(/_/g, ' ') : 'Tailored to improve your weak areas'}
                                         </p>
                                         <Link href="/mock-tests">
-                                            <Button size="sm" variant="outline" className="w-full text-xs h-8 border-purple-200 hover:bg-purple-50 hover:text-purple-700">
+                                            <Button size="sm" variant="outline" className="w-full text-xs h-8 border-lime-200 hover:bg-lime-50 hover:text-lime-700">
                                                 Take Test
                                             </Button>
                                         </Link>

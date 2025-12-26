@@ -31,6 +31,16 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 export default function ChatInterface({ user }) {
   const searchParams = useSearchParams();
   const initialQuestion = searchParams.get('question');
+  // Extract extra PYQ metadata
+  const pyqMeta = useMemo(() => ({
+    year: searchParams.get('year'),
+    paper: searchParams.get('paper'),
+    exam: searchParams.get('exam'),
+    level: searchParams.get('level'),
+    theme: searchParams.get('theme'),
+    isPyqSolve: !!searchParams.get('question') && (!!searchParams.get('year') || !!searchParams.get('paper') || !!searchParams.get('theme'))
+  }), [searchParams]);
+
   const [hasHandledInitialQuestion, setHasHandledInitialQuestion] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -355,7 +365,8 @@ export default function ChatInterface({ user }) {
             language: messageLanguage,
             enableCaching: settings.enableCaching,
             quickResponses: settings.quickResponses,
-            notesContext: window.currentNotesContext // Pass notes context if available
+            notesContext: window.currentNotesContext, // Pass notes context if available
+            pyqMetadata: window.currentPyqMetadata // Pass rich PYQ metadata
           }),
           signal: controller.signal
         });
@@ -375,6 +386,7 @@ export default function ChatInterface({ user }) {
         let fullResponse = '';
         let buffer = '';
 
+        let isTruthAnchored = false;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -395,6 +407,9 @@ export default function ChatInterface({ user }) {
               if (data && data !== '[DONE]') {
                 try {
                   const parsed = JSON.parse(data);
+                  if (parsed.truthAnchored) {
+                    isTruthAnchored = true;
+                  }
                   if (parsed.content) {
                     fullResponse += parsed.content;
                     appendStreamingChunk(parsed.content);
@@ -422,6 +437,7 @@ export default function ChatInterface({ user }) {
             if (data !== '[DONE]') {
               try {
                 const parsed = JSON.parse(data);
+                if (parsed.truthAnchored) isTruthAnchored = true;
                 const chunkText = extractChunkText(parsed) || parsed.choices?.[0]?.delta?.content;
                 if (typeof chunkText === 'string' && chunkText.length > 0) {
                   fullResponse += chunkText;
@@ -468,6 +484,8 @@ export default function ChatInterface({ user }) {
           if (shouldRetry) {
             streamingRetryingRef.current = true;
             showToast('Response looked incomplete, retrying once more...', { type: 'warning' });
+            // Add a 1s delay before retrying to avoid hitting the 800ms rate limit on the server
+            await new Promise(resolve => setTimeout(resolve, 1000));
             return await handleStreamingResponse(message, messageLanguage, chatId, isVoiceInput, retryAttempt + 1);
           }
           // After retry is exhausted, use fallback if response is still below minFallbackLength
@@ -479,7 +497,7 @@ export default function ChatInterface({ user }) {
           // This handles cases where responses are slightly short but still valid
         }
 
-        await addAIMessage(chatId, finalResponse, messageLanguage);
+        await addAIMessage(chatId, finalResponse, messageLanguage, isTruthAnchored);
         setStreamingMessage('');
 
         if (isVoiceInput) await speakResponse(finalResponse, speechLanguage);
@@ -520,6 +538,13 @@ export default function ChatInterface({ user }) {
       window.currentNotesContext = context;
     } else {
       window.currentNotesContext = null;
+    }
+
+    // Set PYQ metadata if present
+    if (context?.pyqMetadata) {
+      window.currentPyqMetadata = context.pyqMetadata;
+    } else if (!window.currentPyqMetadata) {
+      window.currentPyqMetadata = null;
     }
 
     // Detect if user is asking for translation in voice input
@@ -715,12 +740,28 @@ export default function ChatInterface({ user }) {
     // Only run if we have an initial question, haven't handled it yet, and aren't currently generating a response
     if (initialQuestion && !hasHandledInitialQuestion && !isLoading) {
       setHasHandledInitialQuestion(true);
-      // Short timeout to ensure UI is ready
+      // Snappier transition: shorter timeout
       setTimeout(() => {
-        handleSendMessage(`Please solve this previous year question:\n\n${initialQuestion}`, false, settings.language || 'en');
-        // Clear the query param to prevent re-triggering on refresh (optional, but good UX)
+        const metaValues = [
+          pyqMeta.exam,
+          pyqMeta.year,
+          pyqMeta.paper && `Paper: ${pyqMeta.paper}`,
+          pyqMeta.theme && `Theme: ${pyqMeta.theme}`
+        ].filter(Boolean).join(' | ');
+
+        const promptPrefix = pyqMeta.isPyqSolve
+          ? `Please solve this ${metaValues} previous year question and provide critical insights:\n\n`
+          : `Please solve this previous year question:\n\n`;
+
+        handleSendMessage(
+          `${promptPrefix}${initialQuestion}`,
+          false,
+          settings.language || 'en',
+          { pyqMetadata: pyqMeta }
+        );
+        // Clear the query param to prevent re-triggering on refresh
         window.history.replaceState({}, '', '/chat');
-      }, 500);
+      }, 300);
     }
   }, [initialQuestion, hasHandledInitialQuestion, isLoading, handleSendMessage, settings.language]);
 

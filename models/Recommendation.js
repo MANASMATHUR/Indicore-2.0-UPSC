@@ -55,7 +55,14 @@ const recommendationSchema = new mongoose.Schema({
             'study_schedule',
             'flashcard',
             'interview',
-            'general'
+            'general',
+            'weakness_map',
+            'performance_history',
+            'daily_plan',
+            'persona',
+            'nudges',
+            'prediction',
+            'achievements'
         ],
         required: true,
         index: true

@@ -10,10 +10,13 @@ import pyqService from '@/lib/pyqService';
 import axios from 'axios';
 import { cleanAIResponse, validateAndCleanResponse, isGarbledResponse, GARBLED_PATTERNS } from '@/lib/responseCleaner';
 import { extractUserInfo, updateUserProfile, formatProfileContext, extractConversationFacts } from '@/lib/userProfileExtractor';
+import { formatMemoriesForAI } from '@/lib/memoryService';
 import { buildConversationMemoryPrompt, saveConversationMemory } from '@/lib/conversationMemory';
 import { updateUserPersonalization, generatePersonalizedPrompt } from '@/lib/personalizationService';
-import { getPyqContext, setPyqContext, clearPyqContext } from '@/lib/pyqContextCache';
+import { getPyqContext, setPyqContext, clearPyqContext, getDisplayedQuestions, setDisplayedQuestions } from '@/lib/pyqContextCache';
 import { callAIWithFallback } from '@/lib/ai-providers';
+import intelligenceService from '@/lib/intelligenceService';
+import { SystemPromptBuilder } from '@/lib/ai/prompts';
 
 const responseCache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -125,7 +128,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, chatId, model, systemPrompt, language, provider, openAIModel } = req.body;
+    let {
+      message,
+      chatId,
+      model,
+      systemPrompt,
+      language,
+      provider,
+      openAIModel,
+      pyqMetadata
+    } = req.body;
     const STREAMING_FALLBACK_MESSAGE = "I couldn't generate a full answer this time, but I'm still here—please rephrase or ask again so I can try once more.";
     const pyqContextKey = `${session.user.email}:${chatId || 'stream'}`;
     const providerPreference = (provider || 'openai').toLowerCase();
@@ -168,11 +180,15 @@ export default async function handler(req, res) {
     const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     const rateLimitKey = `rate_limit_${clientIP}`;
 
+    const startTime = Date.now();
+    const timings = {};
+
     if (global.rateLimitMap && global.rateLimitMap[rateLimitKey]) {
       const lastRequest = global.rateLimitMap[rateLimitKey];
-      if (Date.now() - lastRequest < 1000) {
+      const timeSinceLast = Date.now() - lastRequest;
+      if (timeSinceLast < 800) { // Slightly more lenient than 1000ms
         return res.status(429).json({
-          error: 'Rate limit exceeded. Please wait a moment before making another request.',
+          error: `Wait ${Math.ceil((800 - timeSinceLast) / 100) / 10}s before next message.`,
           code: 'RATE_LIMIT_EXCEEDED'
         });
       }
@@ -309,6 +325,7 @@ export default async function handler(req, res) {
       }
     }
 
+    // Unified history fetching
     const historyPromise = chatId ? (async () => {
       try {
         await connectToDatabase();
@@ -318,9 +335,6 @@ export default async function handler(req, res) {
         }).lean();
 
         if (chat && chat.messages && Array.isArray(chat.messages)) {
-          // Keep the full history for optimization, but let the optimizer
-          // aggressively keep more recent turns so follow-ups like
-          // "was he good?" always see enough context.
           const allMessages = chat.messages
             .filter(msg => msg.sender && msg.text && msg.text.trim() !== message.trim())
             .map(msg => ({
@@ -333,16 +347,13 @@ export default async function handler(req, res) {
           }
 
           let optimizedContext = [];
-
-          // For longer chats, keep a large recent window plus several
-          // semantically relevant earlier turns.
           if (allMessages.length > 12) {
             const summary = contextOptimizer.summarizeLongConversation(allMessages);
-            const recent = allMessages.slice(-8); // keep last 8 turns verbatim
+            const recent = allMessages.slice(-8);
             const relevant = contextOptimizer.selectRelevantContext(
               allMessages.slice(0, -8),
               message,
-              12 // pull up to 12 earlier relevant turns
+              12
             );
 
             if (summary) {
@@ -355,7 +366,6 @@ export default async function handler(req, res) {
               optimizedContext = contextOptimizer.selectRelevantContext(allMessages, message, 16);
             }
           } else {
-            // For short chats, include a generous slice of history
             optimizedContext = contextOptimizer.selectRelevantContext(allMessages, message, 16);
           }
 
@@ -366,131 +376,6 @@ export default async function handler(req, res) {
       }
       return { optimizedContext: [], fullHistory: [] };
     })() : Promise.resolve({ optimizedContext: [], fullHistory: [] });
-
-    let finalSystemPrompt = systemPrompt || `You are Indicore, your intelligent exam preparation companion—think of me as ChatGPT, but specialized for UPSC, PCS, and SSC exam preparation. I'm here to help you succeed, whether you need explanations, practice questions, answer writing guidance, or just someone to discuss exam topics with. I can also help with general questions, but I always keep exam relevance in mind.
-
-RESPONSE QUALITY STANDARDS - CRITICAL:
-- Provide comprehensive, well-researched answers that match or exceed ChatGPT's quality
-- Be thorough but concise—cover all important aspects without unnecessary verbosity
-- Use clear, logical structure: introduction → main points → examples → conclusion
-- Include relevant facts, data, dates, and sources when available
-- Connect concepts to real-world applications and current affairs
-- Anticipate follow-up questions and address related topics proactively
-- When solving PYQ questions, provide complete, exam-ready answers with proper structure
-- For Mains questions, structure answers with Introduction, Body (with sub-points), and Conclusion
-- For Prelims questions, provide clear explanations with key facts highlighted
-- Always verify information accuracy—never guess or make up facts
-
-EXAMPLES - MANDATORY REQUIREMENT:
-- ALWAYS include multiple relevant examples in every response (minimum 2-3 examples per topic)
-- Use diverse examples: PYQ references, case studies, current affairs, historical events, government schemes, real-world applications
-- Examples must be exam-relevant: connect to UPSC/PCS/SSC syllabus, PYQ patterns, and answer writing requirements
-- Include examples from different contexts: national, international, historical, contemporary, regional (for PCS)
-- For conceptual topics, provide both theoretical and practical examples
-- For policy topics, include implementation examples, success stories, and challenges
-- For historical topics, include chronological examples with dates and significance
-- Examples should be specific, verifiable, and directly relevant to the question asked
-- When explaining concepts, use analogies and real-world examples to enhance understanding
-
-MY PERSONALITY & APPROACH:
-- I'm conversational, friendly, and genuinely interested in helping you succeed. Think of me as a knowledgeable friend who's been through these exams and wants to share everything I know.
-- I adapt to your style—if you're casual, I'll be casual. If you're formal, I'll match that. If you're stressed, I'll be supportive and encouraging.
-- I remember our conversations and build on them naturally. I'll reference things we've discussed before without you having to repeat yourself.
-- I ask clarifying questions when needed, but I also make intelligent assumptions based on context. I don't over-question—I help.
-- I'm proactive. If I think something might be helpful, I'll mention it. If I see a connection to another topic, I'll point it out.
-- I'm honest about what I know and don't know. If I'm uncertain, I'll say so. If something is beyond my knowledge, I'll admit it.
-
-HOW I RESPOND:
-- I write naturally, like I'm talking to you. No robotic language, no excessive formality unless the topic demands it.
-- I use examples, analogies, and real-world connections to make things stick. I don't just list facts—I help you understand.
-- I structure my responses clearly but naturally. I use paragraphs, bullet points when helpful, and I make sure everything flows logically.
-- I'm comprehensive but not overwhelming. I give you what you need, and if you want more depth, just ask.
-- I always complete my thoughts. Every sentence is finished, every idea is fully expressed. No cut-offs, no incomplete phrases.
-
-EXAM PREPARATION FOCUS:
-- Everything I share connects back to your exam prep. But I do it naturally—not like I'm forcing it, but because it genuinely matters for your success.
-- I know the exam patterns: what UPSC asks, how PCS frames questions, what SSC focuses on. I'll help you see these patterns.
-- I understand answer writing: how to structure Mains answers, what examiners look for, common pitfalls to avoid.
-- I know the syllabus inside out: GS-1, GS-2, GS-3, GS-4, Prelims patterns, Essay requirements. I'll help you see how topics connect.
-- I'm aware of PYQ trends: what's been asked before, how questions evolve, what might come next.
-- I stay current: I know recent developments, new schemes, policy changes, and how they relate to your preparation.
-
-WHAT I DO BEST:
-- Explain complex topics simply: I break down difficult concepts into understandable pieces.
-- Connect the dots: I show how different topics relate, how history connects to polity, how geography links to environment.
-- Provide context: I don't just give facts—I explain why they matter, how they fit into the bigger picture.
-- Offer practical advice: Study strategies, revision tips, answer writing techniques, time management.
-- Answer follow-ups naturally: If you ask "what about X?" or "can you explain Y?", I understand the context and respond accordingly.
-- Handle ambiguity: If your question is unclear, I'll interpret it intelligently and answer what I think you're asking, while checking if I got it right.
-
-CONVERSATION FLOW:
-- I maintain context across the conversation. If you say "tell me more about that" or "what about the other one?", I know what you're referring to.
-- I build on previous messages. If we discussed something earlier, I'll reference it naturally.
-- I anticipate needs. If you ask about a topic, I might mention related areas you should also know about.
-- I'm encouraging. Exam prep is hard, and I acknowledge that. I celebrate your progress and help you through challenges.
-
-ACCURACY & HONESTY - CRITICAL REQUIREMENTS:
-- I ONLY provide verifiable, factual information. I NEVER make up facts, dates, names, statistics, or any information.
-- If I'm uncertain about something, I clearly state: "I'm not certain about this, but..." or "This information may need verification..."
-- When information is outside my direct knowledge or scope, I provide sources or suggest where to verify: "According to [source]" or "You can verify this in [official source/document]"
-- For current affairs, I distinguish between confirmed facts and general knowledge. I mention dates, official sources, and government documents when available.
-- For PYQs, I only reference actual questions from the database—no invented questions.
-- I tag subjects properly: When discussing topics, I identify the subject area (Polity, History, Geography, Economics, Science & Technology, Environment, etc.) and mention relevant GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context.
-
-EXAM RELEVANCE - MANDATORY:
-- EVERY response must be highly exam-relevant. Connect every explanation to UPSC/PCS/SSC exam requirements.
-- Tag subjects clearly: Identify which subject area (Polity, History, Geography, Economics, Science, Environment, etc.) and which GS paper it relates to.
-- Provide exam context: Mention how topics appear in exams, PYQ patterns, answer writing frameworks.
-- Include practical exam insights: How examiners frame questions, common mistakes, scoring strategies.
-- Reference actual PYQs when relevant: Mention specific year and paper when discussing topics that have appeared in exams
-- Connect to syllabus: Always relate topics to specific GS papers (GS-1, GS-2, GS-3, GS-4) or Prelims/Mains context
-- Provide answer writing frameworks: For Mains topics, include how to structure answers, what examiners look for
-- Include interconnections: Show how topics connect across subjects and papers (e.g., how a policy relates to GS-2 and GS-3)
-
-BROAD SEARCH SCOPE & COMPREHENSIVE COVERAGE:
-- Cast a wide net: Consider multiple perspectives, contexts, and dimensions of every topic
-- Cover all relevant aspects: Don't just answer the direct question—address related concepts, background, implications, and applications
-- Include interdisciplinary connections: Show how topics relate across subjects (e.g., how environmental policies connect to economics, geography, and governance)
-- Provide comprehensive context: Include historical background, current status, future implications, and global comparisons where relevant
-- Consider multiple exam perspectives: Address how topics appear in Prelims vs Mains, different GS papers, and various exam formats
-- Include comparative analysis: When relevant, compare Indian context with international examples, historical vs contemporary, different states/regions
-- Cover depth and breadth: Provide both detailed explanations and broader overviews to give complete understanding
-
-Write like you're having a natural conversation with a knowledgeable friend who happens to be an exam prep expert. Be helpful, be real, be engaging. Make every interaction feel valuable and personal. Always prioritize exam relevance and factual accuracy.`;
-
-    const profileContext = userProfile ? formatProfileContext(userProfile) : '';
-    if (profileContext) {
-      finalSystemPrompt += profileContext;
-    }
-
-    // Add personalized prompt based on user's behavior and preferences
-    const personalizedPrompt = userProfile ? generatePersonalizedPrompt(userProfile) : '';
-    if (personalizedPrompt) {
-      finalSystemPrompt += personalizedPrompt;
-    }
-
-    const memoryPrompt = buildConversationMemoryPrompt(userProfile?.conversationSummaries);
-    if (memoryPrompt) {
-      finalSystemPrompt += `\n\nRECENT CONVERSATIONS WITH THIS USER:\n${memoryPrompt}\nUse this to maintain continuity even in new chat threads.`;
-    }
-
-    if (language && language !== 'en') {
-      const languageNames = {
-        hi: 'Hindi', mr: 'Marathi', ta: 'Tamil', bn: 'Bengali',
-        pa: 'Punjabi', gu: 'Gujarati', te: 'Telugu', ml: 'Malayalam',
-        kn: 'Kannada', es: 'Spanish'
-      };
-
-      const langName = languageNames[language] || 'English';
-      finalSystemPrompt += `\n\nCRITICAL LANGUAGE REQUIREMENT:
-- Your ENTIRE response MUST be written EXCLUSIVELY in ${langName} (${language}).
-- Do NOT mix languages. Do NOT use English words unless they are technical terms that have no ${langName} equivalent.
-- Use proper ${langName} script/characters. For Indic languages, use the native script (Devanagari for Hindi/Marathi, Tamil script for Tamil, etc.).
-- Ensure natural, fluent ${langName} that sounds native and professional.
-- Maintain exam-appropriate formality and clarity in ${langName}.
-- If you must use an English technical term, provide the ${langName} equivalent immediately after in parentheses.
-- Your response should be completely understandable to a native ${langName} speaker preparing for competitive exams.`;
-    }
 
     async function tryPyqFromDb(userMsg, context = null) {
       const fallbackMsg = context ? `PYQ on ${context.theme || 'history'} from ${context.fromYear || 2021} for ${context.examCode || 'UPSC'}` : userMsg;
@@ -516,6 +401,10 @@ Write like you're having a natural conversation with a knowledgeable friend who 
               ...result.context,
               originalQuery: result.context.originalQuery || effectiveMsg
             });
+            // Store displayable questions for "solve these" feature
+            if (result.displayableQuestions && result.displayableQuestions.length > 0) {
+              setDisplayedQuestions(pyqContextKey, result.displayableQuestions);
+            }
           }
           return result.content;
         }
@@ -551,9 +440,10 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     const conversationHistoryForSolve = contextOptimizer.compressContext(rawHistoryForSolve);
     const fullConversationHistory = historyData.fullHistory || [];
 
+    let ledgerPrompt = '';
     const conversationLedger = contextOptimizer.buildConversationLedger(fullConversationHistory, 50, 10);
     if (conversationLedger) {
-      finalSystemPrompt += `\n\nCONVERSATION LEDGER (chronological user prompts for recall):\n${conversationLedger}\nRefer to these prompt numbers whenever the user asks about earlier questions.`;
+      ledgerPrompt = `\n\nCONVERSATION LEDGER (chronological user prompts for recall):\n${conversationLedger}\nRefer to these prompt numbers whenever the user asks about earlier questions.`;
     }
     const cachedPyqContextForSolve = chatId ? getPyqContext(pyqContextKey) : null;
     // Use fullConversationHistory (uncompressed) to ensure PYQ keywords aren't lost from long queries
@@ -563,13 +453,20 @@ Write like you're having a natural conversation with a knowledgeable friend who 
     const isDirectQuestionToSolve = (msg) => {
       const trimmedMsg = msg.trim();
 
-      // Pattern 1: "solve/answer/explain this [previous year] question: <actual question text>"
-      // This catches embedded questions after colons
-      if (/(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain)\s+(?:this|the)\s+(?:previous\s+year\s+)?question\s*:\s*.{20,}/i.test(trimmedMsg)) {
+      // Pattern 1: Explicit "solve this" with metadata (even without colon)
+      // Catches: "Please solve this UPSC | 2024 | Paper: GS Paper 1"
+      if (/(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain)\s+(?:this|the|following)\s+(?:upsc|pcs|ssc|previous\s+year|past\s+year|question|paper)/i.test(trimmedMsg)) {
         return true;
       }
 
-      // Pattern 2: Solve requests with previous context (for follow-up questions)
+      // Pattern 2: "solve/answer/explain this [metadata] question [with insights]: <actual question text>"
+      // This catches embedded questions after colons, including our new enriched formatting.
+      // Use [\s\S] to handle newlines between metadata and question text.
+      if (/(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain)\s+(?:this|the)[\s\S]*?(?:previous\s+year\s+)?question[\s\S]*?:\s*[\s\S]{10,}/i.test(trimmedMsg)) {
+        return true;
+      }
+
+      // Pattern 3: Solve requests with previous context (for follow-up questions)
       if (previousPyqContextForSolve) {
         // Allow polite prefixes before solve commands
         const PYQ_SOLVE_REGEX_WITH_CONTEXT = /^(?:please|kindly|can\s+you|could\s+you)?\s*(?:solve|answer|explain|provide\s+(?:answers?|solutions?)|give\s+(?:answers?|solutions?)|how\s+to\s+(?:solve|answer)|what\s+(?:are|is)\s+the\s+(?:answers?|solutions?))(?:\s+(?:these|those|the|this|these\s+questions?|those\s+questions?|the\s+questions?|this\s+question|them|all\s+of\s+them|the\s+pyqs?|pyqs?|questions?|you\s+just\s+(?:gave|provided|showed|listed)))?$/i;
@@ -581,10 +478,19 @@ Write like you're having a natural conversation with a knowledgeable friend who 
       return false;
     };
 
-    const isSolveRequestEarly = isDirectQuestionToSolve(message);
+    const isSolveRequestEarly = isDirectQuestionToSolve(message) || pyqMetadata?.isPyqSolve === true;
 
-    // Only treat as new PYQ query if it's NOT a solve request
-    const isPyqQueryResult = !isSolveRequestEarly && initialMessageIsPyq;
+    // SIMPLIFIED FIX: If it's a PYQ query, ALWAYS search the database first
+    // Only treat as solve request if user explicitly says "solve" and message doesn't contain PYQ search terms
+    const hasPyqSearchTerms = /(?:give|show|get|fetch|list|find|search|bring).*(?:pyq|question)/i.test(message) ||
+      /(?:eco|geo|hist|pol|sci|tech|env|art|culture|modern|ancient|medieval|indian|world)\s*(?:pyqs?|questions?)/i.test(message) ||
+      /pyqs?\s+(?:on|for|about|from|of|related)/i.test(message);
+
+    // If message has PYQ search terms OR is a general PYQ query (and NOT explicitly asking to solve), run PYQ search
+    const isPyqQueryResult = initialMessageIsPyq && (!isSolveRequestEarly || hasPyqSearchTerms);
+
+    // Detect "solve these questions" pattern - user wants to solve previously shown PYQs
+    const isSolveTheseRequest = /^(?:please\s+)?(?:solve|answer|explain|do)\s+(?:these|those|the|them|all)?\s*(?:questions?|pyqs?|that|you\s+(?:just\s+)?(?:gave|showed|listed|provided))?/i.test(message.trim());
 
     const needsContext = !isPyqQueryResult && message.length > 10;
 
@@ -594,12 +500,35 @@ Write like you're having a natural conversation with a knowledgeable friend who 
         contextualEnhancement: contextualLayer.generateContextualPrompt(message),
         examContext: examKnowledge.generateContextualPrompt(message)
       }) : Promise.resolve({ contextualEnhancement: '', examContext: '' }),
-      isPyqQueryResult ? tryPyqFromDb(message) : Promise.resolve(null)
+      isPyqQueryResult ? tryPyqFromDb(message) : Promise.resolve(null),
     ]);
+    const factStartTime = Date.now();
+    const factDb = await intelligenceService.getRelevantFacts(message, 7); // Show 7 facts
+    timings.factSearch = Date.now() - factStartTime;
 
     // Use the history we already processed
     const conversationHistory = conversationHistoryForSolve;
     const cachedPyqContext = cachedPyqContextForSolve;
+
+    // Handle "solve these" request - retrieve and solve previously shown questions
+    if (isSolveTheseRequest && pyqContextKey) {
+      const displayedQuestions = getDisplayedQuestions(pyqContextKey);
+      if (displayedQuestions && displayedQuestions.length > 0) {
+        // Format questions for AI to solve
+        const questionsToSolve = displayedQuestions.slice(0, 5); // Limit to 5 questions
+        const questionsPrompt = questionsToSolve.map((q, i) => `${i + 1}. ${q.question} (${q.year})`).join('\n');
+        const solvePrompt = `Please provide detailed, exam-oriented solutions for these UPSC Previous Year Questions:\n\n${questionsPrompt}\n\nFor each question, provide:\n1. Direct Answer (if MCQ)
+2. Key Concepts
+3. Brief Explanation
+4. UPSC relevance`;
+
+        // Override message to solve these questions
+        const originalMessage = message;
+        message = solvePrompt;
+        // Mark this so it goes to AI, not PYQ search
+        // Continue to AI processing below
+      }
+    }
 
     if (isPyqQueryResult) {
       if (pyqDb && pyqDb.trim().length > 50) {
@@ -786,7 +715,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
         ? previousPyqContext.offset
         : (cachedPyqContext?.offset ?? estimatedOffset);
       const followUpQuery = previousPyqContext.originalQuery || message;
+      const pyqStartTime = Date.now();
       const pyqDb = await tryPyqFromDb(followUpQuery, contextWithOffset);
+      timings.pyqSearch = Date.now() - pyqStartTime;
 
       if (!pyqDb) {
         // Stop the stream and inform user no more questions are found
@@ -860,8 +791,11 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     }
 
     // If solving questions, fetch the PYQs again to include in context
+    // BUT only if the user isn't providing the question text directly in the message
     let pyqContextForSolving = null;
-    if (isSolveRequest && previousPyqContext) {
+    const messageHasDirectQuestion = message.includes(':') && message.split(':').slice(1).join(':').trim().length > 20;
+
+    if (isSolveRequest && previousPyqContext && !messageHasDirectQuestion) {
       try {
         // Use the original query from context, not the current message
         const solvePyqResult = await tryPyqFromDb(previousPyqContext.originalQuery, previousPyqContext);
@@ -891,22 +825,36 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     const hasContext = optimizedHistory.length > 0;
     const isFollowUp = /^(continue|more|another|further|elaborate|expand)/i.test(message.trim()) || optimizedHistory.length > 0;
 
-    // Only build PYQ listing prompt if this is NOT a solve request
-    // Solve requests should get answer/solution instructions, not listing instructions
+    // Build final prompt using builder logic
     const pyqPrompt = !isSolveRequest ? buildPyqPrompt(message, previousPyqContext) : null;
-    let systemContent = contextOptimizer.optimizeSystemPrompt(finalSystemPrompt, hasContext, isFollowUp);
 
-    // If solving questions, enhance the user message with PYQ context
-    // Note: pyqContextForSolving is guaranteed to be non-null here because we return early if it's null
-    let userMessage = message;
-    if (isSolveRequest) {
-      userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
+    const subject = examKnowledge.detectSubjectFromQuery(message);
+
+    // Assemble modular prompt
+    const finalBuilder = new SystemPromptBuilder(language || 'en')
+      .withExamFocus()
+      .withUserContext(formatProfileContext(userProfile))
+      .withMemories(formatMemoriesForAI(userProfile?.memories || []))
+      .withFacts(factDb || [])
+      .withDirectiveAnalysis(message)
+      .withSubjectKeywords(subject)
+      .withDiagramSuggestions();
+
+    if (pyqMetadata) {
+      finalBuilder.withPyqExpert(pyqMetadata);
     }
+
+    if (isSolveRequest) {
+      finalBuilder.withSolveContext(pyqContextForSolving);
+    }
+
+    // Base system content
+    let systemContent = finalBuilder.build() + (ledgerPrompt || '');
 
     if (pyqPrompt) {
       systemContent += pyqPrompt;
     } else if (contextualEnhancement && needsContext) {
-      systemContent += contextualEnhancement.substring(0, 300);
+      systemContent += contextualEnhancement.substring(0, 500); // Increased slightly
     }
 
     let contextNote = '';
@@ -914,11 +862,22 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       contextNote = `\nContext: ${previousPyqContext.theme || 'general'} (${previousPyqContext.fromYear || 'all'}-${previousPyqContext.toYear || 'present'}), ${previousPyqContext.examCode || ''}`;
     }
 
-    // Truncate system prompt if too long (Perplexity has limits)
-    const maxSystemLength = 1400;
+    // INCREASED TRUNCATION LIMIT (from 1400 to 4500)
+    // This Prevents instruction loss while staying within model limits
+    const maxSystemLength = 4500;
     let finalSystemContent = systemContent + contextNote;
     if (finalSystemContent.length > maxSystemLength) {
-      finalSystemContent = finalSystemContent.substring(0, maxSystemLength - 100) + '...';
+      finalSystemContent = finalSystemContent.substring(0, maxSystemLength - 100) + '... [Context limited]';
+    }
+
+    let userMessage = message;
+    if (isSolveRequest) {
+      if (pyqContextForSolving) {
+        userMessage = `The user previously asked for PYQs and I provided the following questions:\n\n${pyqContextForSolving}\n\nNow the user is asking: "${message}"\n\nPlease provide comprehensive, well-structured answers/solutions to these questions. For each question:\n1. Provide a clear, detailed answer\n2. Explain key concepts and context\n3. Include relevant examples and current affairs connections\n4. Structure answers in exam-appropriate format (for Mains questions)\n5. Highlight important points that examiners look for\n6. Connect to broader syllabus topics where relevant`;
+      } else if (messageHasDirectQuestion) {
+        // Just use the message as is, but the system prompt will handle the solving instructions
+        userMessage = message;
+      }
     }
 
     const optimalModel = contextOptimizer.selectOptimalModel(message, hasContext && optimizedHistory.length > 2);
@@ -1094,11 +1053,16 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       return;
     }
 
+    // AI Model Selection & Preparation
+    const streamTimeout = 120000; // 120s for better responsiveness
+
     let response;
     const providerName = useOpenAI ? 'openai' : 'perplexity';
 
     if (useOpenAI) {
       try {
+        const aiStartTime = Date.now();
+        console.log(`[Chat Stream] Initiating OpenAI ${resolvedOpenAIModel} stream...`);
         response = await axios.post('https://api.openai.com/v1/chat/completions', {
           model: resolvedOpenAIModel,
           messages: messagesForAPI,
@@ -1110,8 +1074,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             'Content-Type': 'application/json'
           },
           responseType: 'stream',
-          timeout: 520000
+          timeout: streamTimeout
         });
+        timings.aiInitiation = Date.now() - aiStartTime;
       } catch (apiError) {
         let errorMessage = apiError.response?.data?.error?.message || apiError.message || 'OpenAI request failed. Please try again.';
 
@@ -1150,6 +1115,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
             if (validResponse && validResponse.length >= minFallbackLength) {
               await persistMemory(validResponse);
+              if (factDb && factDb.length > 0) {
+                res.write(`data: ${JSON.stringify({ truthAnchored: true })}\n\n`);
+              }
               const chunkSize = 400;
               for (let i = 0; i < validResponse.length; i += chunkSize) {
                 const chunk = validResponse.slice(i, i + chunkSize);
@@ -1179,8 +1147,10 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       }
     } else {
       try {
+        const aiStartTime = Date.now();
+        console.log(`[Chat Stream] Initiating Perplexity stream...`);
         // Perplexity requires max_tokens, so use a high limit if undefined
-        const perplexityMaxTokens = maxTokens || 40000;
+        const perplexityMaxTokens = maxTokens || 4000; // Reduced from 40k to 4k for safety
         response = await axios.post('https://api.perplexity.ai/chat/completions', {
           model: optimalModel === 'sonar' ? 'sonar' : selectedModel,
           messages: messagesForAPI,
@@ -1195,8 +1165,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
             'Accept': 'text/event-stream'
           },
           responseType: 'stream',
-          timeout: 520000
+          timeout: streamTimeout
         });
+        timings.aiInitiation = Date.now() - aiStartTime;
       } catch (apiError) {
         let errorMessage = 'API request failed. Please try again.';
 
@@ -1274,6 +1245,9 @@ Remember: Your goal is to present questions clearly and completely. If no questi
 
               if (validResponse && validResponse.length >= minFallbackLength) {
                 await persistMemory(validResponse);
+                if (factDb && factDb.length > 0) {
+                  res.write(`data: ${JSON.stringify({ truthAnchored: true })}\n\n`);
+                }
                 const chunkSize = 400;
                 for (let i = 0; i < validResponse.length; i += chunkSize) {
                   const chunk = validResponse.slice(i, i + chunkSize);
@@ -1314,6 +1288,11 @@ Remember: Your goal is to present questions clearly and completely. If no questi
       const keepAlive = setInterval(() => {
         if (!res.writableEnded) res.write('');
       }, 15000);
+
+      // Send truth-anchoring metadata if relevant
+      if (factDb && factDb.length > 0 && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ truthAnchored: true })}\n\n`);
+      }
 
       response.data.on('data', (chunk) => {
         const lines = chunk.toString().split('\n');
@@ -1444,17 +1423,7 @@ Remember: Your goal is to present questions clearly and completely. If no questi
               const parsed = JSON.parse(data);
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 let content = parsed.choices[0].delta.content;
-                content = content.replace(/\[\d+(?:\s*,\s*\d+)*\]/g, '');
-                content = content.replace(/\([A-Z][a-zA-Z\s]{3,}\):\s*(?![A-Z])/g, '');
-                content = content.replace(/From\s+result\s*\([^)]*\)\s*[:.]?\s*/gi, '');
-                content = content.replace(/From\s+result\s*[:.]?\s*/gi, '');
-                content = content.replace(/From\s+result[^.!?]*/gi, '');
-                content = content.replace(/\s*\([A-Z][a-zA-Z\s]{2,}\)\s*:\s*(?=\s*[a-z])/g, ' ');
-                content = content.replace(/🌐\s*Translate\s+to[^\n]*/gi, '');
-                content = content.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*/gi, '');
-                content = content.replace(/👤|🎓|🌐/g, '');
-
-                if (content.trim().length > 0) {
+                if (content.length > 0) {
                   fullResponse += content;
                   if (!res.writableEnded) {
                     res.write(`data: ${JSON.stringify({ content })}\n\n`);

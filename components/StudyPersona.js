@@ -11,18 +11,18 @@ export default function StudyPersona({ persona, userName }) {
     const primary = persona.time || { label: 'Explorer', icon: '🚀' };
 
     return (
-        <Card className="border border-indigo-100 dark:border-indigo-900/30 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-gray-900 shadow-md mb-6 overflow-hidden relative">
+        <Card className="border border-rose-100 dark:border-rose-900/30 bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-gray-900 shadow-md mb-6 overflow-hidden relative">
             {/* Background decoration */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none" />
+            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none" />
 
             <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-6">
 
                 {/* Avatar / Main Identity */}
                 <div className="flex-shrink-0 text-center relative z-10">
-                    <div className="w-20 h-20 mx-auto bg-white dark:bg-gray-800 rounded-full shadow-lg border-2 border-indigo-100 dark:border-indigo-500/30 flex items-center justify-center text-4xl mb-2">
+                    <div className="w-20 h-20 mx-auto bg-white dark:bg-gray-800 rounded-full shadow-lg border-2 border-rose-100 dark:border-rose-500/30 flex items-center justify-center text-4xl mb-2">
                         {primary.icon}
                     </div>
-                    <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 border-indigo-200">
+                    <Badge variant="secondary" className="bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300 border-rose-200">
                         {primary.label}
                     </Badge>
                 </div>
@@ -38,8 +38,8 @@ export default function StudyPersona({ persona, userName }) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {persona.time && (
-                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-indigo-50 dark:border-indigo-500/10 backdrop-blur-sm">
-                                <Clock className="w-4 h-4 text-indigo-500" />
+                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-rose-50 dark:border-rose-500/10 backdrop-blur-sm">
+                                <Clock className="w-4 h-4 text-rose-500" />
                                 <div className="text-left">
                                     <p className="text-[10px] text-gray-500 uppercase font-bold">Time</p>
                                     <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{persona.time.label}</p>
@@ -48,8 +48,8 @@ export default function StudyPersona({ persona, userName }) {
                         )}
 
                         {persona.focus && (
-                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-indigo-50 dark:border-indigo-500/10 backdrop-blur-sm">
-                                <Zap className="w-4 h-4 text-amber-500" />
+                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-rose-50 dark:border-rose-500/10 backdrop-blur-sm">
+                                <Zap className="w-4 h-4 text-orange-500" />
                                 <div className="text-left">
                                     <p className="text-[10px] text-gray-500 uppercase font-bold">Focus</p>
                                     <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{persona.focus.label}</p>
@@ -58,8 +58,8 @@ export default function StudyPersona({ persona, userName }) {
                         )}
 
                         {persona.learnerType && (
-                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-indigo-50 dark:border-indigo-500/10 backdrop-blur-sm">
-                                <Book className="w-4 h-4 text-emerald-500" />
+                            <div className="flex items-center gap-2 p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-rose-50 dark:border-rose-500/10 backdrop-blur-sm">
+                                <Book className="w-4 h-4 text-red-500" />
                                 <div className="text-left">
                                     <p className="text-[10px] text-gray-500 uppercase font-bold">Style</p>
                                     <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{persona.learnerType.label}</p>

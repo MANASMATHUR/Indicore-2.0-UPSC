@@ -13,7 +13,25 @@ import { useToast } from '../ui/ToastProvider';
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 import { stripMarkdown, supportedLanguages } from '@/lib/messageUtils';
 
-const StreamingChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, streamingMessage = null, onRegenerate, onPromptClick, searchQuery = '', onBookmark, onEdit, onDelete }) => {
+const cleanText = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .trim();
+};
+
+const StreamingChatMessages = memo(({
+  messages = [],
+  isLoading = false,
+  messagesEndRef,
+  streamingMessage = null,
+  onRegenerate,
+  onPromptClick,
+  searchQuery = '',
+  onBookmark,
+  onEdit,
+  onDelete
+}) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
   const translationLoading = useLoadingState();
@@ -25,7 +43,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
       showToast('Message not found', { type: 'error' });
       return;
     }
-    
+
     let text = message?.text || message?.content || '';
     if (!text.trim()) {
       showToast('No text found to translate', { type: 'error' });
@@ -36,7 +54,7 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
       text = stripMarkdown(text);
     } catch (e) {
     }
-    
+
     if (!text?.trim()) {
       showToast('No text to translate', { type: 'error' });
       return;
@@ -54,13 +72,13 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
         showToast('No text to translate', { type: 'error' });
         return;
       }
-      
+
       translationLoading?.setLoading?.('Translating...', 0);
       setTranslatingMessage(messageIndex);
-      
+
       const response = await fetch('/api/ai/translate', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'X-CSRF-Token': (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csrfToken') : null) || ''
         },
@@ -90,23 +108,23 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
       if (!data?.translatedText) {
         throw new Error('Invalid translation response');
       }
-      
+
       translationLoading?.updateProgress?.(90);
-      
+
       setTranslatedText(prev => ({
         ...prev,
         [`${messageIndex}-${targetLang}`]: data.translatedText
       }));
-      
+
       translationLoading?.setSuccess?.('Done');
-      
+
     } catch (error) {
       const errorMsg = errorHandler?.handleChatError?.(error, {
         type: 'streaming_translation_error',
         messageIndex,
         targetLang
       })?.userMessage || error?.message || 'Translation failed';
-      
+
       translationLoading?.setError?.(errorMsg);
       showToast(errorMsg, { type: 'error' });
       errorHandler?.logError?.(error, { type: 'streaming_translation_error' }, 'warning');
@@ -196,39 +214,37 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
 
         {/* Streaming Message */}
         {streamingMessage && streamingMessage.trim().length > 0 && (
-          <div className="message assistant mb-4 flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
+          <div className="message assistant mb-6 flex items-start gap-3">
+            <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
               🎓
             </div>
-            <div className="message-content relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md flex-1 px-4 py-3 sm:px-5 sm:py-4 min-w-0">
-              <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base">
+            <div className="message-content relative rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-md flex-1 px-4 py-3 sm:px-5 sm:py-4 overflow-hidden">
+              <div className="prose prose-slate dark:prose-invert max-w-none prose-chat prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base prose-p:my-0 prose-headings:mt-1 prose-headings:mb-0.5 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-hr:my-1 prose-li:marker:text-slate-400">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    p: ({ children }) => <p className="mb-3 last:mb-0 leading-7 text-slate-700 dark:text-slate-200 text-[15px]">{children}</p>,
+                    p: ({ children }) => <p className="my-2 leading-relaxed text-slate-700 dark:text-slate-200 text-[15px]">{children}</p>,
                     strong: ({ children }) => <strong className="font-semibold text-slate-900 dark:text-slate-50">{children}</strong>,
                     em: ({ children }) => <em className="italic text-slate-700 dark:text-slate-300">{children}</em>,
-                    ul: ({ children }) => <ul className="mb-3 mt-2 list-disc space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-3 mt-2 list-decimal space-y-1.5 pl-5 text-slate-700 dark:text-slate-200">{children}</ol>,
-                    li: ({ children }) => <li className="leading-7 text-[15px]">{children}</li>,
-                    h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-3 mt-4 first:mt-0 text-slate-900 dark:text-slate-50">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700 pb-2">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-2 mt-3 first:mt-0 text-slate-700 dark:text-slate-200">{children}</h3>,
-                    h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-2 mt-3 text-slate-700 dark:text-slate-200">{children}</h4>,
+                    ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-slate-700 dark:text-slate-200">{children}</ul>,
+                    ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-slate-700 dark:text-slate-200">{children}</ol>,
+                    li: ({ children }) => <li className="leading-relaxed text-[15px] my-1 py-0">{children}</li>,
+                    h1: ({ children }) => <h1 className="text-xl sm:text-2xl font-bold mb-2 mt-4 first:mt-0 text-slate-900 dark:text-slate-50">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700 pb-1">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-1.5 mt-3 first:mt-0 text-slate-700 dark:text-slate-200">{children}</h3>,
+                    h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-1.5 mt-3 text-slate-700 dark:text-slate-200">{children}</h4>,
+                    hr: () => <hr className="my-4 border-slate-200 dark:border-slate-700" />,
                     code: ({ inline, children, ...props }) => {
                       if (inline) {
-                        return (
-                          <code className="bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm px-1.5 py-0.5 rounded font-mono" {...props}>
-                            {children}
-                          </code>
-                        );
+                        return <code className="text-sm px-1.5 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100" {...props}>{children}</code>;
                       }
-                      return (
-                        <code className="block bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm p-3 rounded-lg overflow-x-auto font-mono border border-slate-200 dark:border-slate-700 my-2" {...props}>
-                          {children}
-                        </code>
-                      );
+                      return <code className="block text-sm p-4 rounded-lg overflow-x-auto font-mono bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 my-2" {...props}>{children}</code>;
                     },
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-4 border-red-500 pl-4 my-2 italic py-1 bg-red-50/30 dark:bg-red-900/20 text-slate-700 dark:text-slate-100">
+                        {children}
+                      </blockquote>
+                    ),
                   }}
                 >
                   {streamingMessage}
@@ -247,11 +263,11 @@ const StreamingChatMessages = memo(({ messages = [], isLoading = false, messages
   );
 });
 
-const MessageItem = memo(({ 
-  message, 
-  index, 
-  onTranslate, 
-  translatingMessage, 
+const MessageItem = memo(({
+  message,
+  index,
+  onTranslate,
+  translatingMessage,
   translatedText,
   onRegenerate,
   onPromptClick,
@@ -272,15 +288,13 @@ const MessageItem = memo(({
   const timeStr = ts && !isNaN(ts) ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const isTranslating = translatingMessage === index;
 
-  const cleanText = useCallback((text) => text || '', []);
-
   const highlightText = (text, query) => {
     if (!query || !query.trim()) return text;
-    
+
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
     const parts = text.split(regex);
-    
-    return parts.map((part, i) => 
+
+    return parts.map((part, i) =>
       regex.test(part) ? (
         <mark key={i} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
           {part}
@@ -321,7 +335,7 @@ const MessageItem = memo(({
   };
 
   return (
-    <div 
+    <div
       className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-2 sm:mb-3 flex items-start gap-2 sm:gap-3 highlight-match`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -333,11 +347,10 @@ const MessageItem = memo(({
         </div>
       )}
       <div
-        className={`message-content relative rounded-xl border flex-1 flex flex-col ${
-          sender === 'user'
-            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
-        }`}
+        className={`message-content relative rounded-xl border flex-1 flex flex-col ${sender === 'user'
+          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
+          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
+          }`}
       >
         {isEditing && sender === 'user' ? (
           <div className="w-full">
@@ -364,49 +377,42 @@ const MessageItem = memo(({
             </div>
           </div>
         ) : (
-          <div className={`prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base ${sender === 'user' ? 'prose-invert' : ''}`}>
+          <div className={`prose prose-slate dark:prose-invert max-w-none prose-chat prose-headings:font-semibold prose-strong:font-semibold prose-strong:text-inherit prose-sm sm:prose-base prose-headings:mt-4 prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-hr:my-4 prose-li:marker:text-slate-400 ${sender === 'user' ? 'prose-invert' : ''}`}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-              p: ({ children }) => <p className={`mb-3 last:mb-0 leading-7 text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
-              strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
-              em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
-              ul: ({ children }) => <ul className={`mb-3 mt-2 list-disc space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
-              ol: ({ children }) => <ol className={`mb-3 mt-2 list-decimal space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ol>,
-              li: ({ children }) => <li className="leading-7 text-[15px]">{children}</li>,
-              h1: ({ children }) => <h1 className={`text-xl sm:text-2xl font-bold mb-3 mt-4 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</h1>,
-              h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 border-b pb-2 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
-              h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-2 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
-              h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-2 mt-3 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
-              code: ({ inline, children, ...props }) => {
-                if (inline) {
-                  return (
-                    <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-                return (
-                  <code className={`block text-sm p-3 rounded-lg overflow-x-auto font-mono border my-2 ${sender === 'user' ? 'bg-blue-400/20 text-white border-blue-400/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`} {...props}>
+                p: ({ children }) => <p className={`my-2 leading-relaxed text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
+                strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
+                em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
+                ul: ({ children }) => <ul className={`my-2 list-disc space-y-1 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
+                ol: ({ children }) => <ol className={`my-2 list-decimal space-y-1 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ol>,
+                li: ({ children }) => <li className="leading-relaxed text-[15px] my-1 py-0">{children}</li>,
+                h1: ({ children }) => <h1 className={`text-xl sm:text-2xl font-bold mb-2 mt-4 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</h1>,
+                h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 border-b pb-1 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
+                h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-1.5 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
+                h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-1.5 mt-3 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
+                hr: () => <hr className="my-4 border-slate-200 dark:border-slate-700" />,
+                code: ({ inline, children, ...props }) => {
+                  if (inline) {
+                    return <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>{children}</code>;
+                  }
+                  return <code className={`block text-sm p-4 rounded-lg overflow-x-auto font-mono border my-2 ${sender === 'user' ? 'bg-blue-400/20 text-white border-blue-400/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`} {...props}>{children}</code>;
+                },
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-red-500 pl-4 my-2 italic py-1 bg-red-50/30 dark:bg-red-900/20 text-slate-700 dark:text-slate-100">
                     {children}
-                  </code>
-                );
-              },
-              blockquote: ({ children }) => (
-                <blockquote className={`border-l-4 pl-4 my-2 italic py-2 rounded-r-lg ${sender === 'user' ? 'border-blue-300 bg-blue-400/20 text-blue-50' : 'border-red-400 dark:border-red-400 bg-red-50/50 dark:bg-red-900/30 text-slate-700 dark:text-slate-100'}`}>
-                  {children}
-                </blockquote>
-              ),
-            }}
-          >
-            {searchQuery ? highlightText(cleanText(text), searchQuery) : cleanText(text)}
-          </ReactMarkdown>
-        </div>
+                  </blockquote>
+                ),
+              }}
+            >
+              {cleanText(text)}
+            </ReactMarkdown>
+          </div>
         )}
-        
+
         {/* Translation dropdown for AI messages and OCR results */}
         {sender === 'assistant' && text.trim() && onTranslate && (
-          <div className="mt-4">
+          <div className="mt-2">
             <select
               onChange={(e) => {
                 if (e.target.value && onTranslate) {
@@ -415,9 +421,9 @@ const MessageItem = memo(({
                 }
               }}
               disabled={isTranslating}
-              className="text-xs px-3 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed font-medium cursor-pointer backdrop-blur focus:outline-none"
+              className="text-xs px-2 py-1 bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm focus:outline-none"
             >
-              <option value="">🌐 Translate to...</option>
+              <option value="">🌐 Translate</option>
               {supportedLanguages.map((lang) => (
                 <option key={lang.code} value={lang.code}>
                   {lang.name}
@@ -445,95 +451,50 @@ const MessageItem = memo(({
         })}
 
         {timeStr && (
-          <div className={`mt-3 text-xs opacity-60 ${sender === 'user' ? 'text-white/70' : 'text-red-600 dark:text-gray-400'}`}>
+          <div className={`mt-1 text-[10px] opacity-40 ${sender === 'user' ? 'text-right text-white' : 'text-slate-500 dark:text-gray-400'}`}>
             {timeStr}
           </div>
         )}
 
-        {/* Message Action Buttons - At Bottom, Visible on Hover */}
+        {/* Message Action Buttons */}
         {isHovered && text.trim() && !isEditing && (
-          <div className={`mt-3 flex gap-2 flex-wrap justify-end ${sender === 'user' ? 'justify-start' : ''}`}>
+          <div className={`mt-2 flex gap-1.5 flex-wrap ${sender === 'user' ? 'justify-end' : ''}`}>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
-              title="Copy message"
-              aria-label="Copy message"
+              className="p-1 px-2 text-[10px] bg-white/90 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
               Copy
             </button>
-            
             {onBookmark && (
               <button
                 onClick={() => onBookmark(index, !isBookmarked)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium backdrop-blur-sm rounded-lg shadow-sm border transition-all duration-200 ${
-                  isBookmarked
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300'
-                    : 'bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-yellow-300 dark:hover:border-yellow-600'
-                }`}
-                title={isBookmarked ? "Unbookmark message" : "Bookmark message"}
-                aria-label={isBookmarked ? "Unbookmark message" : "Bookmark message"}
+                className={`p-1 px-2 text-[10px] rounded border ${isBookmarked ? 'bg-yellow-50 border-yellow-300 text-yellow-600' : 'bg-white border-slate-200'}`}
               >
-                <svg className="w-3.5 h-3.5" fill={isBookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </button>
             )}
-            
             {sender === 'user' && onEdit && (
               <button
                 onClick={handleEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200"
-                title="Edit message"
-                aria-label="Edit message"
+                className="p-1 px-2 text-[10px] bg-white/90 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
                 Edit
               </button>
             )}
-            
             {onDelete && (
               <button
-                onClick={() => {
-                  if (confirm('Are you sure you want to delete this message?')) {
-                    onDelete(index);
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
-                title="Delete message"
-                aria-label="Delete message"
+                onClick={() => confirm('Delete?') && onDelete(index)}
+                className="p-1 px-2 text-[10px] bg-white/90 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-red-500"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
                 Delete
-              </button>
-            )}
-            
-            {sender === 'assistant' && onRegenerate && (
-              <button
-                onClick={() => onRegenerate(index)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
-                title="Regenerate response"
-                aria-label="Regenerate response"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Regenerate
               </button>
             )}
           </div>
         )}
 
-        {/* Quick Reply Suggestions for Assistant Messages */}
+        {/* Quick Reply Suggestions */}
         {sender === 'assistant' && text.trim() && (
-          <QuickReplySuggestions 
+          <QuickReplySuggestions
             messageText={text}
             onSelect={onPromptClick}
             isLastMessage={index === messages.length - 1}
@@ -604,13 +565,13 @@ const TranslationResult = memo(({ text, language, langCode }) => {
       showToast('Speech synthesis is not supported in this browser. Please use Chrome, Edge, or Safari.', { type: 'error' });
       return;
     }
-    
-   
+
+
     let cleanText = sanitizeTranslationOutput(text)
       .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold formatting
       .replace(/\*(.*?)\*/g, '$1') // Remove italic formatting
-      .replace(/#{1,6}\s*/g, '') // Remove markdown headers
+      .replace(/#{1, 6}\s*/g, '') // Remove markdown headers
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove markdown links
       .replace(/\n+/g, ' ') // Replace newlines with spaces
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
@@ -619,7 +580,7 @@ const TranslationResult = memo(({ text, language, langCode }) => {
     if (!speechService) {
       return;
     }
-    
+
     try {
       const validation = validateInput('multilingualText', cleanText);
       if (!validation.isValid) {
@@ -628,22 +589,22 @@ const TranslationResult = memo(({ text, language, langCode }) => {
 
       speechLoading.setLoading('Preparing speech...', 0);
       setIsSpeaking(true);
-      
+
       speechLoading.updateProgress(50, 'Synthesizing speech...');
       await speechService.speak(validation.value, langCode);
       speechLoading.setSuccess('Speech completed');
-      
+
     } catch (error) {
       console.error('Speech error:', error);
-      
+
       const errorResult = errorHandler.handleSpeechError(error, {
         textLength: text.length,
         language: langCode,
         type: 'translation_speech'
       });
-      
+
       speechLoading.setError(errorResult.userMessage);
-      
+
       errorHandler.logError(error, {
         type: 'translation_speech_error',
         textLength: text.length,

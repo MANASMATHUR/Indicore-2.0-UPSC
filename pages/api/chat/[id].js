@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   }
 
   const session = await getServerSession(req, res, authOptions);
-  
+
   if (!session) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -24,9 +24,9 @@ export default async function handler(req, res) {
     await connectToDatabase();
 
     if (req.method === 'GET') {
-      const chat = await Chat.findOne({ 
-        _id: id, 
-        userEmail: session.user.email 
+      const chat = await Chat.findOne({
+        _id: id,
+        userEmail: session.user.email
       });
 
       if (!chat) {
@@ -37,8 +37,8 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      const { name, settings, message, language = 'en' } = req.body;
-      
+      const { name, settings, message, language = 'en', truthAnchored = false } = req.body;
+
       const updateData = {};
       if (name) updateData.name = name;
       if (settings) updateData.settings = settings;
@@ -61,6 +61,7 @@ export default async function handler(req, res) {
           sender: 'assistant',
           text: message,
           language: language || 'en',
+          truthAnchored,
           timestamp: new Date()
         });
         chat.lastMessageAt = new Date();

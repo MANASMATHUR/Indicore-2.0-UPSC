@@ -25,7 +25,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
       showToast('Message not found', { type: 'error' });
       return;
     }
-    
+
     let text = message?.text || message?.content || '';
     if (!text.trim()) {
       showToast('No text found to translate', { type: 'error' });
@@ -37,7 +37,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
     } catch (e) {
       // keep original text
     }
-    
+
     if (!text?.trim()) {
       showToast('No text to translate', { type: 'error' });
       return;
@@ -55,13 +55,13 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
         showToast('No text to translate', { type: 'error' });
         return;
       }
-      
+
       translationLoading?.setLoading?.('Translating...', 0);
       setTranslatingMessage(messageIndex);
-      
+
       const response = await fetch('/api/ai/translate', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'X-CSRF-Token': (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csrfToken') : null) || ''
         },
@@ -91,23 +91,23 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
       if (!data?.translatedText) {
         throw new Error('Invalid translation response');
       }
-      
+
       translationLoading?.updateProgress?.(90);
-      
+
       setTranslatedText(prev => ({
         ...prev,
         [`${messageIndex}-${targetLang}`]: data.translatedText
       }));
-      
+
       translationLoading?.setSuccess?.('Done');
-      
+
     } catch (error) {
       const errorMsg = errorHandler?.handleChatError?.(error, {
         type: 'translation_error',
         messageIndex,
         targetLang
       })?.userMessage || error?.message || 'Translation failed';
-      
+
       translationLoading?.setError?.(errorMsg);
       showToast(errorMsg, { type: 'error' });
       errorHandler?.logError?.(error, { type: 'translation_error' }, 'warning');
@@ -124,7 +124,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-400/20 dark:bg-red-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-orange-400/20 dark:bg-orange-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }}></div>
         </div>
-        
+
         <div className="text-center max-w-2xl animate-fade-in relative z-10">
           <div className="relative mb-8">
             <div className="absolute inset-0 flex items-center justify-center">
@@ -214,11 +214,11 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
   );
 });
 
-const MessageItem = memo(({ 
-  message, 
-  index, 
-  onTranslate, 
-  translatingMessage, 
+const MessageItem = memo(({
+  message,
+  index,
+  onTranslate,
+  translatingMessage,
   translatedText,
   onRegenerate,
   onPromptClick,
@@ -254,11 +254,11 @@ const MessageItem = memo(({
 
   const highlightText = (text, query) => {
     if (!query || !query.trim()) return text;
-    
+
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
     const parts = text.split(regex);
-    
-    return parts.map((part, i) => 
+
+    return parts.map((part, i) =>
       regex.test(part) ? (
         <mark key={i} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
           {part}
@@ -288,24 +288,33 @@ const MessageItem = memo(({
   };
 
   return (
-    <div 
-      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3 highlight-match`} 
+    <div
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3 highlight-match`}
       style={{ animationDelay: `${index * 0.05}s` }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-message-index={index}
     >
       {sender === 'assistant' && (
-        <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
-          🎓
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50 relative">
+            🎓
+            {message.truthAnchored && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full animate-pulse shadow-sm" title="Verified by Indicore Core"></span>
+            )}
+          </div>
+          {message.truthAnchored && (
+            <div className="text-[8px] font-black tracking-tighter text-emerald-600 dark:text-emerald-500 uppercase leading-none text-center">
+              CORE
+            </div>
+          )}
         </div>
       )}
       <div
-        className={`message-content relative rounded-xl border flex-1 flex flex-col ${
-          sender === 'user'
-            ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
-        }`}
+        className={`message-content relative rounded-xl border flex-1 flex flex-col ${sender === 'user'
+          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
+          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md px-4 py-3 sm:px-5 sm:py-4'
+          }`}
       >
         {isEditing && sender === 'user' ? (
           <div className="w-full">
@@ -336,42 +345,42 @@ const MessageItem = memo(({
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-              p: ({ children }) => <p className={`mb-3 last:mb-0 leading-7 text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
-              strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
-              em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
-              ul: ({ children }) => <ul className={`mb-3 mt-2 list-disc space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
-              ol: ({ children }) => <ol className={`mb-3 mt-2 list-decimal space-y-1.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ol>,
-              li: ({ children }) => <li className="leading-7 text-[15px]">{children}</li>,
-              h1: ({ children }) => <h1 className={`text-xl sm:text-2xl font-bold mb-3 mt-4 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</h1>,
-              h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-2 mt-4 first:mt-0 border-b pb-2 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
-              h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-2 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
-              h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-2 mt-3 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
-              code: ({ inline, children, ...props }) => {
-                if (inline) {
+                p: ({ children }) => <p className={`mb-1.5 last:mb-0 leading-relaxed text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
+                strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
+                em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
+                ul: ({ children }) => <ul className={`mb-2 mt-1 list-disc space-y-0.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
+                ol: ({ children }) => <ol className={`mb-2 mt-1 list-decimal space-y-0.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ol>,
+                li: ({ children }) => <li className="leading-relaxed text-[15px]">{children}</li>,
+                h1: ({ children }) => <h1 className={`text-xl sm:text-2xl font-bold mb-2 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</h1>,
+                h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-1.5 mt-3 first:mt-0 border-b pb-1.5 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
+                h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-1 mt-2 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
+                h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-1 mt-2 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
+                code: ({ inline, children, ...props }) => {
+                  if (inline) {
+                    return (
+                      <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>
+                        {children}
+                      </code>
+                    );
+                  }
                   return (
-                    <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>
+                    <code className={`block text-sm p-3 rounded-lg overflow-x-auto font-mono border my-2 ${sender === 'user' ? 'bg-blue-400/20 text-white border-blue-400/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`} {...props}>
                       {children}
                     </code>
                   );
-                }
-                return (
-                  <code className={`block text-sm p-3 rounded-lg overflow-x-auto font-mono border my-2 ${sender === 'user' ? 'bg-blue-400/20 text-white border-blue-400/30' : 'bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`} {...props}>
+                },
+                blockquote: ({ children }) => (
+                  <blockquote className={`border-l-4 pl-4 my-2 italic py-2 rounded-r-lg ${sender === 'user' ? 'border-blue-300 bg-blue-400/20 text-blue-50' : 'border-red-400 dark:border-red-400 bg-red-50/50 dark:bg-red-900/30 text-slate-700 dark:text-slate-100'}`}>
                     {children}
-                  </code>
-                );
-              },
-              blockquote: ({ children }) => (
-                <blockquote className={`border-l-4 pl-4 my-2 italic py-2 rounded-r-lg ${sender === 'user' ? 'border-blue-300 bg-blue-400/20 text-blue-50' : 'border-red-400 dark:border-red-400 bg-red-50/50 dark:bg-red-900/30 text-slate-700 dark:text-slate-100'}`}>
-                  {children}
-                </blockquote>
-              ),
-            }}
-          >
-            {searchQuery ? highlightText(cleanText(text), searchQuery) : cleanText(text)}
-          </ReactMarkdown>
-        </div>
+                  </blockquote>
+                ),
+              }}
+            >
+              {searchQuery ? highlightText(cleanText(text), searchQuery) : cleanText(text)}
+            </ReactMarkdown>
+          </div>
         )}
-        
+
         {/* Translation dropdown for AI messages and OCR results */}
         {sender === 'assistant' && text.trim() && onTranslate && (
           <div className="mt-4">
@@ -432,15 +441,14 @@ const MessageItem = memo(({
               </svg>
               Copy
             </button>
-            
+
             {onBookmark && (
               <button
                 onClick={() => onBookmark(index, !isBookmarked)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium backdrop-blur-sm rounded-lg shadow-sm border transition-all duration-200 ${
-                  isBookmarked
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300'
-                    : 'bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-yellow-300 dark:hover:border-yellow-600'
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium backdrop-blur-sm rounded-lg shadow-sm border transition-all duration-200 ${isBookmarked
+                  ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300'
+                  : 'bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:border-yellow-300 dark:hover:border-yellow-600'
+                  }`}
                 title={isBookmarked ? "Unbookmark message" : "Bookmark message"}
                 aria-label={isBookmarked ? "Unbookmark message" : "Bookmark message"}
               >
@@ -450,7 +458,7 @@ const MessageItem = memo(({
                 {isBookmarked ? 'Bookmarked' : 'Bookmark'}
               </button>
             )}
-            
+
             {sender === 'user' && onEdit && (
               <button
                 onClick={handleEdit}
@@ -464,7 +472,7 @@ const MessageItem = memo(({
                 Edit
               </button>
             )}
-            
+
             {onDelete && (
               <button
                 onClick={() => {
@@ -482,7 +490,7 @@ const MessageItem = memo(({
                 Delete
               </button>
             )}
-            
+
             {sender === 'assistant' && onRegenerate && (
               <button
                 onClick={() => onRegenerate(index)}
@@ -501,7 +509,7 @@ const MessageItem = memo(({
 
         {/* Quick Reply Suggestions for Assistant Messages */}
         {sender === 'assistant' && text.trim() && (
-          <QuickReplySuggestions 
+          <QuickReplySuggestions
             messageText={text}
             onSelect={onPromptClick}
             isLastMessage={index === messages.length - 1}
@@ -592,11 +600,11 @@ const TranslationResult = memo(({ text, language, langCode }) => {
 
       speechLoading.setLoading('Preparing speech...', 0);
       setIsSpeaking(true);
-      
+
       speechLoading.updateProgress(50, 'Synthesizing speech...');
       await speechService.speak(validation.value, langCode);
       speechLoading.setSuccess('Speech completed');
-      
+
     } catch (error) {
       console.error('Speech error:', error);
       const errorResult = errorHandler.handleSpeechError(error, {
@@ -604,16 +612,16 @@ const TranslationResult = memo(({ text, language, langCode }) => {
         language: langCode,
         type: 'translation_speech'
       });
-      
+
       speechLoading.setError(errorResult.userMessage);
-      
-    
+
+
       errorHandler.logError(error, {
         type: 'translation_speech_error',
         textLength: text.length,
         language: langCode
       }, 'warning');
-      
+
     } finally {
       setIsSpeaking(false);
     }
@@ -626,30 +634,30 @@ const TranslationResult = memo(({ text, language, langCode }) => {
           Translated to {language}:
         </div>
         <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSpeak}
-          disabled={isSpeaking}
-          className={`text-xs px-3 py-1.5 bg-gradient-to-r from-red-200 to-orange-200 dark:from-red-800/50 dark:to-red-900/50 text-red-700 dark:text-red-200 rounded-lg hover:from-red-300 hover:to-orange-300 dark:hover:from-red-700 dark:hover:to-red-800 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500/20 ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {isSpeaking ? '🔊 Speaking...' : '🔊 Speak'}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            try {
-              if (navigator.clipboard) {
-                await navigator.clipboard.writeText(sanitizeTranslationOutput(text));
-                showToast('Copied', { type: 'success' });
-              }
-            } catch (e) { showToast('Copy failed', { type: 'error' }); }
-          }}
-          className="text-xs px-3 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
-        >
-          📋 Copy
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSpeak}
+            disabled={isSpeaking}
+            className={`text-xs px-3 py-1.5 bg-gradient-to-r from-red-200 to-orange-200 dark:from-red-800/50 dark:to-red-900/50 text-red-700 dark:text-red-200 rounded-lg hover:from-red-300 hover:to-orange-300 dark:hover:from-red-700 dark:hover:to-red-800 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500/20 ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {isSpeaking ? '🔊 Speaking...' : '🔊 Speak'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                if (navigator.clipboard) {
+                  await navigator.clipboard.writeText(sanitizeTranslationOutput(text));
+                  showToast('Copied', { type: 'success' });
+                }
+              } catch (e) { showToast('Copy failed', { type: 'error' }); }
+            }}
+            className="text-xs px-3 py-1.5 bg-white/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md backdrop-blur-sm hover:scale-105 focus:scale-105 focus:outline-none focus:ring-2 focus:ring-slate-500/20"
+          >
+            📋 Copy
+          </Button>
           <Button
             variant="ghost"
             size="sm"

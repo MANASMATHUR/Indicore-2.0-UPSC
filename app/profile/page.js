@@ -35,6 +35,9 @@ import {
 } from 'lucide-react';
 import AnimatedCard from '@/components/AnimatedCard';
 import { motion, AnimatePresence } from 'framer-motion';
+import PredictiveSuccessScore from '@/components/PredictiveSuccessScore';
+import GamificationDashboard from '@/components/GamificationDashboard';
+import PYQQuestionCard from '@/components/PYQQuestionCard';
 
 export default function DashboardPage() {
     const { data: session, status } = useSession();
@@ -45,6 +48,8 @@ export default function DashboardPage() {
     const [chatInsights, setChatInsights] = useState(null);
     const [resumableChat, setResumableChat] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [recommendedPYQs, setRecommendedPYQs] = useState([]);
+    const [loadingPYQs, setLoadingPYQs] = useState(true);
 
     useEffect(() => {
         if (status === 'unauthenticated') {
@@ -59,11 +64,12 @@ export default function DashboardPage() {
 
     const fetchDashboardData = async () => {
         try {
-            const [recsRes, statsRes, chatRes, resumeRes] = await Promise.all([
+            const [recsRes, statsRes, chatRes, resumeRes, pyqRes] = await Promise.all([
                 fetch('/api/personalization/recommendations?type=all'),
                 fetch('/api/user/analytics'),
                 fetch('/api/personalization/chat-insights'),
-                fetch('/api/personalization/resume-conversation')
+                fetch('/api/personalization/resume-conversation'),
+                fetch('/api/pyq/recommendations?limit=4')
             ]);
 
             if (recsRes.ok) {
@@ -93,10 +99,18 @@ export default function DashboardPage() {
                     setResumableChat(resumeData);
                 }
             }
+
+            if (pyqRes.ok) {
+                const pyqData = await pyqRes.json();
+                if (pyqData.ok && pyqData.recommendations) {
+                    setRecommendedPYQs(pyqData.recommendations);
+                }
+            }
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
             setLoading(false);
+            setLoadingPYQs(false);
         }
     };
 
@@ -104,7 +118,7 @@ export default function DashboardPage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lime-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400">Loading your dashboard...</p>
                 </div>
             </div>
@@ -231,13 +245,13 @@ export default function DashboardPage() {
     const greeting = getDynamicGreeting();
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-indigo-50/20 dark:from-gray-950 dark:via-purple-950/20 dark:to-indigo-950/10">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-lime-50/30 to-green-50/20 dark:from-gray-950 dark:via-lime-950/20 dark:to-green-950/10">
             {/* Header / Hero */}
-            <div className="relative bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-700 text-white py-14 px-4 sm:px-6 lg:px-8 overflow-hidden">
+            <div className="relative bg-gradient-to-r from-lime-700 via-green-700 to-lime-700 text-white py-14 px-4 sm:px-6 lg:px-8 overflow-hidden">
                 {/* Decorative background elements */}
                 <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
                     <div className="absolute -top-24 -left-24 w-96 h-96 bg-white rounded-full blur-3xl animate-pulse"></div>
-                    <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-purple-400 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+                    <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-lime-400 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
                 </div>
 
                 <div className="max-w-7xl mx-auto relative z-10">
@@ -661,16 +675,100 @@ export default function DashboardPage() {
                             </Card>
                         )}
 
+                        {/* Predictive Success Score - NEW */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 px-1">
+                                <Brain className="w-5 h-5 text-lime-600" />
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Predictive AI</h2>
+                                <Badge variant="secondary" className="ml-2 bg-gradient-to-r from-lime-100 to-green-100 text-lime-700 dark:from-lime-900/40 dark:to-green-900/40 dark:text-lime-300">AI Powered</Badge>
+                            </div>
+                            <PredictiveSuccessScore userStats={userStats} chatInsights={chatInsights} />
+                        </section>
+
+                        {/* Gamification Dashboard - NEW */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 px-1">
+                                <Trophy className="w-5 h-5 text-yellow-600" />
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Achievements & Progress</h2>
+                            </div>
+                            <GamificationDashboard userStats={userStats} />
+                        </section>
+
+                        {/* Recommended PYQs - NEW */}
+                        <section className="space-y-4">
+                            <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-lime-600" />
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recommended PYQs</h2>
+                                    <Badge variant="secondary" className="ml-2 bg-gradient-to-r from-lime-100 to-green-100 text-lime-700 dark:from-lime-900/40 dark:to-green-900/40 dark:text-lime-300">For You</Badge>
+                                </div>
+                                <Link href="/pyq-archive">
+                                    <Button variant="outline" size="sm" className="text-lime-600 border-lime-300 hover:bg-lime-50">
+                                        View All
+                                        <ChevronRight className="w-4 h-4 ml-1" />
+                                    </Button>
+                                </Link>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {loadingPYQs ? (
+                                    // Loading skeleton
+                                    [1, 2].map((i) => (
+                                        <Card key={i} className="border-gray-200 dark:border-gray-700">
+                                            <CardContent className="p-6">
+                                                <div className="animate-pulse space-y-3">
+                                                    <div className="flex gap-2">
+                                                        <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                        <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                    </div>
+                                                    <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                    <div className="flex gap-2">
+                                                        <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                        <div className="h-5 w-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))
+                                ) : recommendedPYQs.length > 0 ? (
+                                    // Display personalized PYQs
+                                    recommendedPYQs.map((pyq, idx) => (
+                                        <PYQQuestionCard
+                                            key={pyq._id || idx}
+                                            question={pyq}
+                                            index={idx}
+                                            onBookmark={(id, bookmarked) => {
+                                                console.log('Bookmark toggled:', id, bookmarked);
+                                            }}
+                                        />
+                                    ))
+                                ) : (
+                                    // Empty state
+                                    <Card className="col-span-2 border-gray-200 dark:border-gray-700">
+                                        <CardContent className="p-8 text-center">
+                                            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                                            <p className="text-gray-600 dark:text-gray-400 mb-2">No recommendations yet</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-500">Start practicing to get personalized PYQ recommendations</p>
+                                            <Link href="/pyq-archive">
+                                                <Button variant="outline" size="sm" className="mt-4">
+                                                    Browse PYQ Archive
+                                                </Button>
+                                            </Link>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
+                        </section>
+
 
                     </div>
 
                     {/* Right Sidebar */}
                     <div className="space-y-6">
                         {/* Quick Actions */}
-                        <Card className="border-purple-100 dark:border-purple-900/30 shadow-lg">
+                        <Card className="border-lime-100 dark:border-lime-900/30 shadow-lg">
                             <CardHeader>
                                 <CardTitle className="text-lg flex items-center gap-2">
-                                    <Zap className="w-5 h-5 text-yellow-600" />
+                                    <Zap className="w-5 h-5 text-lime-600" />
                                     Quick Actions
                                 </CardTitle>
                             </CardHeader>
@@ -709,7 +807,7 @@ export default function DashboardPage() {
                         </Card>
 
                         {/* Study Streak */}
-                        <Card className="border-orange-100 dark:border-orange-900/30 shadow-lg bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20">
+                        <Card className="border-green-100 dark:border-green-900/30 shadow-lg bg-gradient-to-br from-green-50/50 to-lime-50/50 dark:from-green-950/20 dark:to-lime-950/20">
                             <CardContent className="pt-6">
                                 <div className="text-center">
                                     <Flame className="w-16 h-16 text-orange-500 mx-auto mb-3" />
@@ -733,7 +831,7 @@ export default function DashboardPage() {
                         </Card>
 
                         {/* Predictive Milestone */}
-                        <Card className="border-purple-100 dark:border-purple-900/30 shadow-lg bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 rounded-2xl">
+                        <Card className="border-lime-100 dark:border-lime-900/30 shadow-lg bg-gradient-to-br from-green-50/50 to-lime-50/50 dark:from-green-950/20 dark:to-lime-950/20 rounded-2xl">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-lg flex items-center gap-2">
                                     <Trophy className="w-5 h-5 text-yellow-600" />

@@ -13,10 +13,10 @@ export function Card({
   ...props
 }) {
   const variants = {
-    default: 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700',
-    elevated: 'bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-shadow duration-300',
-    gradient: 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 border border-red-100 dark:border-gray-700',
-    glass: 'bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border border-white/20 dark:border-gray-700/20',
+    default: 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700/50 shadow-sm',
+    elevated: 'bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all duration-300',
+    gradient: 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 border border-red-100 dark:border-gray-700/50',
+    glass: 'bg-white/70 dark:bg-gray-800/70 backdrop-blur-lg border border-white/30 dark:border-white/10 shadow-lg',
   };
 
   const hoverClass = hoverable

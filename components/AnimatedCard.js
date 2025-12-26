@@ -1,20 +1,17 @@
-/**
- * Animated Card Component
- * Beautiful card with hover animations and reveal effects
- */
-
 import { motion } from 'framer-motion';
 import { cardVariants } from '@/lib/animations';
+import React, { forwardRef } from 'react';
 
-export default function AnimatedCard({
+const AnimatedCard = forwardRef(({
     children,
     className = '',
     onClick,
     delay = 0,
     ...props
-}) {
+}, ref) => {
     return (
         <motion.div
+            ref={ref}
             className={`animated-card ${className}`}
             variants={cardVariants}
             initial="rest"
@@ -34,4 +31,8 @@ export default function AnimatedCard({
       `}</style>
         </motion.div>
     );
-}
+});
+
+AnimatedCard.displayName = 'AnimatedCard';
+
+export default AnimatedCard;

@@ -107,13 +107,13 @@ export function useChat(userEmail) {
   }, []);
 
   // Add AI assistant message to a chat
-  const addAIMessage = useCallback(async (chatId, content, language = 'en') => {
+  const addAIMessage = useCallback(async (chatId, content, language = 'en', truthAnchored = false) => {
     if (!chatId || !content?.trim()) return;
     try {
       const response = await fetch(`/api/chat/${chatId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, language }),
+        body: JSON.stringify({ message: content, language, truthAnchored }),
       });
       if (response.ok) {
         const payload = await response.json();

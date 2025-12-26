@@ -1,18 +1,18 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-  sender: { 
-    type: String, 
-    enum: ['user', 'assistant'], 
-    required: true 
+  sender: {
+    type: String,
+    enum: ['user', 'assistant'],
+    required: true
   },
-  text: { 
-    type: String, 
-    required: true 
+  text: {
+    type: String,
+    required: true
   },
-  timestamp: { 
-    type: Date, 
-    default: Date.now 
+  timestamp: {
+    type: Date,
+    default: Date.now
   },
   metadata: {
     model: String,
@@ -27,22 +27,26 @@ const messageSchema = new mongoose.Schema({
   bookmarked: {
     type: Boolean,
     default: false
+  },
+  truthAnchored: {
+    type: Boolean,
+    default: false
   }
 });
 
 const chatSchema = new mongoose.Schema({
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-  userEmail: { 
-    type: String, 
-    required: true 
+  userEmail: {
+    type: String,
+    required: true
   },
-  name: { 
-    type: String, 
-    required: true 
+  name: {
+    type: String,
+    required: true
   },
   messages: [messageSchema],
   settings: {
@@ -79,8 +83,8 @@ const chatSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 chatSchema.index({ userId: 1, createdAt: -1 });
@@ -90,7 +94,7 @@ chatSchema.index({ userEmail: 1, archived: 1, lastMessageAt: -1 });
 chatSchema.index({ userEmail: 1, folder: 1, lastMessageAt: -1 });
 chatSchema.index({ userEmail: 1, tags: 1, lastMessageAt: -1 });
 
-chatSchema.pre('save', function(next) {
+chatSchema.pre('save', function (next) {
   if (this.messages && this.messages.length > 0) {
     this.lastMessageAt = this.messages[this.messages.length - 1].timestamp;
   }

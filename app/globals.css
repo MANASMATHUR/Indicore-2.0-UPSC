@@ -225,12 +225,12 @@
   }
 
   .message-content {
-    @apply px-4 py-3 sm:px-6 sm:py-4 text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words max-w-3xl rounded-3xl shadow-lg transition-all duration-300;
+    @apply px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base break-words max-w-3xl rounded-3xl shadow-lg transition-all duration-300;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     backdrop-filter: blur(20px) saturate(180%);
     transform-origin: bottom;
-    line-height: 1.75;
-    letter-spacing: 0.01em;
+    line-height: 1.2;
+    letter-spacing: 0;
     position: relative;
     border: 1px solid rgba(0, 0, 0, 0.1);
     will-change: transform;

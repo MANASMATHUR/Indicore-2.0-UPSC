@@ -18,21 +18,21 @@ export default function DailyPlan({ plan }) {
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case 'completed': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+            case 'completed': return <CheckCircle2 className="w-5 h-5 text-rose-500" />;
             case 'locked': return <Lock className="w-4 h-4 text-gray-400" />;
-            default: return <Circle className="w-4 h-4 text-blue-500" />;
+            default: return <Circle className="w-4 h-4 text-orange-500" />;
         }
     };
 
     return (
-        <Card className="border border-green-100 dark:border-green-900/30 bg-white dark:bg-gray-900 shadow-lg shadow-green-500/5 h-full">
-            <CardHeader className="pb-4 border-b border-green-50 dark:border-green-900/20 bg-green-50/20 dark:bg-green-900/5">
+        <Card className="border border-rose-100 dark:border-rose-900/30 bg-white dark:bg-gray-900 shadow-lg shadow-rose-500/5 h-full">
+            <CardHeader className="pb-4 border-b border-rose-50 dark:border-rose-900/20 bg-rose-50/20 dark:bg-rose-900/5">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-green-600" />
+                        <Calendar className="w-4 h-4 text-rose-600" />
                         Daily Focus Plan
                     </CardTitle>
-                    <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">Today</span>
+                    <span className="text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">Today</span>
                 </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -49,10 +49,10 @@ export default function DailyPlan({ plan }) {
                                 <div key={index} className={`relative p-4 pl-12 transition-colors ${isCompleted ? 'bg-gray-50/50 dark:bg-gray-900/50' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'
                                     }`}>
                                     {/* Timeline Node */}
-                                    <div className={`absolute left-4 top-5 w-5 h-5 -ml-0.5 rounded-full border-2 flex items-center justify-center bg-white dark:bg-gray-900 z-10 ${isCompleted ? 'border-green-500' : (isLocked ? 'border-gray-300' : 'border-blue-500')
+                                    <div className={`absolute left-4 top-5 w-5 h-5 -ml-0.5 rounded-full border-2 flex items-center justify-center bg-white dark:bg-gray-900 z-10 ${isCompleted ? 'border-rose-500' : (isLocked ? 'border-gray-300' : 'border-orange-500')
                                         }`}>
-                                        {isCompleted && <div className="w-2.5 h-2.5 rounded-full bg-green-500" />}
-                                        {!isCompleted && !isLocked && <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />}
+                                        {isCompleted && <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />}
+                                        {!isCompleted && !isLocked && <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />}
                                     </div>
 
                                     <div className="flex flex-col gap-1">
@@ -60,9 +60,9 @@ export default function DailyPlan({ plan }) {
                                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wide flex items-center gap-1">
                                                 <Clock className="w-3 h-3" /> {item.time}
                                             </span>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize ${item.type === 'learning' ? 'bg-blue-50 text-blue-600' :
-                                                    item.type === 'practice' ? 'bg-purple-50 text-purple-600' :
-                                                        'bg-orange-50 text-orange-600'
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize ${item.type === 'learning' ? 'bg-orange-50 text-orange-600' :
+                                                item.type === 'practice' ? 'bg-purple-50 text-purple-600' :
+                                                    'bg-orange-50 text-orange-600'
                                                 }`}>
                                                 {item.type}
                                             </span>
@@ -79,7 +79,7 @@ export default function DailyPlan({ plan }) {
                                         {!isCompleted && !isLocked && (
                                             <div className="mt-2">
                                                 <Link href={item.actionUrl}>
-                                                    <Button size="sm" className="h-7 text-xs w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white border-none shadow-sm shadow-green-500/20">
+                                                    <Button size="sm" className="h-7 text-xs w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white border-none shadow-sm shadow-rose-500/20">
                                                         Start Session <ArrowRight className="w-3 h-3 ml-1" />
                                                     </Button>
                                                 </Link>
