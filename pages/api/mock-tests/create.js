@@ -389,21 +389,45 @@ Format as JSON array:
         }
       );
       const aiResponse = aiResult?.content || '';
+      console.log('[MockTest API] AI Response received, length:', aiResponse.length);
 
-      let parsedData;
       try {
+        // Robust JSON extraction
         const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          parsedData = JSON.parse(jsonMatch[0]);
+          let jsonStr = jsonMatch[0];
+          // Clean up potential markdown formatting if the regex was too greedy
+          if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json/, '');
+          if (jsonStr.endsWith('```')) jsonStr = jsonStr.replace(/```$/, '');
+
+          parsedData = JSON.parse(jsonStr.trim());
+          console.log('[MockTest API] AI JSON parsed successfully. Questions count:', parsedData.questions?.length);
         } else {
-          throw new Error('No JSON found');
+          console.error('[MockTest API] No JSON object found in response:', aiResponse);
+          throw new Error('No valid JSON object found in AI response');
         }
       } catch (parseError) {
-        return res.status(500).json({ error: 'Failed to parse test data', details: parseError.message });
+        console.error('AI Response that failed to parse:', aiResponse);
+        return res.status(500).json({
+          error: 'Failed to parse test data',
+          details: parseError.message,
+          rawResponse: aiResponse.substring(0, 200) + '...'
+        });
       }
 
       // Process AI-generated questions
-      aiQuestions = parsedData.questions.map((q, index) => {
+      console.log('[MockTest API] Processing AI-generated questions...');
+
+      let rawQuestions = [];
+      if (Array.isArray(parsedData)) {
+        rawQuestions = parsedData;
+      } else if (parsedData.questions && Array.isArray(parsedData.questions)) {
+        rawQuestions = parsedData.questions;
+      } else if (parsedData.test && Array.isArray(parsedData.test.questions)) {
+        rawQuestions = parsedData.test.questions;
+      }
+
+      aiQuestions = rawQuestions.map((q, index) => {
         const question = {
           question: q.question,
           questionType: q.questionType || (isMains ? 'subjective' : 'mcq'),
@@ -427,16 +451,49 @@ Format as JSON array:
           question.negativeMarks = q.negativeMarks || (examType === 'SSC' ? 0.25 : 0.33);
 
           // Validate MCQ structure
-          if (!Array.isArray(question.options) || question.options.length !== 4) {
-            throw new Error(`Question ${index + 1}: MCQ must have exactly 4 options`);
+          if (!Array.isArray(question.options) || question.options.length < 2) {
+            console.error(`[MockTest API] Question ${index + 1}: Invalid options array`, question.options);
+            question.options = ['Option A', 'Option B', 'Option C', 'Option D'];
           }
-          if (!question.correctAnswer || !question.options.includes(question.correctAnswer)) {
-            throw new Error(`Question ${index + 1}: correctAnswer must be one of the provided options`);
+
+          // ROBUST CORRECT ANSWER MAPPING
+          let mappedAnswer = null;
+          const trimmedAnswer = String(question.correctAnswer).trim();
+          const options = question.options.map(o => String(o).trim());
+
+          // 1. Check for exact match
+          if (options.includes(trimmedAnswer)) {
+            mappedAnswer = trimmedAnswer;
           }
-          if (question.options.some(opt => !opt || opt.trim().length === 0)) {
-            throw new Error(`Question ${index + 1}: All options must be non-empty`);
+          // 2. Check for Letter indices (A, B, C, D)
+          else if (/^[A-D]$/i.test(trimmedAnswer)) {
+            const letterIdx = trimmedAnswer.toUpperCase().charCodeAt(0) - 65;
+            if (options[letterIdx]) mappedAnswer = options[letterIdx];
           }
-        } else {
+          // 3. Check for Numeric indices (0, 1, 2, 3)
+          else if (/^[0-3]$/.test(trimmedAnswer)) {
+            const numIdx = parseInt(trimmedAnswer);
+            if (options[numIdx]) mappedAnswer = options[numIdx];
+          }
+          // 4. Case-insensitive fuzzy match
+          else {
+            const lowerAnswer = trimmedAnswer.toLowerCase();
+            const foundIdx = options.findIndex(o => o.toLowerCase() === lowerAnswer);
+            if (foundIdx !== -1) mappedAnswer = options[foundIdx];
+          }
+
+          if (mappedAnswer) {
+            question.correctAnswer = mappedAnswer;
+          } else {
+            console.warn(`[MockTest API] Question ${index + 1}: Invalid correctAnswer "${trimmedAnswer}". Falling back to first option.`);
+            question.correctAnswer = question.options[0];
+          }
+
+          if (question.options.some(opt => !opt || String(opt).trim().length === 0)) {
+            question.options = question.options.map((opt, i) => (opt && String(opt).trim()) ? opt : `Option ${String.fromCharCode(65 + i)}`);
+          }
+        }
+        else {
           // Validate subjective questions
           const defaultWordLimit = examType === 'SSC' ? 300 : 250;
           question.wordLimit = q.wordLimit || defaultWordLimit;
@@ -461,6 +518,7 @@ Format as JSON array:
 
       // Combine PYQ and AI questions
       processedQuestions = [...processedQuestions, ...aiQuestions];
+      console.log('[MockTest API] Total questions combined:', processedQuestions.length);
     }
 
     const appliedDifficultyTargets = buildDifficultyTargets(processedQuestions.length, difficultyMix);
@@ -476,7 +534,7 @@ Format as JSON array:
       const { batchTranslateQuestions } = await import('@/lib/batchTranslate');
       try {
         processedQuestions = await batchTranslateQuestions(processedQuestions, language);
-        console.log('Mock test batch translation completed successfully');
+        console.log('[MockTest API] Batch translation completed successfully');
       } catch (translationError) {
         console.warn('Batch translation failed, using English content:', translationError.message);
         // Continue with English content if translation fails
@@ -514,7 +572,19 @@ Format as JSON array:
       adaptiveSuggestion
     };
 
+    console.log('[MockTest API] Final test data prepared. Title:', testData.title);
+
+    // Explicitly validate each question for required fields to catch Mongoose errors
+    processedQuestions.forEach((q, idx) => {
+      if (!q.question) console.error(`[MockTest API] ERR: Question at index ${idx} is missing question text!`);
+      if (q.questionType === 'mcq' && !q.correctAnswer) {
+        console.warn(`[MockTest API] WARN: Question at index ${idx} (MCQ) is missing correctAnswer. Using fallback.`);
+        q.correctAnswer = q.options?.[0] || 'Unknown';
+      }
+    });
+
     const mockTest = await MockTest.create(testData);
+    console.log('[MockTest API] ✅ Mock test created successfully in DB. ID:', mockTest._id);
 
     // Track the mock test creation
     try {
