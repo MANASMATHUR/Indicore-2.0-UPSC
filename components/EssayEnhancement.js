@@ -17,13 +17,13 @@ const essayTypes = [
   { code: 'international', name: 'International Relations', description: 'Global affairs and diplomacy' }
 ];
 
-export default function EssayEnhancement({ 
-  isOpen, 
-  onClose, 
-  onEnhance, 
-  preloadedEssay = null, 
+export default function EssayEnhancement({
+  isOpen,
+  onClose,
+  onEnhance,
+  preloadedEssay = null,
   selectedTopic = null,
-  isLoadingEssay = false 
+  isLoadingEssay = false
 }) {
   const { showToast } = useToast();
   const [essayText, setEssayText] = useState('');
@@ -64,7 +64,7 @@ export default function EssayEnhancement({
 
     try {
       setIsProcessing(true);
-      
+
       const response = await fetch('/api/ai/enhance-essay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,7 +79,7 @@ export default function EssayEnhancement({
 
       if (!response.ok) throw new Error('Enhancement failed');
       const data = await response.json();
-      
+
       setEnhancedText(data.enhancedEssay);
       setShowEnhanced(true);
       showToast('Essay enhanced successfully!', { type: 'success' });
@@ -105,7 +105,7 @@ export default function EssayEnhancement({
 
   return (
     <>
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
@@ -151,11 +151,10 @@ export default function EssayEnhancement({
                       <button
                         key={type.code}
                         onClick={() => setEssayType(type.code)}
-                        className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${
-                          essayType === type.code
+                        className={`p-3 rounded-lg border-2 transition-all duration-200 text-left ${essayType === type.code
                             ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                             : 'border-gray-200 dark:border-slate-600 hover:border-indigo-300'
-                        }`}
+                          }`}
                       >
                         <div className="font-medium text-sm text-gray-800 dark:text-slate-200">
                           {type.name}
@@ -277,15 +276,13 @@ export default function EssayEnhancement({
                       </button>
                     </div>
                   </div>
-                  
-                  <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 max-h-96 overflow-y-auto">
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <pre className="whitespace-pre-wrap text-gray-700 dark:text-slate-300 font-sans">
-                        {enhancedText}
-                      </pre>
+
+                  <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 max-h-96 overflow-y-auto border border-gray-200 dark:border-slate-700">
+                    <div className="whitespace-pre-wrap text-gray-700 dark:text-slate-300 font-sans text-base leading-relaxed">
+                      {enhancedText}
                     </div>
                   </div>
-                  
+
                   <div className="mt-2 text-sm text-gray-500 dark:text-slate-400">
                     Word count: {enhancedText.split(/\s+/).filter(word => word.length > 0).length}
                   </div>
