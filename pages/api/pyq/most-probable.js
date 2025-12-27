@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       .limit(500)
       .lean();
 
-    // Analyze trends: count topic tags and keywords
+    // Analyze trends
     const topicFrequency = new Map();
     const keywordFrequency = new Map();
     const yearFrequency = new Map();
