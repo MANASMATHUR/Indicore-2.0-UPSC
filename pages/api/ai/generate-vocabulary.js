@@ -1,8 +1,19 @@
 import { getUserPerformanceStats } from '@/lib/personalizationHelpers';
 
 export default async function handler(req, res) {
+  // Debug logging
+  console.log(`[Generate Vocab] Request received: ${req.method} ${req.url}`);
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    console.log(`[Generate Vocab] Method not allowed: ${req.method}`);
+    // Allow POST only
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: `Method ${req.method} not allowed` });
   }
 
   const session = await getServerSession(req, res, authOptions);
