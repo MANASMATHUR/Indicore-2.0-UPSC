@@ -11,52 +11,64 @@ export function useWebSocket() {
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
-    // Prioritize localhost if we are running locally to avoid connecting to prod socket
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const socketUrl = isLocal ? window.location.origin : (process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : ''));
+    try {
+      // Prioritize localhost if we are running locally to avoid connecting to prod socket
+      const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const socketUrl = isLocal ? window.location.origin : (process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : ''));
 
-    if (!socketUrl || typeof window === 'undefined') {
-      return;
-    }
+      console.log('[WebSocket Debug] Environment:', { isLocal, hostname: window?.location?.hostname, finalUrl: socketUrl });
 
-    const newSocket = io(socketUrl, {
-      path: '/api/socket',
-      transports: ['websocket'], // Force websocket only for lowest latency
-      reconnection: true,
-      reconnectionDelay: 300, // Faster reconnection
-      reconnectionDelayMax: 1500,
-      reconnectionAttempts: maxReconnectAttempts,
-      timeout: 8000, // Reduced timeout for faster failure detection
-      forceNew: false, // Reuse connection when possible
-      upgrade: false, // Skip polling upgrade - websocket only
-      rememberUpgrade: true,
-      // Optimize for low latency
-      autoConnect: true,
-      multiplex: false // Disable multiplexing for simpler, faster connections
-    });
-
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      reconnectAttempts.current = 0;
-    });
-
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      setIsConnected(false);
-      reconnectAttempts.current++;
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
+      if (!socketUrl || typeof window === 'undefined') {
+        return;
       }
-      newSocket.close();
-    };
+
+      const newSocket = io(socketUrl, {
+        path: '/api/socket',
+        transports: ['websocket'], // Force websocket only for lowest latency
+        reconnection: true,
+        reconnectionDelay: 300, // Faster reconnection
+        reconnectionDelayMax: 1500,
+        reconnectionAttempts: maxReconnectAttempts,
+        timeout: 8000, // Reduced timeout for faster failure detection
+        forceNew: false, // Reuse connection when possible
+        upgrade: false, // Skip polling upgrade - websocket only
+        rememberUpgrade: true,
+        // Optimize for low latency
+        autoConnect: true,
+        multiplex: false // Disable multiplexing for simpler, faster connections
+      });
+
+      newSocket.on('connect', () => {
+        console.log('[WebSocket Debug] Connected successfully');
+        setIsConnected(true);
+        reconnectAttempts.current = 0;
+      });
+
+      newSocket.on('disconnect', (reason) => {
+        console.log('[WebSocket Debug] Disconnected:', reason);
+        setIsConnected(false);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        // Suppress massive error logs in console for polling failures
+        if (reconnectAttempts.current < 3) {
+          console.warn('[WebSocket Debug] Connection error:', error.message);
+        }
+        setIsConnected(false);
+        reconnectAttempts.current++;
+      });
+
+      setSocket(newSocket);
+
+      return () => {
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        if (newSocket) newSocket.close();
+      };
+    } catch (err) {
+      console.error('[WebSocket Debug] Critical setup error:', err);
+    }
   }, []);
 
   const sendMessage = useCallback((message, options = {}) => {
