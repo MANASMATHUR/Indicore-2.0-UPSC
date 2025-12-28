@@ -73,6 +73,7 @@ export default async function handler(req, res) {
 4. Date (if available)
 5. Relevance to competitive exams
 6. Key points/exam-relevant aspects
+7. Ensure the news fetched is highly detailed and very thoroughly verified
 
 Format the response as a JSON array of news items, where each item has: title, summary, category, date, relevance, keyPoints (array), and tags (array).`;
 
