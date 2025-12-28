@@ -64,9 +64,9 @@ export default function Home() {
             </Link>
             <div className="flex items-center space-x-6">
               <div className="hidden md:flex items-center space-x-6 text-sm font-medium text-gray-600 dark:text-gray-300">
-                <Link href="#features" className="hover:text-primary transition-colors">Features</Link>
-                <Link href="#comparison" className="hover:text-primary transition-colors">Why Us</Link>
-                <Link href="#tools" className="hover:text-primary transition-colors">Tools</Link>
+                <a href="#features" className="hover:text-primary transition-colors">Features</a>
+                <a href="#comparison" className="hover:text-primary transition-colors">Why Us</a>
+                <a href="#tools" className="hover:text-primary transition-colors">Tools</a>
                 <button onClick={() => setShowContactModal(true)} className="hover:text-primary transition-colors">Contact</button>
               </div>
               <UnifiedDashboard />
