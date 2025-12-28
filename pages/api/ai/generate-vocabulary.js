@@ -1,8 +1,14 @@
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]";
 import { getUserPerformanceStats } from '@/lib/personalizationHelpers';
 
 export default async function handler(req, res) {
-  // Debug logging
-  console.log(`[Generate Vocab] Request received: ${req.method} ${req.url}`);
+  // Debug logging - CRITICAL for Vercel 405 debugging
+  console.log(`[Generate Vocab Debug] Request received: ${req.method} ${req.url}`);
+  console.log(`[Generate Vocab Debug] Headers:`, JSON.stringify(req.headers));
+  console.log(`[Generate Vocab Debug] Body keys:`, Object.keys(req.body || {}));
+
+  // Handle preflight requests
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
