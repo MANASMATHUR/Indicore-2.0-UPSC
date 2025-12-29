@@ -3,8 +3,19 @@ import mongoose from 'mongoose';
 const userSchema = new mongoose.Schema({
   googleId: {
     type: String,
-    required: true,
-    unique: true
+    required: false,
+    unique: true,
+    sparse: true // Allow null values for email/password users
+  },
+  password: {
+    type: String,
+    required: false,
+    select: false // Don't include password in queries by default
+  },
+  authProvider: {
+    type: String,
+    enum: ['google', 'email', 'both'],
+    default: 'google'
   },
   name: {
     type: String,
@@ -623,5 +634,6 @@ const userSchema = new mongoose.Schema({
 
 userSchema.index({ email: 1 });
 userSchema.index({ googleId: 1 });
+userSchema.index({ authProvider: 1 });
 
 export default mongoose.models.User || mongoose.model('User', userSchema);
