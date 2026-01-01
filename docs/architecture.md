@@ -16,31 +16,31 @@ Indicore is an AI-powered UPSC exam preparation platform featuring:
 
 ```mermaid
 graph TB
-    User[👤 UPSC Aspirant]
+    User["👤 UPSC Aspirant"]
     
     subgraph "Indicore Platform"
         direction TB
-        WebApp[🌐 Web Application<br/>Next.js 14 + React]
-        API[⚙️ API Layer<br/>74 Endpoints]
-        Memory[🧠 Memory System<br/>Smart Learning]
-        Personalization[🎯 Personalization Engine<br/>Adaptive Content]
-        DB[(💾 MongoDB<br/>User Data & Content)]
+        WebApp["🌐 Web Application - Next.js 14 + React"]
+        API["⚙️ API Layer - 74 Endpoints"]
+        Memory["🧠 Memory System - Smart Learning"]
+        Personalization["🎯 Personalization Engine - Adaptive Content"]
+        DB[("💾 MongoDB - User Data & Content")]
     end
     
     subgraph "External AI Services"
-        Perplexity[🤖 Perplexity AI<br/>Sonar Pro/Reasoning]
-        Azure[☁️ Azure Cognitive<br/>Speech + Translation]
-        Google[🔍 Google Cloud<br/>Auth + Translate]
+        Perplexity["🤖 Perplexity AI - Sonar Pro/Reasoning"]
+        Azure["☁️ Azure Cognitive - Speech + Translation"]
+        Google["🔍 Google Cloud - Auth + Translate"]
     end
     
     User -->|Uses| WebApp
-    WebApp -->|REST/SSE/WebSocket| API
-    API -->|Read/Write| DB
-    API -->|Learns from| Memory
-    API -->|Adapts via| Personalization
-    API -->|AI Queries| Perplexity
-    API -->|Speech/Translation| Azure
-    API -->|Auth/Translate| Google
+    WebApp -->|"REST/SSE/WebSocket"| API
+    API -->|"Read/Write"| DB
+    API -->|"Learns from"| Memory
+    API -->|"Adapts via"| Personalization
+    API -->|"AI Queries"| Perplexity
+    API -->|"Speech/Translation"| Azure
+    API -->|"Auth/Translate"| Google
     
     Memory -.->|Contextualizes| API
     Personalization -.->|Customizes| API
@@ -52,55 +52,55 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Frontend (Next.js + React)"
-        UI[📱 UI Components<br/>- Chat Interface<br/>- Mock Tests<br/>- Settings Dashboard]
-        Pages[📄 Pages/Routes<br/>15+ Features]
-        Hooks[🎣 Custom Hooks<br/>- useChat<br/>- useSpeech<br/>- useMemory]
+    subgraph "Frontend - Next.js + React"
+        UI["📱 UI Components"]
+        Pages["📄 Pages/Routes - 15+ Features"]
+        Hooks["🎣 Custom Hooks"]
     end
     
-    subgraph "API Layer (74 Endpoints)"
+    subgraph "API Layer - 74 Endpoints"
         direction LR
         
         subgraph "Core AI APIs"
-            ChatAPI[💬 Chat APIs<br/>/api/ai/chat<br/>/api/ai/chat-stream<br/>/api/ai/chat-ws]
-            SpeechAPI[🎤 Speech APIs<br/>/api/ai/speech<br/>/api/ai/speech-token]
-            TranslateAPI[🌐 Translation<br/>/api/ai/translate]
+            ChatAPI["💬 Chat APIs"]
+            SpeechAPI["🎤 Speech APIs"]
+            TranslateAPI["🌐 Translation"]
         end
         
         subgraph "Feature APIs"
-            MockAPI[📝 Mock Tests<br/>create/submit/analyze]
-            PyqAPI[📚 PYQ System<br/>search/analyze/organize]
-            EssayAPI[✍️ Essay Tools<br/>generate/enhance/evaluate]
-            InterviewAPI[🎯 Interview Prep<br/>DAF/questions/evaluate]
-            FlashcardAPI[🃏 Flashcards<br/>generate/notes]
-            AffairsAPI[📰 Current Affairs<br/>digest/news/trending]
+            MockAPI["📝 Mock Tests"]
+            PyqAPI["📚 PYQ System"]
+            EssayAPI["✍️ Essay Tools"]
+            InterviewAPI["🎯 Interview Prep"]
+            FlashcardAPI["🃏 Flashcards"]
+            AffairsAPI["📰 Current Affairs"]
         end
         
         subgraph "Personalization APIs"
-            MemoryAPI[🧠 Memory System<br/>/api/user/memory]
-            PrefsAPI[⚙️ Preferences<br/>/api/user/preferences]
-            GoalsAPI[🎯 Goals & Analytics<br/>/api/user/goals<br/>/api/user/analytics]
-            RecommendAPI[💡 Recommendations<br/>/api/user/recommendations]
+            MemoryAPI["🧠 Memory System"]
+            PrefsAPI["⚙️ Preferences"]
+            GoalsAPI["🎯 Goals & Analytics"]
+            RecommendAPI["💡 Recommendations"]
         end
         
         subgraph "Utility APIs"
-            AuthAPI[🔐 Authentication<br/>/api/auth]
-            UserAPI[👤 User Profile<br/>/api/user/profile]
-            BookmarkAPI[🔖 Bookmarks<br/>/api/user/bookmarks]
-            ExportAPI[📤 Data Export<br/>/api/user/export-data]
+            AuthAPI["🔐 Authentication"]
+            UserAPI["👤 User Profile"]
+            BookmarkAPI["🔖 Bookmarks"]
+            ExportAPI["📤 Data Export"]
         end
     end
     
     subgraph "Smart Services Layer"
-        MemoryExtractor[🔍 Smart Memory<br/>Extractor]
-        Personalizer[🤖 Personalization<br/>Service]
-        AIProvider[🎨 AI Provider<br/>Abstraction]
-        CacheService[⚡ Redis Cache]
+        MemoryExtractor["🔍 Smart Memory Extractor"]
+        Personalizer["🤖 Personalization Service"]
+        AIProvider["🎨 AI Provider Abstraction"]
+        CacheService["⚡ Redis Cache"]
     end
     
     subgraph "Data Layer"
-        MongoDB[(🗄️ MongoDB<br/>Collections:<br/>- users<br/>- chats<br/>- mockTests<br/>- pyqs<br/>- memories)]
-        Redis[(💨 Redis<br/>Cache)]
+        MongoDB[("🗄️ MongoDB")]
+        Redis[("💨 Redis Cache")]
     end
     
     UI --> Pages
@@ -113,7 +113,7 @@ graph TB
     
     MemoryAPI --> MongoDB
     PrefsAPI --> MongoDB
-    AllAPIs[All APIs] --> MongoDB
+    AllAPIs["All APIs"] --> MongoDB
     
     AIProvider --> CacheService
     CacheService --> Redis
@@ -126,31 +126,31 @@ graph TB
 ```mermaid
 graph TB
     subgraph "User Interaction"
-        Chat[💬 Chat Message]
-        UI[⚙️ Settings UI]
+        Chat["💬 Chat Message"]
+        UI["⚙️ Settings UI"]
     end
     
     subgraph "Memory Detection Layer"
-        Explicit[🗣️ Explicit Commands<br/>Remember that...]
-        Smart[🤖 Smart Extraction<br/>AI-Powered Detection]
-        Patterns[⚡ Pattern Matching<br/>Quick Detection]
+        Explicit["🗣️ Explicit Commands - Remember that..."]
+        Smart["🤖 Smart Extraction - AI-Powered Detection"]
+        Patterns["⚡ Pattern Matching - Quick Detection"]
     end
     
     subgraph "Memory Processing"
-        Extract[📊 Information Extraction]
-        Category[🏷️ Auto-Categorization<br/>goal, preference, exam, etc.]
-        Confidence[🎯 Confidence Scoring<br/>high/medium/low]
-        Duplicate[🔍 Duplicate Detection]
+        Extract["📊 Information Extraction"]
+        Category["🏷️ Auto-Categorization"]
+        Confidence["🎯 Confidence Scoring"]
+        Duplicate["🔍 Duplicate Detection"]
     end
     
     subgraph "Memory Storage"
-        MemoryDB[(🧠 User Memories<br/>- content<br/>- category<br/>- importance<br/>- usage stats)]
+        MemoryDB[("🧠 User Memories")]
     end
     
     subgraph "Memory Usage"
-        Context[📝 AI Context Enrichment]
-        Personalize[🎨 Response Personalization]
-        Analytics[📊 Usage Tracking]
+        Context["📝 AI Context Enrichment"]
+        Personalize["🎨 Response Personalization"]
+        Analytics["📊 Usage Tracking"]
     end
     
     Chat --> Explicit & Smart
@@ -177,38 +177,38 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Chat Request Flow"
-        UserMsg[📨 User Message]
+        UserMsg["📨 User Message"]
         
         subgraph "Pre-Processing"
-            SessionCheck[🔐 Auth Check]
-            ProfileLoad[👤 Load User Profile]
-            MemoryLoad[🧠 Load Memories]
-            HistoryLoad[📜 Load Chat History]
+            SessionCheck["🔐 Auth Check"]
+            ProfileLoad["👤 Load User Profile"]
+            MemoryLoad["🧠 Load Memories"]
+            HistoryLoad["📜 Load Chat History"]
         end
         
         subgraph "Information Extraction"
-            ExplicitMemory[🗣️ Explicit Memory Detection]
-            SmartExtract[🤖 Smart Memory Extraction]
-            ProfileExtract[📊 Profile Info Extraction]
+            ExplicitMemory["🗣️ Explicit Memory Detection"]
+            SmartExtract["🤖 Smart Memory Extraction"]
+            ProfileExtract["📊 Profile Info Extraction"]
         end
         
         subgraph "Context Building"
-            SystemPrompt[📝 System Prompt Builder]
-            MemoryContext[🧠 Add Memories Context]
-            ProfileContext[👤 Add Profile Context]
-            RAGContext[📚 Add PYQ Context<br/>if relevant]
+            SystemPrompt["📝 System Prompt Builder"]
+            MemoryContext["🧠 Add Memories Context"]
+            ProfileContext["👤 Add Profile Context"]
+            RAGContext["📚 Add PYQ Context - if relevant"]
         end
         
         subgraph "AI Processing"
-            Cache[⚡ Check Cache]
-            AICall[🤖 Perplexity API Call]
-            Stream[📡 Stream Response]
+            Cache["⚡ Check Cache"]
+            AICall["🤖 Perplexity API Call"]
+            Stream["📡 Stream Response"]
         end
         
         subgraph "Post-Processing"
-            SaveChat[💾 Save to MongoDB]
-            UpdateMemories[🧠 Update Memory Stats]
-            UpdateProfile[👤 Update User Profile]
+            SaveChat["💾 Save to MongoDB"]
+            UpdateMemories["🧠 Update Memory Stats"]
+            UpdateProfile["👤 Update User Profile"]
         end
     end
     
