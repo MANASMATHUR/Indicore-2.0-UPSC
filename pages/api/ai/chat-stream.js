@@ -136,7 +136,8 @@ export default async function handler(req, res) {
       language,
       provider,
       openAIModel,
-      pyqMetadata
+      pyqMetadata,
+      simulationMode
     } = req.body;
     const STREAMING_FALLBACK_MESSAGE = "I couldn't generate a full answer this time, but I'm still here—please rephrase or ask again so I can try once more.";
     const pyqContextKey = `${session.user.email}:${chatId || 'stream'}`;
@@ -833,15 +834,26 @@ Remember: Your goal is to present questions clearly and completely. If no questi
     // Assemble modular prompt
     const finalBuilder = new SystemPromptBuilder(language || 'en')
       .withExamFocus()
+      .withSyllabusMapping(subject) // New: Automatic GS Paper mapping
+      .withIndicoreBlueprint()     // New: Mandatory answer structure
       .withUserContext(formatProfileContext(userProfile))
       .withMemories(formatMemoriesForAI(userProfile?.memories || []))
       .withFacts(factDb || [])
       .withDirectiveAnalysis(message)
       .withSubjectKeywords(subject)
-      .withDiagramSuggestions();
+      .withDiagramSuggestions()
+      .withMindMapSupport();
+
+    if (simulationMode === 'ethics') {
+      finalBuilder.withEthicsSimulation();
+    }
 
     if (pyqMetadata) {
       finalBuilder.withPyqExpert(pyqMetadata);
+      // Inject real questions for the drill if we have them
+      if (pyqMetadata.questions) {
+        finalBuilder.withRelatedPYQs(pyqMetadata.questions.slice(0, 3));
+      }
     }
 
     if (isSolveRequest) {
