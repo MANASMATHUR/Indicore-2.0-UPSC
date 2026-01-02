@@ -24,7 +24,7 @@ function validateTranslateRequest(req) {
   }
 
   const supportedLanguages = ['en', 'hi', 'mr', 'ta', 'bn', 'pa', 'gu', 'te', 'ml', 'kn', 'es', 'auto'];
-  
+
   if (!supportedLanguages.includes(sourceLanguage)) {
     throw new Error('Unsupported source language');
   }
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ 
+    return res.status(405).json({
       error: 'Method not allowed',
       code: 'METHOD_NOT_ALLOWED'
     });
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
     }
 
     const normalizedSourceLang = sourceLanguage === 'auto' ? 'en' : sourceLanguage;
-    
+
     if (normalizedSourceLang === targetLanguage) {
       return res.status(200).json({
         translatedText: text,
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
     const startTime = Date.now();
     const translatedText = await translateText(text, sourceLanguage, targetLanguage, isStudyMaterial);
     const processingTime = Date.now() - startTime;
-    
+
     if (!translatedText || translatedText.trim() === text.trim()) {
       return res.status(500).json({
         error: `Translation failed: Unable to translate from ${sourceLanguage} to ${targetLanguage}.`,
@@ -116,8 +116,8 @@ export default async function handler(req, res) {
         timestamp: new Date().toISOString()
       });
     }
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       translatedText,
       sourceLanguage,
       targetLanguage,
@@ -126,29 +126,29 @@ export default async function handler(req, res) {
       processingTime,
       timestamp: new Date().toISOString()
     });
-    
+
   } catch (error) {
     console.error('Translation error:', error);
-    
+
     const errorMsg = error?.message || String(error) || 'Unknown error';
-    
+
     if (errorMsg.includes('malicious') || errorMsg.includes('unsupported') || errorMsg.includes('required') || errorMsg.includes('too long')) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: errorMsg,
         code: 'VALIDATION_ERROR',
         timestamp: new Date().toISOString()
       });
     }
-    
+
     if (errorMsg.includes('Unable to translate') || errorMsg.includes('translation services failed')) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: errorMsg,
         code: 'TRANSLATION_FAILED',
         timestamp: new Date().toISOString()
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Translation service unavailable',
       code: 'SERVICE_ERROR',
       details: process.env.NODE_ENV === 'development' ? errorMsg : undefined,
@@ -206,7 +206,7 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
   }
 
   const shouldUseAI = isStudyMaterial || text.length > 2000;
-  
+
   if (shouldUseAI) {
     const attempts = [];
     const tryModel = (p) => p.then(r => {
@@ -214,7 +214,7 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
       throw new Error('empty_translation');
     });
 
-    // Use dynamic timeout calculation based on text length
+    // Use dynamic timeout calculation based on text length (up to 60s)
     const dynamicTimeout = calculateTranslationTimeout(text.length);
     if (process.env.GEMINI_API_KEY) attempts.push(tryModel(translateWithGemini(text, sourceLang, targetLang, dynamicTimeout)));
     if (process.env.COHERE_API_KEY) attempts.push(tryModel(translateWithCohere(text, sourceLang, targetLang, dynamicTimeout)));
@@ -249,17 +249,18 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
 
     // Split long text into chunks for APIs with URL length limits
     // MyMemory uses GET requests, so we need smaller chunks (URL encoding adds ~30% overhead)
-    const chunkText = (str, maxLen = 250) => {
+    // Increased chunk size to 1000 to reduce overhead for longer texts
+    const chunkText = (str, maxLen = 1000) => {
       const chunks = [];
       let current = '';
-      
+
       // Split by sentences first, then by words if needed
       const sentences = str.split(/([.!?]\s+|\.\s+|\.$|\n\n)/);
-      
+
       for (let i = 0; i < sentences.length; i++) {
         const sentence = sentences[i];
         const combinedLength = (current + sentence).length;
-        
+
         if (combinedLength <= maxLen) {
           current += sentence;
         } else {
@@ -267,7 +268,7 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
           if (current.trim()) {
             chunks.push(current.trim());
           }
-          
+
           // If the sentence itself is longer than maxLen, split it by words
           if (sentence.length > maxLen) {
             const words = sentence.split(/(\s+)/);
@@ -286,11 +287,11 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
           }
         }
       }
-      
+
       if (current.trim()) {
         chunks.push(current.trim());
       }
-      
+
       return chunks.length > 0 ? chunks : [str.substring(0, maxLen)];
     };
 
@@ -300,27 +301,27 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
         if (text.length > 2000) {
           const chunks = chunkText(text, 1500);
           const translatedChunks = await Promise.all(
-            chunks.map(chunk => 
+            chunks.map(chunk =>
               fetchWithTimeout('https://libretranslate.de/translate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  q: chunk, 
-                  source: sourceLang, 
-                  target: targetLang, 
-                  format: 'text' 
+                body: JSON.stringify({
+                  q: chunk,
+                  source: sourceLang,
+                  target: targetLang,
+                  format: 'text'
                 })
-              }, 15000).then(async res => {
+              }, 30000).then(async res => {
                 if (!res.ok) {
                   const errorText = await res.text().catch(() => '');
                   throw new Error(`LibreTranslate HTTP ${res.status}: ${errorText.substring(0, 100)}`);
                 }
-                
+
                 const contentType = res.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
                   throw new Error('LibreTranslate returned non-JSON response (likely HTML error page)');
                 }
-                
+
                 const data = await res.json();
                 const translated = sanitizeTranslationOutput(data.translatedText || '');
                 if (!translated || translated.trim() === chunk.trim()) {
@@ -336,18 +337,18 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ q: text, source: sourceLang, target: targetLang, format: 'text' })
-          }, 15000);
-          
+          }, 30000);
+
           if (!res.ok) {
             const errorText = await res.text().catch(() => '');
             throw new Error(`LibreTranslate HTTP ${res.status}: ${errorText.substring(0, 100)}`);
           }
-          
+
           const contentType = res.headers.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
             throw new Error('LibreTranslate returned non-JSON response (likely HTML error page)');
           }
-          
+
           const data = await res.json();
           const translated = sanitizeTranslationOutput(data.translatedText || '');
           if (!translated || translated.trim() === text.trim()) {
@@ -364,30 +365,30 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
       try {
         // MyMemory uses GET requests, so URL length is limited
         // Account for URL encoding overhead (~30-40%) and keep chunks small
-        // Use 200 chars to be safe (200 * 1.4 = 280 chars encoded, well under 2048 URL limit)
-        if (text.length > 200) {
-          const chunks = chunkText(text, 200);
+        // Combined with GET limits, 500 chars is safe for URL length
+        if (text.length > 500) {
+          const chunks = chunkText(text, 500);
           const translatedChunks = [];
-          
+
           // Process chunks sequentially with small delays to avoid rate limiting
           for (let i = 0; i < chunks.length; i++) {
             if (i > 0) {
               // Small delay between requests (except first one)
               await new Promise(resolve => setTimeout(resolve, 200));
             }
-            
+
             try {
               const res = await fetchWithTimeout(
-                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunks[i])}&langpair=${sourceLang}|${targetLang}`, 
-                {}, 
-                10000
+                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunks[i])}&langpair=${sourceLang}|${targetLang}`,
+                {},
+                30000
               );
-              
+
               if (!res.ok) {
                 const errorText = await res.text().catch(() => '');
                 throw new Error(`MyMemory HTTP ${res.status}: ${errorText.substring(0, 100)}`);
               }
-              
+
               const data = await res.json();
               const translated = sanitizeTranslationOutput(
                 (data && data.responseData && data.responseData.translatedText) || ''
@@ -400,23 +401,23 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
               // skip failed chunk
             }
           }
-          
+
           if (translatedChunks.length === 0) {
             throw new Error('MyMemory failed to translate any chunks');
           }
           return translatedChunks.join(' ');
         } else {
           const res = await fetchWithTimeout(
-            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`, 
-            {}, 
-            10000
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`,
+            {},
+            30000
           );
-          
+
           if (!res.ok) {
             const errorText = await res.text().catch(() => '');
             throw new Error(`MyMemory HTTP ${res.status}: ${errorText.substring(0, 100)}`);
           }
-          
+
           const data = await res.json();
           const translated = sanitizeTranslationOutput(
             (data && data.responseData && data.responseData.translatedText) || ''
@@ -435,15 +436,15 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
       tryProvider(libre, 'LibreTranslate'),
       tryProvider(myMemory, 'MyMemory')
     ];
-    
+
     try {
-    const firstFree = await Promise.any(freeAttempts);
-    if (firstFree && firstFree.trim() && firstFree.trim() !== text.trim()) {
-      translationCache.set(cacheKey, {
-        translation: firstFree,
-        timestamp: Date.now()
-      });
-      return firstFree;
+      const firstFree = await Promise.any(freeAttempts);
+      if (firstFree && firstFree.trim() && firstFree.trim() !== text.trim()) {
+        translationCache.set(cacheKey, {
+          translation: firstFree,
+          timestamp: Date.now()
+        });
+        return firstFree;
       }
     } catch (e) {
       freeTranslationError = e;
@@ -486,7 +487,7 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
   // Fallback with study material context
   const sourceLangName = languageNames[sourceLang] || sourceLang;
   const targetLangName = languageNames[targetLang] || targetLang;
-  
+
   // Try one more free service as fallback - use Google Translate web scraping alternative
   // Or use a simpler online translation service
   try {
@@ -494,20 +495,20 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
     const altLibre = await fetchWithTimeout('https://translate.argosopentech.com/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         q: text.substring(0, 5000), // Limit to avoid issues
-        source: sourceLang, 
-        target: targetLang, 
-        format: 'text' 
+        source: sourceLang,
+        target: targetLang,
+        format: 'text'
       })
-    }, 10000).then(async res => {
+    }, 30000).then(async res => {
       if (!res.ok) throw new Error(`Alt LibreTranslate HTTP ${res.status}`);
-      
+
       const contentType = res.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Alt LibreTranslate returned non-JSON response (likely HTML error page)');
       }
-      
+
       const data = await res.json();
       const translated = sanitizeTranslationOutput(data.translatedText || '');
       if (translated && translated.trim() && translated.trim() !== text.trim()) {
@@ -526,9 +527,9 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
   } catch (error) {
     // fallback
   }
-  
+
   let translatedText = text;
-  
+
   if (isStudyMaterial && sourceLang === 'en') {
     translatedText = enhanceStudyMaterialTranslation(text, targetLang);
   } else {
@@ -559,16 +560,16 @@ export async function translateText(text, sourceLang, targetLang, isStudyMateria
 // Azure Translator API - Professional translation service
 // Calculate timeout based on text length to prevent cutoffs
 function calculateTranslationTimeout(textLength) {
-  // Base timeout: 20 seconds
-  // Add 1 second per 500 characters
-  return Math.min(60000, 20000 + Math.ceil(textLength / 500) * 1000);
+  // Base timeout: 30 seconds (increased for reliability)
+  // Add 3 seconds per 1000 characters
+  return Math.min(60000, 30000 + Math.ceil(textLength / 1000) * 3000);
 }
 
 async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = null) {
   if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const azureKey = process.env.AZURE_TRANSLATOR_KEY || process.env.AZURE_TRANSLATOR_SUBSCRIPTION_KEY;
   const azureRegion = process.env.AZURE_TRANSLATOR_REGION || process.env.AZURE_TRANSLATOR_LOCATION || 'global';
-  
+
   if (!azureKey) {
     return null;
   }
@@ -591,7 +592,7 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = null
   const azureSourceLang = azureLanguageMap[sourceLang] || sourceLang;
   const azureTargetLang = azureLanguageMap[targetLang] || targetLang;
   const endpoint = `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=${azureSourceLang}&to=${azureTargetLang}`;
-  
+
   try {
     const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
@@ -615,7 +616,7 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = null
         return translated;
       }
     }
-    
+
     throw new Error('Invalid Azure response');
   } catch (error) {
     throw error;
@@ -626,8 +627,8 @@ async function translateWithAzure(text, sourceLang, targetLang, timeoutMs = null
 async function translateWithGemini(text, sourceLang, targetLang, timeoutMs = null) {
   if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
-    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
-    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil',
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu',
     'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
   };
 
@@ -697,8 +698,8 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
 async function translateWithCohere(text, sourceLang, targetLang, timeoutMs = null) {
   if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
-    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
-    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil',
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu',
     'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
   };
 
@@ -739,7 +740,7 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
         'Authorization': `Bearer ${process.env.COHERE_API_KEY}`,
         'Content-Type': 'application/json',
       },
-        body: JSON.stringify({
+      body: JSON.stringify({
         model: 'command',
         prompt: prompt,
         max_tokens: Math.min(8000, Math.ceil(text.length * 3)), // Increased to prevent cutoffs, scale better
@@ -760,8 +761,8 @@ Provide ONLY the translation in ${targetLangName}, without any explanations, not
 async function translateWithMistral(text, sourceLang, targetLang, timeoutMs = null) {
   if (timeoutMs === null) timeoutMs = calculateTranslationTimeout(text.length);
   const languageNames = {
-    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil', 
-    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu', 
+    'en': 'English', 'hi': 'Hindi', 'mr': 'Marathi', 'ta': 'Tamil',
+    'bn': 'Bengali', 'pa': 'Punjabi', 'gu': 'Gujarati', 'te': 'Telugu',
     'ml': 'Malayalam', 'kn': 'Kannada', 'es': 'Spanish'
   };
 
@@ -931,7 +932,7 @@ function enhanceStudyMaterialTranslation(text, targetLang) {
 // Basic translation fallback
 function basicTranslation(text, sourceLang, targetLang) {
   let translatedText = text;
-  
+
   // Basic word mapping for all supported languages
   if (sourceLang === 'en' && targetLang === 'hi') {
     translatedText = text
@@ -1079,11 +1080,11 @@ function basicTranslation(text, sourceLang, targetLang) {
   if (translatedText === text) {
     return text;
   }
-  
+
   return translatedText;
 }
 
-async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
+async function fetchWithTimeout(resource, options = {}, timeout = 60000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
