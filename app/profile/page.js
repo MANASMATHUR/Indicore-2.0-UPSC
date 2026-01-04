@@ -38,6 +38,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PredictiveSuccessScore from '@/components/PredictiveSuccessScore';
 import GamificationDashboard from '@/components/GamificationDashboard';
 import PYQQuestionCard from '@/components/PYQQuestionCard';
+import PersonalizedDashboard from '@/components/PersonalizedDashboard';
 
 export default function DashboardPage() {
     const { data: session, status } = useSession();
@@ -323,6 +324,9 @@ export default function DashboardPage() {
             </div>
 
             {/* Main Content */}
+            {/* New Unified Personalized Dashboard Components */}
+            <PersonalizedDashboard />
+
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Column - Main Content */}
