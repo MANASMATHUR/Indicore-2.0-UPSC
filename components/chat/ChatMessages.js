@@ -12,8 +12,11 @@ import { validateInput } from '@/lib/validation';
 import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingStates';
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 import { stripMarkdown, supportedLanguages } from '@/lib/messageUtils';
+import MermaidRenderer from '../MermaidRenderer';
+import * as highlightService from '@/lib/highlightService';
+import HighlightToolbar from './HighlightToolbar';
 
-const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, onRegenerate, onPromptClick, searchQuery = '', onBookmark, onEdit, onDelete }) => {
+const ChatMessages = memo(({ messages = [], isLoading = false, chatId, messagesEndRef, onRegenerate, onPromptClick, searchQuery = '', onBookmark, onEdit, onDelete }) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
   const translationLoading = useLoadingState();
@@ -204,6 +207,7 @@ const ChatMessages = memo(({ messages = [], isLoading = false, messagesEndRef, o
             onEdit={onEdit}
             onDelete={onDelete}
             isBookmarked={message.bookmarked || false}
+            chatId={chatId}
           />
         ))}
 
@@ -224,10 +228,10 @@ const MessageItem = memo(({
   onPromptClick,
   messages = [],
   searchQuery = '',
-  onBookmark,
   onEdit,
   onDelete,
-  isBookmarked = false
+  isBookmarked = false,
+  chatId
 }) => {
   const { showToast } = useToast();
   const [isHovered, setIsHovered] = useState(false);
@@ -238,6 +242,20 @@ const MessageItem = memo(({
   const ts = message?.timestamp ? new Date(message.timestamp) : null;
   const timeStr = ts && !isNaN(ts) ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const isTranslating = translatingMessage === index;
+
+  const [userHighlights, setUserHighlights] = useState([]);
+  const [toolbarPosition, setToolbarPosition] = useState(null);
+  const [selectedRange, setSelectedRange] = useState(null);
+  const [activeHighlightId, setActiveHighlightId] = useState(null);
+  const messageRef = useRef(null);
+
+  // Load highlights on mount
+  useEffect(() => {
+    if (chatId) {
+      const highlights = highlightService.getHighlightsForMessage(chatId, index);
+      setUserHighlights(highlights);
+    }
+  }, [chatId, index]);
 
   const cleanText = useCallback((text) => text || '', []);
 
@@ -287,14 +305,210 @@ const MessageItem = memo(({
     setEditText('');
   };
 
+  const handleSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !messageRef.current) {
+      // Only hide if we aren't currently interacting with a highlight
+      if (!activeHighlightId) setToolbarPosition(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    // Ensure selection is within THIS message
+    if (!messageRef.current.contains(range.commonAncestorContainer)) {
+      if (!activeHighlightId) setToolbarPosition(null);
+      return;
+    }
+
+    const rect = range.getBoundingClientRect();
+    console.log('Highlighter: Selection detected at', rect.top, rect.left);
+
+    // Use fixed viewport coordinates since toolbar is fixed via Portal
+    setToolbarPosition({
+      top: rect.top,
+      left: rect.left + rect.width / 2
+    });
+    setSelectedRange(range);
+    setActiveHighlightId(null);
+  }, [activeHighlightId]);
+
+  // Global selection listener for robustness
+  useEffect(() => {
+    const handleGlobalSelection = () => {
+      // Small debounce to let selection settle
+      setTimeout(handleSelection, 10);
+    };
+
+    document.addEventListener('selectionchange', handleGlobalSelection);
+    return () => document.removeEventListener('selectionchange', handleGlobalSelection);
+  }, [handleSelection]);
+
+  const handleApplyHighlight = (color) => {
+    if (!selectedRange || !chatId) return;
+
+    const selectedText = selectedRange.toString().trim();
+    if (!selectedText) {
+      showToast('No text selected', { type: 'warning' });
+      return;
+    }
+
+    const highlight = {
+      text: selectedText,
+      color
+    };
+
+    console.log('Highlighter: Saving highlight for chatId:', chatId, 'index:', index);
+    try {
+      const saved = highlightService.saveHighlight(chatId, index, highlight);
+      if (saved) {
+        setUserHighlights(prev => [...prev, saved]);
+        showToast('Highlight saved to library', { type: 'success' });
+      }
+    } catch (error) {
+      console.error('Highlight save error:', error);
+      showToast('Failed to save highlight', { type: 'error' });
+    }
+
+    // Clear selection
+    window.getSelection()?.removeAllRanges();
+    setToolbarPosition(null);
+    setSelectedRange(null);
+  };
+
+  const handleRemoveHighlight = (id) => {
+    if (!chatId) return;
+    highlightService.removeHighlight(chatId, index, id);
+    setUserHighlights(prev => prev.filter(h => h.id !== id));
+    setToolbarPosition(null);
+    setActiveHighlightId(null);
+  };
+
+  const renderHighlightedText = (text, query, highlights) => {
+    if (!text) return text;
+
+    // Combine all strings to highlight
+    const highlightWords = [
+      ...highlights.map(h => ({ text: h.text, color: h.color, id: h.id })),
+    ];
+
+    // Search query highlighting
+    const searchWords = query && query.trim() ? [query.trim()] : [];
+
+    if (highlightWords.length === 0 && searchWords.length === 0) return text;
+
+    // Build a map of text to highlights to handle multiple colors
+    const textMap = new Map();
+    highlightWords.forEach(h => {
+      textMap.set(h.text.toLowerCase(), h);
+    });
+
+    // Patterns to match
+    const patterns = [
+      ...highlightWords.map(h => h.text),
+      ...searchWords
+    ].filter(Boolean).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    if (patterns.length === 0) return text;
+
+    const regex = new RegExp(`(${patterns.join('|')})`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, i) => {
+      if (!part) return null;
+
+      const lowerPart = part.toLowerCase().trim();
+      if (!lowerPart) return part;
+
+      // 1. Exact Match (Highest Priority)
+      const exactHighlight = highlightWords.find(h => h.text.toLowerCase() === lowerPart);
+      if (exactHighlight) {
+        return (
+          <mark
+            key={`u-e-${i}`}
+            className={`highlight-${exactHighlight.color} px-0.5 rounded cursor-pointer transition-opacity hover:opacity-80`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setToolbarPosition({
+                top: rect.top,
+                left: rect.left + rect.width / 2
+              });
+              setActiveHighlightId(exactHighlight.id);
+            }}
+          >
+            {part}
+          </mark>
+        );
+      }
+
+      // 2. Partial Match (For markdown-split segments)
+      // Only match if the segment is at least 3 chars or equals a word in the highlight
+      const partialHighlight = highlightWords.find(h => {
+        const hText = h.text.toLowerCase();
+        return hText.includes(lowerPart) && (lowerPart.length > 3 || hText.split(/\s+/).includes(lowerPart));
+      });
+
+      if (partialHighlight) {
+        return (
+          <mark
+            key={`u-p-${i}`}
+            className={`highlight-${partialHighlight.color} px-0.5 rounded cursor-pointer transition-opacity hover:opacity-80`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setToolbarPosition({
+                top: rect.top,
+                left: rect.left + rect.width / 2
+              });
+              setActiveHighlightId(partialHighlight.id);
+            }}
+          >
+            {part}
+          </mark>
+        );
+      }
+
+      // 3. Search query match
+      if (searchWords.some(w => w.toLowerCase() === lowerPart)) {
+        return (
+          <mark key={`s-${i}`} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
+            {part}
+          </mark>
+        );
+      }
+
+      return part;
+    });
+  };
+
+
+  const COLORS = [
+    { name: 'yellow', hex: 'rgba(250, 204, 21, 0.4)' },
+    { name: 'green', hex: 'rgba(74, 222, 128, 0.4)' },
+    { name: 'pink', hex: 'rgba(251, 113, 133, 0.4)' },
+    { name: 'blue', hex: 'rgba(96, 165, 250, 0.4)' },
+    { name: 'orange', hex: 'rgba(251, 146, 60, 0.4)' }
+  ];
+
   return (
     <div
-      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3 highlight-match`}
+      ref={messageRef}
+      className={`message ${sender === 'user' ? 'user' : 'assistant'} animate-fade-in flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3 highlight-match relative`}
       style={{ animationDelay: `${index * 0.05}s` }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-message-index={index}
     >
+      {toolbarPosition && (
+        <HighlightToolbar
+          position={toolbarPosition}
+          onSelectColor={handleApplyHighlight}
+          onRemove={activeHighlightId ? () => handleRemoveHighlight(activeHighlightId) : null}
+          isExisting={!!activeHighlightId}
+        />
+      )}
       {sender === 'assistant' && (
         <div className="flex flex-col items-center gap-1">
           <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50 relative">
@@ -346,6 +560,7 @@ const MessageItem = memo(({
               remarkPlugins={[remarkGfm]}
               components={{
                 p: ({ children }) => <p className={`mb-1.5 last:mb-0 leading-relaxed text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
+                text: ({ value }) => renderHighlightedText(value, searchQuery, userHighlights),
                 strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
                 em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
                 ul: ({ children }) => <ul className={`mb-2 mt-1 list-disc space-y-0.5 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
@@ -355,7 +570,30 @@ const MessageItem = memo(({
                 h2: ({ children }) => <h2 className={`text-lg sm:text-xl font-bold mb-1.5 mt-3 first:mt-0 border-b pb-1.5 ${sender === 'user' ? 'text-white border-blue-400' : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'}`}>{children}</h2>,
                 h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-1 mt-2 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
                 h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-1 mt-2 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
-                code: ({ inline, children, ...props }) => {
+                code: ({ inline, children, className, ...props }) => {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const lang = match ? match[1] : '';
+                  const codeContent = String(children);
+                  const isMermaid = lang === 'mermaid' || (!inline && (
+                    codeContent.startsWith('mindmap') ||
+                    codeContent.startsWith('graph ') ||
+                    codeContent.startsWith('flowchart ') ||
+                    codeContent.startsWith('sequenceDiagram') ||
+                    codeContent.startsWith('gantt')
+                  ));
+
+                  if (isMermaid && !inline) {
+                    return (
+                      <div className="my-4 shadow-sm border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                          <span>Visual Mindmap / Diagram</span>
+                          <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded uppercase">UPSC Visual</span>
+                        </div>
+                        <MermaidRenderer chart={codeContent.replace(/\n$/, '')} id={`msg-mermaid-${index}`} />
+                      </div>
+                    );
+                  }
+
                   if (inline) {
                     return (
                       <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>
@@ -376,7 +614,7 @@ const MessageItem = memo(({
                 ),
               }}
             >
-              {searchQuery ? highlightText(cleanText(text), searchQuery) : cleanText(text)}
+              {cleanText(text)}
             </ReactMarkdown>
           </div>
         )}

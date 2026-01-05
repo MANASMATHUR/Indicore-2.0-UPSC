@@ -14,7 +14,17 @@ export default function SmartSuggestions({ onSelect, className = '' }) {
             const data = await res.json();
 
             if (data.success) {
-                setSuggestions(data.suggestions);
+                const enhancedSuggestions = [
+                    {
+                        question: "Start a Guided Ethics (GS-4) Case Study Simulation",
+                        topic: "Ethics Lab",
+                        priority: "high",
+                        type: "level_up",
+                        reason: "Practice stakeholder & dilemma mapping"
+                    },
+                    ...data.suggestions
+                ];
+                setSuggestions(enhancedSuggestions);
                 setContext(data.context);
             }
         } catch (error) {

@@ -15,11 +15,16 @@ import {
     BookOpen,
     Clock,
     Award,
-    Zap
+    Zap,
+    Link as LinkIcon,
+    Search,
+    Highlighter
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { motion, AnimatePresence } from 'framer-motion';
+import StudyCompendium from './chat/StudyCompendium';
+import { useToast } from './ui/ToastProvider';
 
 /**
  * Unified Dashboard - Compact header dropdown with personalized insights
@@ -31,6 +36,12 @@ export default function UnifiedDashboard() {
     const [recommendations, setRecommendations] = useState(null);
     const [userStats, setUserStats] = useState(null);
     const [resumableChat, setResumableChat] = useState(null);
+    const [dailyNews, setDailyNews] = useState([
+        { id: 1, headline: "Supreme Court stays implementation of controversial state law on reservation.", content: "A three-judge bench headed by the CJI observed that the law prima facie violates the 50% ceiling..." },
+        { id: 2, headline: "India-European Union to resume free trade agreement (FTA) talks next month.", content: "Both sides aim to resolve issues related to market access and digital trade..." }
+    ]);
+    const [syncingId, setSyncingId] = useState(null);
+    const [newsLinks, setNewsLinks] = useState({});
     const [loading, setLoading] = useState(true);
     const dropdownRef = useRef(null);
 
@@ -92,6 +103,26 @@ export default function UnifiedDashboard() {
         }
     };
 
+    const handleSyllabusLink = async (news) => {
+        if (newsLinks[news.id]) return;
+        setSyncingId(news.id);
+        try {
+            const res = await fetch('/api/ai/syllabus-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ headline: news.headline, content: news.content })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setNewsLinks(prev => ({ ...prev, [news.id]: data.analysis }));
+            }
+        } catch (error) {
+            console.error('Sync error:', error);
+        } finally {
+            setSyncingId(null);
+        }
+    };
+
     // Don't render for non-authenticated users
     if (!session) return null;
 
@@ -135,21 +166,26 @@ export default function UnifiedDashboard() {
                         </div>
 
                         {/* Quick Stats */}
-                        <div className="grid grid-cols-3 gap-2 mt-4">
+                        <div className="grid grid-cols-4 gap-2 mt-4">
                             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 text-center">
-                                <Flame className="w-5 h-5 mx-auto mb-1 text-orange-300" />
-                                <div className="text-xl font-bold">{studyStreak}</div>
-                                <div className="text-[10px] text-rose-100">Day Streak</div>
+                                <Flame className="w-4 h-4 mx-auto mb-1 text-orange-300" />
+                                <div className="text-lg font-bold">{studyStreak}</div>
+                                <div className="text-[9px] text-rose-100">Streak</div>
                             </div>
                             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 text-center">
-                                <BarChart3 className="w-5 h-5 mx-auto mb-1 text-rose-300" />
-                                <div className="text-xl font-bold">{userStats?.mockTestsCompleted || 0}</div>
-                                <div className="text-[10px] text-rose-100">Tests Done</div>
+                                <BarChart3 className="w-4 h-4 mx-auto mb-1 text-rose-300" />
+                                <div className="text-lg font-bold">{userStats?.mockTestsCompleted || 0}</div>
+                                <div className="text-[9px] text-rose-100">Tests</div>
                             </div>
                             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 text-center">
-                                <Award className="w-5 h-5 mx-auto mb-1 text-yellow-300" />
-                                <div className="text-xl font-bold">{userStats?.averageScore || 0}%</div>
-                                <div className="text-[10px] text-rose-100">Achievements</div>
+                                <Award className="w-4 h-4 mx-auto mb-1 text-yellow-300" />
+                                <div className="text-lg font-bold">{userStats?.averageScore || 0}%</div>
+                                <div className="text-[9px] text-rose-100">Score</div>
+                            </div>
+                            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 text-center">
+                                <BookOpen className="w-4 h-4 mx-auto mb-1 text-emerald-300" />
+                                <div className="text-lg font-bold">{recommendations?.overallSyllabusProgress || 0}%</div>
+                                <div className="text-[9px] text-rose-100">Syllabus</div>
                             </div>
                         </div>
                     </div>
@@ -186,6 +222,79 @@ export default function UnifiedDashboard() {
                                         </Link>
                                     </div>
                                 )}
+
+                                {/* Daily News & Syllabus Sync */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 mb-1 px-1">
+                                        <LinkIcon className="w-4 h-4 text-rose-600" />
+                                        <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">Daily Syllabus Sync</h4>
+                                        <Badge className="ml-auto text-[9px] bg-rose-100 text-rose-600 border-rose-200">LIVE</Badge>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {dailyNews.map((news) => (
+                                            <div key={news.id} className="p-3 rounded-xl bg-white dark:bg-gray-800 border border-slate-100 dark:border-slate-800 hover:border-rose-200 transition-all shadow-sm">
+                                                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mb-2 line-clamp-2 leading-snug">
+                                                    {news.headline}
+                                                </p>
+
+                                                {newsLinks[news.id] ? (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        className="mt-2 p-2 bg-rose-50/50 dark:bg-rose-900/10 rounded-lg border border-rose-100 dark:border-rose-900/30"
+                                                    >
+                                                        <div className="flex items-center gap-1.5 mb-1">
+                                                            <div className="px-1.5 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded uppercase">
+                                                                {newsLinks[news.id].gsPaper}
+                                                            </div>
+                                                            <span className="text-[9px] font-bold text-rose-700 dark:text-rose-400 truncate">
+                                                                {newsLinks[news.id].topic}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-600 dark:text-slate-400 italic line-clamp-2">
+                                                            {newsLinks[news.id].relevance}
+                                                        </p>
+                                                    </motion.div>
+                                                ) : (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => handleSyllabusLink(news)}
+                                                        disabled={syncingId === news.id}
+                                                        className="w-full h-7 text-[10px] font-bold text-rose-600 hover:bg-rose-50 border border-dashed border-rose-200 rounded-lg flex items-center justify-center gap-1.5"
+                                                    >
+                                                        {syncingId === news.id ? (
+                                                            <>
+                                                                <div className="w-2.5 h-2.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                                                                Scanning Syllabus...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Search className="w-3 h-3" />
+                                                                Link to UPSC Syllabus
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Study Compendium Highlights (NEW) */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 mb-1 px-1">
+                                        <Highlighter className="w-4 h-4 text-red-600" />
+                                        <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100">Study Compendium</h4>
+                                        <Badge className="ml-auto text-[9px] bg-red-100 text-red-600 border-red-200">RECENT</Badge>
+                                    </div>
+                                    <StudyCompendium compact={true} />
+                                    <Link href="/highlights">
+                                        <Button variant="ghost" size="sm" className="w-full h-8 text-xs text-slate-500 hover:text-red-600 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg mt-1 font-bold">
+                                            VIEW ALL HIGHLIGHTS <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                                        </Button>
+                                    </Link>
+                                </div>
 
                                 {hasRecommendations ? (
                                     <>
@@ -342,7 +451,8 @@ export default function UnifiedDashboard() {
                         </Link>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }

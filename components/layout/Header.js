@@ -139,29 +139,32 @@ const Header = ({
 
         <div className="px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between">
-            {/* Menu Button */}
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onMenuClick();
-              }}
-              className="flex items-center justify-center bg-gradient-to-r from-red-600 to-orange-600 text-white px-4 py-2.5 rounded-lg hover:from-red-700 hover:to-orange-700 active:scale-95 transition-all duration-200 shadow-md hover:shadow-lg z-50"
-              aria-label="Toggle sidebar"
-            >
-              <span className="hidden sm:inline font-semibold">Menu</span>
-              <svg className="sm:hidden w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-
-            {/* Logo - Centered */}
-            <div className="absolute left-1/2 -translate-x-1/2">
-              <Logo variant="light" showText={true} size="sm" />
+            {/* Left side: Menu Button */}
+            <div className="flex items-center">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onMenuClick();
+                }}
+                className="flex items-center justify-center bg-gradient-to-r from-red-600 to-orange-600 text-white px-4 py-2.5 rounded-lg hover:from-red-700 hover:to-orange-700 active:scale-95 transition-all duration-200 shadow-md hover:shadow-lg z-50 whitespace-nowrap"
+                aria-label="Toggle sidebar"
+              >
+                <span className="hidden sm:inline font-semibold">Menu</span>
+                <svg className="sm:hidden w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
             </div>
 
-            {/* Right side buttons */}
+            {/* Center: Logo */}
+            <div className="flex-1 flex justify-center px-4">
+              <Logo variant="light" showText={true} size="sm" className="max-w-[150px] sm:max-w-none" />
+            </div>
+
+            {/* Right side: Tools & Profile */}
             <div className="flex items-center gap-1 sm:gap-2">
+
               {/* Contact Us Button */}
               <Button
                 variant="ghost"
@@ -340,18 +343,18 @@ const Header = ({
                   size="icon"
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="text-red-600 hover:text-red-800 hover:bg-red-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
-                  aria-label={`User account menu - ${user.name}`}
+                  aria-label={`User account menu - ${user?.name || 'User'}`}
                   aria-haspopup="true"
                   aria-expanded={showUserMenu}
                 >
                   <img
-                    src={user.avatar || '/static/default-avatar.jpg'}
-                    alt={`${user.name}'s profile picture`}
+                    src={user?.avatar || '/static/default-avatar.jpg'}
+                    alt={`${user?.name || 'User'}'s profile picture`}
                     className="w-6 h-6 rounded-full"
                   />
                 </Button>
 
-                {showUserMenu && (
+                {showUserMenu && user && (
                   <>
                     <div
                       className="fixed inset-0 z-[90]"
@@ -360,8 +363,8 @@ const Header = ({
                     />
                     <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-red-200 dark:border-slate-600 z-[100]">
                       <div className="p-3 border-b border-red-200 dark:border-slate-600">
-                        <p className="font-medium text-red-800 dark:text-slate-100">{user.name}</p>
-                        <p className="text-sm text-red-600 dark:text-slate-300">{user.email}</p>
+                        <p className="font-medium text-red-800 dark:text-slate-100">{user.name || 'User'}</p>
+                        <p className="text-sm text-red-600 dark:text-slate-300">{user.email || ''}</p>
                       </div>
                       <Button
                         variant="ghost"
