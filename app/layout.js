@@ -4,15 +4,16 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 import { Providers } from './providers';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { PostHogProvider } from '@/components/PostHogProvider';
 import dynamic from 'next/dynamic';
 
 // Lazy load non-critical components
-const VisitorTracker = dynamic(() => import('@/components/VisitorTracker'), { 
-  ssr: false 
+const VisitorTracker = dynamic(() => import('@/components/VisitorTracker'), {
+  ssr: false
 });
 
 // Optimize font loading
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   preload: true,
@@ -36,10 +37,12 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body className={inter.className}>
         <ErrorBoundary>
-          <Providers>
-            {children}
-            <VisitorTracker />
-          </Providers>
+          <PostHogProvider>
+            <Providers>
+              {children}
+              <VisitorTracker />
+            </Providers>
+          </PostHogProvider>
         </ErrorBoundary>
         <Analytics mode="production" />
         <SpeedInsights />

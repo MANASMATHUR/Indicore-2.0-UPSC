@@ -797,6 +797,47 @@
   }
 }
 
+/* Virtual Highlighter Styles */
+.highlight-yellow {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+
+.highlight-green {
+  background-color: rgba(74, 222, 128, 0.4);
+}
+
+.highlight-pink {
+  background-color: rgba(251, 113, 133, 0.4);
+}
+
+.highlight-blue {
+  background-color: rgba(96, 165, 250, 0.4);
+}
+
+.highlight-orange {
+  background-color: rgba(251, 146, 60, 0.4);
+}
+
+.dark .highlight-yellow {
+  background-color: rgba(250, 204, 21, 0.25);
+}
+
+.dark .highlight-green {
+  background-color: rgba(74, 222, 128, 0.25);
+}
+
+.dark .highlight-pink {
+  background-color: rgba(251, 113, 133, 0.25);
+}
+
+.dark .highlight-blue {
+  background-color: rgba(96, 165, 250, 0.25);
+}
+
+.dark .highlight-orange {
+  background-color: rgba(251, 146, 60, 0.25);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1335,6 +1376,63 @@ a {
   50% {
     background-color: rgba(255, 255, 0, 0.2);
   }
+}
+
+/* User Text Highlights */
+.highlight-yellow,
+.prose .highlight-yellow {
+  background-color: rgba(250, 204, 21, 0.45) !important;
+  color: inherit !important;
+}
+
+.highlight-green,
+.prose .highlight-green {
+  background-color: rgba(74, 222, 128, 0.45) !important;
+  color: inherit !important;
+}
+
+.highlight-pink,
+.prose .highlight-pink {
+  background-color: rgba(251, 113, 133, 0.45) !important;
+  color: inherit !important;
+}
+
+.highlight-blue,
+.prose .highlight-blue {
+  background-color: rgba(96, 165, 250, 0.45) !important;
+  color: inherit !important;
+}
+
+.highlight-orange,
+.prose .highlight-orange {
+  background-color: rgba(251, 146, 60, 0.45) !important;
+  color: inherit !important;
+}
+
+/* Dark mode variants */
+.dark .highlight-yellow,
+.dark .prose .highlight-yellow {
+  background-color: rgba(250, 204, 21, 0.35) !important;
+}
+
+.dark .highlight-green,
+.dark .prose .highlight-green {
+  background-color: rgba(74, 222, 128, 0.35) !important;
+}
+
+.dark .highlight-pink,
+.dark .prose .highlight-pink {
+  background-color: rgba(251, 113, 133, 0.35) !important;
+}
+
+.dark .highlight-blue,
+.dark .prose .highlight-blue {
+  background-color: rgba(96, 165, 250, 0.35) !important;
+}
+
+.dark .highlight-orange,
+.dark .prose .highlight-orange {
+  background-color: rgba(251, 146, 60, 0.35) !important;
 }
 
 @layer base {

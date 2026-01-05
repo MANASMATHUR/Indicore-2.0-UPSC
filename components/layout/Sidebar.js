@@ -160,8 +160,23 @@ const Sidebar = ({
           )}
         </div>
 
-        {/* Intelligence Lab Link */}
-        <div className="p-2 border-t border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50">
+        {/* Library & Lab Links */}
+        <div className="p-2 border-t border-gray-100 dark:border-slate-700 space-y-1 bg-white/50 dark:bg-slate-800/50">
+          <a
+            href="/highlights"
+            className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all border border-transparent hover:border-red-100 dark:hover:border-red-800"
+          >
+            <div className="p-1.5 bg-red-100 dark:bg-red-900/30 rounded-lg">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </div>
+            <span>HIGHLIGHTS LIBRARY</span>
+            <div className="ml-auto flex items-center gap-1">
+              <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-black">NEW</span>
+            </div>
+          </a>
+
           <a
             href="/intelligence-lab"
             className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all border border-transparent hover:border-red-100 dark:hover:border-red-800"
