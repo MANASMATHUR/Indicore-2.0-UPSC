@@ -36,6 +36,48 @@ mermaid.initialize({
 });
 
 /**
+ * Sanitize flowchart syntax for Mermaid v11.12.2 compatibility
+ * Removes HTML tags like <br/> and parentheses which cause syntax errors
+ */
+function sanitizeFlowchart(chart) {
+    if (!chart.trim().startsWith('flowchart') && !chart.trim().startsWith('graph')) {
+        return chart; // Only process flowcharts/graphs
+    }
+
+    // Process line by line to preserve structure
+    return chart
+        .split('\n')
+        .map(line => {
+            // Match node definitions with square brackets like A[Label]
+            let processedLine = line.replace(/\[([^\]]+)\]/g, (match, label) => {
+                // Clean the label
+                const cleanLabel = label
+                    .replace(/<br\s*\/?>/gi, ' ')     // Replace <br/> with space
+                    .replace(/<[^>]+>/g, '')          // Remove any HTML tags
+                    .replace(/\(/g, ' - ')            // Replace ( with dash
+                    .replace(/\)/g, '')               // Remove )
+                    .replace(/\s+/g, ' ')             // Normalize whitespace
+                    .trim();
+                return `[${cleanLabel}]`;
+            });
+
+            // Also match node definitions with parentheses like A(Label) or A((Label))
+            processedLine = processedLine.replace(/\(\(([^)]+)\)\)/g, (match, label) => {
+                const cleanLabel = label
+                    .replace(/<br\s*\/?>/gi, ' ')
+                    .replace(/<[^>]+>/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                return `((${cleanLabel}))`;
+            });
+
+            return processedLine;
+        })
+        .join('\n');
+}
+
+
+/**
  * Sanitize mindmap syntax for Mermaid v11.12.2 compatibility
  * Fixes common issues like quoted strings, special characters, and incorrect brackets
  */
@@ -140,7 +182,9 @@ export default function MermaidRenderer({ chart, id = 'mermaid-chart' }) {
                 setError(null);
 
                 // Sanitize the chart for Mermaid v11 compatibility
-                let processedChart = sanitizeMindmap(chart.trim());
+                let processedChart = chart.trim();
+                processedChart = sanitizeFlowchart(processedChart);
+                processedChart = sanitizeMindmap(processedChart);
 
                 // Ensure unique ID for render
                 const uniqueId = `${id}-${Math.random().toString(36).substr(2, 9)}`.replace(/[^a-zA-Z0-9-]/g, '');
