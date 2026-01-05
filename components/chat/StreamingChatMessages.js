@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useCallback } from 'react';
+import { useState, useEffect, memo, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Button from '../ui/Button';
@@ -12,6 +12,9 @@ import { useLoadingState, LoadingStates, StatusIndicator } from '@/lib/loadingSt
 import { useToast } from '../ui/ToastProvider';
 import { sanitizeTranslationOutput } from '@/lib/translationUtils';
 import { stripMarkdown, supportedLanguages } from '@/lib/messageUtils';
+import MermaidRenderer from '../MermaidRenderer';
+import * as highlightService from '@/lib/highlightService';
+import HighlightToolbar from './HighlightToolbar';
 
 const cleanText = (text) => {
   if (!text) return '';
@@ -30,7 +33,8 @@ const StreamingChatMessages = memo(({
   searchQuery = '',
   onBookmark,
   onEdit,
-  onDelete
+  onDelete,
+  chatId
 }) => {
   const [translatingMessage, setTranslatingMessage] = useState(null);
   const [translatedText, setTranslatedText] = useState({});
@@ -122,11 +126,20 @@ const StreamingChatMessages = memo(({
       const errorMsg = errorHandler?.handleChatError?.(error, {
         type: 'streaming_translation_error',
         messageIndex,
-        targetLang
+        targetLang,
+        textLength: text.length
       })?.userMessage || error?.message || 'Translation failed';
 
-      translationLoading?.setError?.(errorMsg);
-      showToast(errorMsg, { type: 'error' });
+      // Provide more specific feedback for common translation issues
+      let friendlyError = errorMsg;
+      if (errorMsg.includes('too long') || text.length > 10000) {
+        friendlyError = 'Text exceeds 10,000 character limit. Please translate a shorter section.';
+      } else if (errorMsg.includes('timeout')) {
+        friendlyError = 'Translation timed out. The text might be too complex or the service is busy. Please try again.';
+      }
+
+      translationLoading?.setError?.(friendlyError);
+      showToast(friendlyError, { type: 'error' });
       errorHandler?.logError?.(error, { type: 'streaming_translation_error' }, 'warning');
     } finally {
       setTranslatingMessage(null);
@@ -209,6 +222,7 @@ const StreamingChatMessages = memo(({
             onEdit={onEdit}
             onDelete={onDelete}
             isBookmarked={message.bookmarked || false}
+            chatId={chatId}
           />
         ))}
 
@@ -224,6 +238,7 @@ const StreamingChatMessages = memo(({
                   remarkPlugins={[remarkGfm]}
                   components={{
                     p: ({ children }) => <p className="my-2 leading-relaxed text-slate-700 dark:text-slate-200 text-[15px]">{children}</p>,
+                    text: ({ value }) => renderHighlightedText(value, searchQuery, userHighlights),
                     strong: ({ children }) => <strong className="font-semibold text-slate-900 dark:text-slate-50">{children}</strong>,
                     em: ({ children }) => <em className="italic text-slate-700 dark:text-slate-300">{children}</em>,
                     ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-slate-700 dark:text-slate-200">{children}</ul>,
@@ -234,7 +249,30 @@ const StreamingChatMessages = memo(({
                     h3: ({ children }) => <h3 className="text-base sm:text-lg font-semibold mb-1.5 mt-3 first:mt-0 text-slate-700 dark:text-slate-200">{children}</h3>,
                     h4: ({ children }) => <h4 className="text-sm sm:text-base font-semibold mb-1.5 mt-3 text-slate-700 dark:text-slate-200">{children}</h4>,
                     hr: () => <hr className="my-4 border-slate-200 dark:border-slate-700" />,
-                    code: ({ inline, children, ...props }) => {
+                    code: ({ inline, children, className, ...props }) => {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const lang = match ? match[1] : '';
+                      const codeContent = String(children);
+                      const isMermaid = lang === 'mermaid' || (!inline && (
+                        codeContent.startsWith('mindmap') ||
+                        codeContent.startsWith('graph ') ||
+                        codeContent.startsWith('flowchart ') ||
+                        codeContent.startsWith('sequenceDiagram') ||
+                        codeContent.startsWith('gantt')
+                      ));
+
+                      if (isMermaid && !inline) {
+                        return (
+                          <div className="my-4 shadow-sm border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                            <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                              <span>Visual Mindmap / Diagram</span>
+                              <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded uppercase">UPSC Visual</span>
+                            </div>
+                            <MermaidRenderer chart={String(children).replace(/\n$/, '')} id="streaming-mermaid" />
+                          </div>
+                        );
+                      }
+
                       if (inline) {
                         return <code className="text-sm px-1.5 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100" {...props}>{children}</code>;
                       }
@@ -276,7 +314,8 @@ const MessageItem = memo(({
   onBookmark,
   onEdit,
   onDelete,
-  isBookmarked = false
+  isBookmarked = false,
+  chatId
 }) => {
   const { showToast } = useToast();
   const [isHovered, setIsHovered] = useState(false);
@@ -288,21 +327,212 @@ const MessageItem = memo(({
   const timeStr = ts && !isNaN(ts) ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const isTranslating = translatingMessage === index;
 
-  const highlightText = (text, query) => {
-    if (!query || !query.trim()) return text;
+  const [userHighlights, setUserHighlights] = useState([]);
+  const [toolbarPosition, setToolbarPosition] = useState(null);
+  const [selectedText, setSelectedText] = useState('');
+  const [activeHighlightId, setActiveHighlightId] = useState(null);
+  const messageRef = useRef(null);
+  const selectionTimeoutRef = useRef(null);
 
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  // Load highlights on mount
+  useEffect(() => {
+    if (chatId) {
+      const h = highlightService.getHighlightsForMessage(chatId, index);
+      setUserHighlights(h);
+    }
+  }, [chatId, index]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (selectionTimeoutRef.current) {
+        clearTimeout(selectionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSelection = (e) => {
+    // Prevent default and stop propagation to avoid selection being cleared
+    e.stopPropagation();
+
+    // Clear any existing timeout
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+    }
+
+    // Use setTimeout to ensure the selection is complete before we process it
+    selectionTimeoutRef.current = setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !messageRef.current) {
+        if (!activeHighlightId) {
+          setToolbarPosition(null);
+          setSelectedText('');
+        }
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      // Ensure selection is within THIS message
+      if (!messageRef.current.contains(range.commonAncestorContainer)) {
+        setToolbarPosition(null);
+        setSelectedText('');
+        return;
+      }
+
+      // Store the selected text immediately before it can be cleared
+      const text = selection.toString().trim();
+      if (!text) {
+        setToolbarPosition(null);
+        setSelectedText('');
+        return;
+      }
+
+      const rect = range.getBoundingClientRect();
+      console.log('StreamingHighlighter: Selection detected:', text, 'at', rect.top, rect.left);
+
+      // Use viewport coordinates for fixed toolbar
+      setToolbarPosition({
+        top: rect.top,
+        left: rect.left + rect.width / 2
+      });
+      setSelectedText(text);
+      setActiveHighlightId(null);
+    }, 10); // Small delay to ensure selection is stable
+  };
+
+  const handleApplyHighlight = (color) => {
+    if (!selectedText || !chatId) {
+      showToast('No text selected', { type: 'warning' });
+      return;
+    }
+
+    const highlight = {
+      text: selectedText,
+      color
+    };
+
+    console.log('StreamingHighlighter: Saving highlight for chatId:', chatId, 'index:', index, 'text:', selectedText);
+    try {
+      const saved = highlightService.saveHighlight(chatId, index, highlight);
+      if (saved) {
+        setUserHighlights(prev => [...prev, saved]);
+        showToast('Highlight saved to library', { type: 'success' });
+      }
+    } catch (error) {
+      console.error('Highlight save error:', error);
+      showToast('Failed to save highlight', { type: 'error' });
+    }
+
+    setToolbarPosition(null);
+    setSelectedText('');
+    window.getSelection().removeAllRanges();
+  };
+
+  const handleRemoveHighlight = (id) => {
+    if (!chatId) return;
+    highlightService.removeHighlight(chatId, index, id);
+    setUserHighlights(prev => prev.filter(h => h.id !== id));
+    setToolbarPosition(null);
+    setActiveHighlightId(null);
+  };
+
+  const renderHighlightedText = (text, query, highlights) => {
+    if (!text) return text;
+
+    // Combine all strings to highlight
+    const highlightWords = [
+      ...highlights.map(h => ({ text: h.text, color: h.color, id: h.id })),
+    ];
+
+    // Search query highlighting
+    const searchWords = query && query.trim() ? [query.trim()] : [];
+
+    if (highlightWords.length === 0 && searchWords.length === 0) return text;
+
+    // Build a map of text to highlights to handle multiple colors
+    const textMap = new Map();
+    highlightWords.forEach(h => {
+      textMap.set(h.text.toLowerCase(), h);
+    });
+
+    // Patterns to match
+    const patterns = [
+      ...highlightWords.map(h => h.text),
+      ...searchWords
+    ].filter(Boolean).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    if (patterns.length === 0) return text;
+
+    const regex = new RegExp(`(${patterns.join('|')})`, 'gi');
     const parts = text.split(regex);
 
-    return parts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
+    return parts.map((part, i) => {
+      if (!part) return null;
+
+      const lowerPart = part.toLowerCase().trim();
+      if (!lowerPart) return part;
+
+      // 1. Exact Match
+      const exactHighlight = highlightWords.find(h => h.text.toLowerCase() === lowerPart);
+      if (exactHighlight) {
+        return (
+          <mark
+            key={`u-e-${i}`}
+            className={`highlight-${exactHighlight.color} px-0.5 rounded cursor-pointer transition-opacity hover:opacity-80`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setToolbarPosition({
+                top: rect.top,
+                left: rect.left + rect.width / 2
+              });
+              setActiveHighlightId(exactHighlight.id);
+            }}
+          >
+            {part}
+          </mark>
+        );
+      }
+
+      // 2. Partial Match
+      const partialHighlight = highlightWords.find(h => {
+        const hText = h.text.toLowerCase();
+        return hText.includes(lowerPart) && (lowerPart.length > 3 || hText.split(/\s+/).includes(lowerPart));
+      });
+
+      if (partialHighlight) {
+        return (
+          <mark
+            key={`u-p-${i}`}
+            className={`highlight-${partialHighlight.color} px-0.5 rounded cursor-pointer transition-opacity hover:opacity-80`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setToolbarPosition({
+                top: rect.top,
+                left: rect.left + rect.width / 2
+              });
+              setActiveHighlightId(partialHighlight.id);
+            }}
+          >
+            {part}
+          </mark>
+        );
+      }
+
+      // 3. Search query match
+      if (searchWords.some(w => w.toLowerCase() === lowerPart)) {
+        return (
+          <mark key={`s-${i}`} className="bg-yellow-300 dark:bg-yellow-600/50 px-0.5 rounded">
+            {part}
+          </mark>
+        );
+      }
+
+      return part;
+    });
   };
 
   const handleCopy = async () => {
@@ -339,13 +569,27 @@ const MessageItem = memo(({
       className={`message ${sender === 'user' ? 'user' : 'assistant'} mb-2 sm:mb-3 flex items-start gap-2 sm:gap-3 highlight-match`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onMouseUp={handleSelection}
       data-message-index={index}
+      ref={messageRef}
     >
-      {sender === 'assistant' && (
-        <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
-          🎓
-        </div>
+      {toolbarPosition && (
+        <HighlightToolbar
+          position={toolbarPosition}
+          onSelectColor={(color) => {
+            handleApplyHighlight(color);
+          }}
+          onRemove={activeHighlightId ? () => handleRemoveHighlight(activeHighlightId) : null}
+          isExisting={!!activeHighlightId}
+        />
       )}
+      {
+        sender === 'assistant' && (
+          <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center text-white text-xs sm:text-sm font-semibold shadow-md ring-2 ring-red-100 dark:ring-red-900/50">
+            🎓
+          </div>
+        )
+      }
       <div
         className={`message-content relative rounded-xl border flex-1 flex flex-col ${sender === 'user'
           ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md ml-auto px-4 py-3 sm:px-5 sm:py-4'
@@ -382,6 +626,7 @@ const MessageItem = memo(({
               remarkPlugins={[remarkGfm]}
               components={{
                 p: ({ children }) => <p className={`my-2 leading-relaxed text-[15px] ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</p>,
+                text: ({ value }) => renderHighlightedText(value, searchQuery, userHighlights),
                 strong: ({ children }) => <strong className={`font-semibold ${sender === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-50'}`}>{children}</strong>,
                 em: ({ children }) => <em className={`italic ${sender === 'user' ? 'text-blue-50' : 'text-slate-700 dark:text-slate-300'}`}>{children}</em>,
                 ul: ({ children }) => <ul className={`my-2 list-disc space-y-1 pl-5 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</ul>,
@@ -392,7 +637,30 @@ const MessageItem = memo(({
                 h3: ({ children }) => <h3 className={`text-base sm:text-lg font-semibold mb-1.5 mt-3 first:mt-0 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h3>,
                 h4: ({ children }) => <h4 className={`text-sm sm:text-base font-semibold mb-1.5 mt-3 ${sender === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>{children}</h4>,
                 hr: () => <hr className="my-4 border-slate-200 dark:border-slate-700" />,
-                code: ({ inline, children, ...props }) => {
+                code: ({ inline, children, className, ...props }) => {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const lang = match ? match[1] : '';
+                  const codeContent = String(children);
+                  const isMermaid = lang === 'mermaid' || (!inline && (
+                    codeContent.startsWith('mindmap') ||
+                    codeContent.startsWith('graph ') ||
+                    codeContent.startsWith('flowchart ') ||
+                    codeContent.startsWith('sequenceDiagram') ||
+                    codeContent.startsWith('gantt')
+                  ));
+
+                  if (isMermaid && !inline) {
+                    return (
+                      <div className="my-4 shadow-sm border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                          <span>Visual Mindmap / Diagram</span>
+                          <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded uppercase">UPSC Visual</span>
+                        </div>
+                        <MermaidRenderer chart={codeContent.replace(/\n$/, '')} id={`msg-mermaid-${index}`} />
+                      </div>
+                    );
+                  }
+
                   if (inline) {
                     return <code className={`text-sm px-1.5 py-0.5 rounded font-mono ${sender === 'user' ? 'bg-blue-400/30 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'}`} {...props}>{children}</code>;
                   }
@@ -501,11 +769,13 @@ const MessageItem = memo(({
           />
         )}
       </div>
-      {sender === 'user' && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-blue-100 dark:ring-blue-900/50">
-          👤
-        </div>
-      )}
+      {
+        sender === 'user' && (
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-semibold shadow-md ring-2 ring-blue-100 dark:ring-blue-900/50">
+            👤
+          </div>
+        )
+      }
     </div>
   );
 });
