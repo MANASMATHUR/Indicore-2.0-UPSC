@@ -173,8 +173,10 @@ export default function PYQQuestionCard({ question, index = 0, onBookmark }) {
                             )}
                             {question.exam && (
                                 <div className="flex items-center gap-1">
-                                    <FileText className="w-3 h-3" />
-                                    <span>{question.exam}</span>
+                                    <FileText className="w-3 h-3 text-red-500 shadow-sm" />
+                                    <span className="font-bold text-red-900/80 dark:text-red-400 uppercase tracking-tighter text-[10px]">
+                                        {question.exam === 'ALL_PCS' ? 'UPSC + STATE PSC' : question.exam}
+                                    </span>
                                 </div>
                             )}
                         </div>

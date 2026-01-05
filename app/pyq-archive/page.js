@@ -99,7 +99,7 @@ function PYQArchiveContent() {
 
   // Generate year options
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: currentYear - 1990 + 1 }, (_, i) => currentYear - i);
+  const years = Array.from({ length: currentYear - 1979 + 1 }, (_, i) => currentYear - i);
 
   // Archive view effects
   useEffect(() => {
@@ -181,7 +181,7 @@ function PYQArchiveContent() {
       if (selectedLevel && selectedLevel.trim()) {
         params.append('level', selectedLevel.trim());
       }
-      if (fromYear && parseInt(fromYear) >= 1990) {
+      if (fromYear && parseInt(fromYear) >= 1979) {
         params.append('fromYear', fromYear);
       }
       if (toYear && parseInt(toYear) <= new Date().getFullYear() + 1) {
@@ -203,7 +203,7 @@ function PYQArchiveContent() {
           item.question &&
           item.question.trim().length >= 10 &&
           item.year &&
-          item.year >= 1990 &&
+          item.year >= 1979 &&
           item.year <= new Date().getFullYear() + 1
         );
         setResults(validResults);

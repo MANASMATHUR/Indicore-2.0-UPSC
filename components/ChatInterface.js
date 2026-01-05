@@ -93,9 +93,18 @@ export default function ChatInterface({ user }) {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    }, 1000);
     return () => clearTimeout(timeoutId);
   }, [messages]);
+
+  // Handle deep-linking to specific chat via ID
+  useEffect(() => {
+    const chatId = searchParams.get('id');
+    if (chatId && chatId !== currentChatId) {
+      setCurrentChatId(chatId);
+      loadChat(chatId);
+    }
+  }, [searchParams, loadChat, currentChatId]);
 
   const clearStreamingTimers = useCallback(() => {
     if (streamingFlushTimeoutRef.current) {
@@ -365,8 +374,9 @@ export default function ChatInterface({ user }) {
             language: messageLanguage,
             enableCaching: settings.enableCaching,
             quickResponses: settings.quickResponses,
-            notesContext: window.currentNotesContext, // Pass notes context if available
-            pyqMetadata: window.currentPyqMetadata // Pass rich PYQ metadata
+            notesContext: window.currentNotesContext,
+            pyqMetadata: window.currentPyqMetadata,
+            simulationMode: message.toLowerCase().includes('ethics') && message.toLowerCase().includes('simulation') ? 'ethics' : null
           }),
           signal: controller.signal
         });
@@ -1244,11 +1254,13 @@ export default function ChatInterface({ user }) {
                 onBookmark={handleBookmarkMessage}
                 onEdit={handleEditMessage}
                 onDelete={handleDeleteMessage}
+                chatId={currentChatId}
               />
             ) : (
               <ChatMessages
                 messages={messages}
                 isLoading={isLoading}
+                chatId={currentChatId}
                 messagesEndRef={messagesEndRef}
                 onRegenerate={handleRegenerate}
                 onPromptClick={handlePromptClick}

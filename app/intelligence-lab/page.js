@@ -160,8 +160,8 @@ const IntelligenceLab = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === tab.id
-                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                                        : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                                    : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
                                     }`}
                             >
                                 {tab.label}
@@ -171,6 +171,99 @@ const IntelligenceLab = () => {
 
                     {/* Tab Content */}
                     <AnimatePresence mode="wait">
+                        {activeTab === 'specialized' && (
+                            <motion.div
+                                key="specialized"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className="space-y-12"
+                            >
+                                <div className="text-center mb-12">
+                                    <h3 className="text-3xl font-black text-slate-900 mb-4">High-Impact AI Tools</h3>
+                                    <p className="text-slate-600 max-w-2xl mx-auto italic">
+                                        "Indicore doesn't just provide content; it provides a cognitive upgrade for civil services preparation."
+                                    </p>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {[
+                                        {
+                                            title: "Mains Answer Evaluator",
+                                            description: "Granular feedback on Intro, Body, and Conclusion with value-addition suggestions.",
+                                            link: "/mains-evaluator",
+                                            icon: "📝",
+                                            color: "bg-blue-50 text-blue-600 shadow-blue-100"
+                                        },
+                                        {
+                                            title: "Mind-Map Generator",
+                                            description: "Visual synthesis of complex topics into interactive diagrams within chat.",
+                                            link: "/chat",
+                                            icon: "🕸️",
+                                            color: "bg-purple-50 text-purple-600 shadow-purple-100"
+                                        },
+                                        {
+                                            title: "Daily Syllabus Connect",
+                                            description: "Linking daily news headlines to specific UPSC syllabus subtopics instantly.",
+                                            link: "/daily-link",
+                                            icon: "🔗",
+                                            color: "bg-green-50 text-green-600 shadow-green-100"
+                                        },
+                                        {
+                                            title: "Ethics Case Simulator",
+                                            description: "Step-by-step interactive workflow for GS-4 Ethics case study practice.",
+                                            link: "/ethics-lab",
+                                            icon: "⚖️",
+                                            color: "bg-red-50 text-red-600 shadow-red-100"
+                                        }
+                                    ].map((tool, idx) => (
+                                        <Link href={tool.link} key={idx}>
+                                            <motion.div
+                                                whileHover={{ y: -8, scale: 1.02 }}
+                                                className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl hover:shadow-2xl transition-all h-full flex flex-col"
+                                            >
+                                                <div className={`w-12 h-12 ${tool.color} rounded-2xl flex items-center justify-center text-2xl mb-4 shadow-inner`}>
+                                                    {tool.icon}
+                                                </div>
+                                                <h4 className="text-lg font-bold text-slate-900 mb-2">{tool.title}</h4>
+                                                <p className="text-slate-500 text-sm leading-relaxed flex-grow">
+                                                    {tool.description}
+                                                </p>
+                                                <div className="mt-6 text-sm font-bold text-blue-600 flex items-center gap-1 group">
+                                                    Launch Tool <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                                </div>
+                                            </motion.div>
+                                        </Link>
+                                    ))}
+                                </div>
+
+                                <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-10 text-white relative overflow-hidden">
+                                    <div className="relative z-10 grid md:grid-cols-2 gap-8 items-center">
+                                        <div>
+                                            <h4 className="text-2xl font-bold mb-4">How it works?</h4>
+                                            <p className="text-slate-400 text-sm leading-relaxed">
+                                                Indicore uses advanced Large Language Models (LLMs) tuned with UPSC-specific evaluation standards and the entire syllabus hierarchy. This ensures every piece of feedback is relevant, rigorous, and aimed at the top 1% performance.
+                                            </p>
+                                        </div>
+                                        <div className="flex justify-center gap-4">
+                                            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center">
+                                                <div className="text-2xl font-black mb-1">RAG</div>
+                                                <div className="text-[10px] uppercase font-bold tracking-widest opacity-60 text-blue-400">Knowledge Retrieval</div>
+                                            </div>
+                                            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center">
+                                                <div className="text-2xl font-black mb-1">JSON</div>
+                                                <div className="text-[10px] uppercase font-bold tracking-widest opacity-60 text-green-400">Structured Intelligence</div>
+                                            </div>
+                                            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md text-center">
+                                                <div className="text-2xl font-black mb-1">SVG</div>
+                                                <div className="text-[10px] uppercase font-bold tracking-widest opacity-60 text-purple-400">Visual Synthesis</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
                         {activeTab === 'overview' && (
                             <motion.div
                                 key="overview"

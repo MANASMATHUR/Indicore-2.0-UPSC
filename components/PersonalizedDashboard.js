@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -15,6 +15,15 @@ import StudyPersona from '@/components/StudyPersona';
 import SmartNudges from '@/components/SmartNudges';
 import PredictiveScore from '@/components/PredictiveScore';
 import AchievementWall from '@/components/AchievementWall';
+import SyllabusProgressTracker from '@/components/SyllabusProgressTracker';
+import DailySyllabusSync from '@/components/DailySyllabusSync';
+import ResumeSession from '@/components/ResumeSession';
+import DashboardSkeleton from '@/components/DashboardSkeleton';
+import DashboardError, { NetworkStatus } from '@/components/DashboardError';
+import useDashboardData, { formatLastUpdated } from '@/hooks/useDashboardData';
+import useKeyboardShortcuts, { KeyboardShortcutsHelp } from '@/hooks/useKeyboardShortcuts';
+import StudyCompendium from '@/components/chat/StudyCompendium';
+import { highlighter as HighlighterIcon } from 'lucide-react';
 import {
     Sparkles,
     ArrowRight,
@@ -26,49 +35,58 @@ import {
     Brain,
     X,
     ChevronRight,
-    Star
+    Star,
+    RefreshCw,
+    Clock,
+    Highlighter
 } from 'lucide-react';
 
 export default function PersonalizedDashboard() {
     const { data: session } = useSession();
-    const [recommendations, setRecommendations] = useState(null);
-    const [loading, setLoading] = useState(true);
     const [isVisible, setIsVisible] = useState(true);
+    const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
-    useEffect(() => {
-        if (session?.user) {
-            fetchRecommendations();
-        } else {
-            setLoading(false);
-        }
-    }, [session]);
+    // Use custom hook for data fetching with caching and auto-refresh
+    const {
+        data: recommendations,
+        loading,
+        error,
+        lastUpdated,
+        isRefreshing,
+        isOnline,
+        refresh,
+        clearCacheAndRefresh
+    } = useDashboardData({
+        refreshInterval: 5 * 60 * 1000, // 5 minutes
+        enableAutoRefresh: true,
+        enableCache: true
+    });
 
-    const fetchRecommendations = async () => {
-        try {
-            const response = await fetch('/api/personalization/recommendations?type=all');
-            const data = await response.json();
-            if (data.success && data.recommendations) {
-                setRecommendations(data.recommendations);
-            }
-        } catch (error) {
-            console.error('Error fetching dashboard recommendations:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Keyboard shortcuts
+    useKeyboardShortcuts({
+        'r': () => refresh(),
+        '?': () => setShowShortcutsHelp(true),
+        'Escape': () => setShowShortcutsHelp(false)
+    });
 
     if (!session || !isVisible) return null;
 
-    if (loading) {
+    // Show loading skeleton
+    if (loading && !recommendations) {
+        return <DashboardSkeleton />;
+    }
+
+    // Show error state
+    if (error && !recommendations) {
         return (
-            <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-rose-50/30 border-y border-rose-100">
-                <div className="max-w-7xl mx-auto text-center">
-                    <div className="animate-pulse space-y-4">
-                        <div className="h-8 bg-gray-200 rounded w-1/4 mx-auto"></div>
-                        <div className="h-32 bg-gray-100 rounded w-full"></div>
-                    </div>
-                </div>
-            </section>
+            <>
+                <NetworkStatus isOnline={isOnline} />
+                <DashboardError
+                    error={error}
+                    onRetry={refresh}
+                    type={error.type}
+                />
+            </>
         );
     }
 
@@ -78,17 +96,25 @@ export default function PersonalizedDashboard() {
         (recommendations.essay && recommendations.essay.length > 0) ||
         (recommendations.mock_test && recommendations.mock_test.length > 0) ||
         (recommendations.weakness_map && recommendations.weakness_map.length > 0) ||
-        (recommendations.daily_plan && recommendations.daily_plan.length > 0)
+        (recommendations.daily_plan && recommendations.daily_plan.length > 0) ||
+        (recommendations.syllabus)
     );
 
-    // Filter out if no recommendations to show (hides "Start Your Journey" empty state)
-    if (!hasRecommendations) {
-        return null;
-    }
+    // We always show the dashboard now, even without recommendations, 
+    // so new users can see the "Active Intelligence" row and empty state.
 
     return (
         <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white to-rose-50/30 dark:from-gray-950 dark:to-rose-900/10 border-y border-rose-100 dark:border-rose-900/20">
             <div className="max-w-7xl mx-auto">
+                {/* Network Status Indicator */}
+                <NetworkStatus isOnline={isOnline} />
+
+                {/* Keyboard Shortcuts Help */}
+                <KeyboardShortcutsHelp
+                    isOpen={showShortcutsHelp}
+                    onClose={() => setShowShortcutsHelp(false)}
+                />
+
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-gradient-to-br from-rose-500 to-red-600 rounded-lg shadow-lg shadow-rose-500/20 text-white">
@@ -103,17 +129,58 @@ export default function PersonalizedDashboard() {
                                     className="ml-2"
                                 />
                             </h2>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                Curated recommendations and strategic analysis based on your progress
-                            </p>
+                            <div className="flex items-center gap-3 mt-1">
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Curated recommendations and strategic analysis based on your progress
+                                </p>
+                                {lastUpdated && (
+                                    <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                        <Clock className="w-3 h-3" />
+                                        {formatLastUpdated(lastUpdated)}
+                                    </div>
+                                )}
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Refresh Button */}
+                    <div className="flex items-center gap-2">
+                        <Button
+                            onClick={refresh}
+                            disabled={isRefreshing}
+                            variant="outline"
+                            size="sm"
+                            className="border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-900/20"
+                        >
+                            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                        </Button>
+                        <Button
+                            onClick={() => setShowShortcutsHelp(true)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            title="Keyboard shortcuts (?)"
+                        >
+                            <kbd className="px-2 py-1 text-xs font-semibold bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded">?</kbd>
+                        </Button>
                     </div>
                 </div>
 
                 {/* Persona Banner (New Phase 3) */}
-                {recommendations.persona && (
+                {recommendations?.persona && (
                     <StudyPersona persona={recommendations.persona} userName={session.user.name} />
                 )}
+
+                {/* Active Intelligence Section (New) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="lg:col-span-1">
+                        <ResumeSession />
+                    </div>
+                    <div className="lg:col-span-2">
+                        <DailySyllabusSync />
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Empty State */}
@@ -156,6 +223,16 @@ export default function PersonalizedDashboard() {
                             {/* Fills remaining space or pushes next items */}
                             {!recommendations.prediction && !recommendations.achievements && (
                                 <div className="hidden"></div>
+                            )}
+
+                            {/* Syllabus Progress Tracker (New) */}
+                            {recommendations.syllabus && (
+                                <div className="col-span-full mb-6">
+                                    <SyllabusProgressTracker
+                                        exam="UPSC"
+                                        userProgress={recommendations.syllabus}
+                                    />
+                                </div>
                             )}
                         </>
                     )}
@@ -328,6 +405,27 @@ export default function PersonalizedDashboard() {
                             </CardContent>
                         </Card>
                     )}
+
+                    {/* Study Compendium Highlights (NEW) */}
+                    <Card className="col-span-full border border-rose-100 dark:border-rose-900/30 bg-white dark:bg-gray-900 shadow-xl shadow-rose-500/5">
+                        <CardHeader className="pb-3 border-b border-rose-50 dark:border-rose-900/20 bg-rose-50/30 dark:bg-rose-900/10 flex flex-row items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Highlighter className="w-5 h-5 text-rose-600" />
+                                <div>
+                                    <CardTitle className="text-lg text-rose-900 dark:text-rose-100 uppercase tracking-tight">Study Compendium</CardTitle>
+                                    <CardDescription>All your saved highlights and key insights</CardDescription>
+                                </div>
+                            </div>
+                            <Link href="/highlights">
+                                <Button variant="outline" size="sm" className="border-rose-200 text-rose-600 hover:bg-rose-50">
+                                    Manage Library <ChevronRight className="w-4 h-4 ml-1" />
+                                </Button>
+                            </Link>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            <StudyCompendium />
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </section>

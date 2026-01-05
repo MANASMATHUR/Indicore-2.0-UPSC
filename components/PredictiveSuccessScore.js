@@ -16,12 +16,14 @@ import {
     Info
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import StudyPlanModal from '@/components/StudyPlanModal';
 
 export default function PredictiveSuccessScore({ userStats, chatInsights }) {
     const [successScore, setSuccessScore] = useState(0);
     const [subjectBreakdown, setSubjectBreakdown] = useState([]);
     const [recommendations, setRecommendations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showPlanModal, setShowPlanModal] = useState(false);
 
     useEffect(() => {
         calculatePredictiveScore();
@@ -134,214 +136,227 @@ export default function PredictiveSuccessScore({ userStats, chatInsights }) {
     }
 
     return (
-        <Card className="border-rose-100 dark:border-rose-900/30 shadow-xl rounded-2xl overflow-hidden bg-gradient-to-br from-white to-rose-50/30 dark:from-gray-900 dark:to-rose-950/20">
-            <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <CardTitle className="flex items-center gap-2 text-2xl">
-                            <Brain className="w-6 h-6 text-rose-600" />
-                            Predictive Success Score
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                            AI-powered analysis of your exam readiness
-                        </CardDescription>
-                    </div>
-                    <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border-0 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        AI Powered
-                    </Badge>
-                </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6">
-                {/* Main Score Display */}
-                <div className="relative">
-                    <div className="flex items-center justify-center">
-                        <div className="relative">
-                            {/* Circular Progress */}
-                            <svg className="w-48 h-48 transform -rotate-90">
-                                <circle
-                                    cx="96"
-                                    cy="96"
-                                    r="88"
-                                    stroke="currentColor"
-                                    strokeWidth="12"
-                                    fill="none"
-                                    className="text-gray-200 dark:text-gray-700"
-                                />
-                                <motion.circle
-                                    cx="96"
-                                    cy="96"
-                                    r="88"
-                                    stroke="url(#gradient)"
-                                    strokeWidth="12"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    strokeDasharray={`${2 * Math.PI * 88}`}
-                                    initial={{ strokeDashoffset: 2 * Math.PI * 88 }}
-                                    animate={{ strokeDashoffset: 2 * Math.PI * 88 * (1 - successScore / 100) }}
-                                    transition={{ duration: 2, ease: "easeOut" }}
-                                />
-                                <defs>
-                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" className="text-rose-500" stopColor="currentColor" />
-                                        <stop offset="100%" className="text-red-600" stopColor="currentColor" />
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-
-                            {/* Score Text */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <motion.div
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ delay: 0.5, type: "spring" }}
-                                    className={`text-6xl font-black ${getScoreColor(successScore)}`}
-                                >
-                                    {successScore}
-                                </motion.div>
-                                <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 mt-1">
-                                    {getScoreLabel(successScore)}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Score Interpretation */}
-                    <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl border border-rose-100 dark:border-rose-900/30">
-                        <div className="flex items-start gap-3">
-                            <Info className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                                    What does this mean?
-                                </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                    {successScore >= 75 && "You're on track for success! Your consistent effort and strong performance indicate excellent exam readiness."}
-                                    {successScore >= 50 && successScore < 75 && "You're making good progress! Focus on consistency and practice to reach your full potential."}
-                                    {successScore < 50 && "There's room for improvement. Increase your study time, take more mock tests, and build a consistent routine."}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Subject-wise Breakdown */}
-                <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm flex items-center gap-2">
-                        <Target className="w-4 h-4 text-rose-600" />
-                        Subject-wise Readiness
-                    </h4>
-                    <div className="space-y-3">
-                        {subjectBreakdown.map((subject, idx) => (
-                            <motion.div
-                                key={idx}
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: idx * 0.1 }}
-                                className="flex items-center gap-3"
-                            >
-                                <div className="flex-1">
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            {subject.name}
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                                                {Math.round(subject.score)}%
-                                            </span>
-                                            {subject.trend === 'up' && (
-                                                <TrendingUp className="w-3 h-3 text-rose-600" />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                                        <motion.div
-                                            className={`h-2 rounded-full bg-gradient-to-r ${getScoreBgColor(subject.score)}`}
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${subject.score}%` }}
-                                            transition={{ duration: 1, delay: idx * 0.1 }}
-                                        />
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* AI Recommendations */}
-                {recommendations.length > 0 && (
-                    <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-rose-600" />
-                            Personalized Recommendations
-                        </h4>
-                        <div className="space-y-2">
-                            {recommendations.map((rec, idx) => {
-                                const Icon = rec.icon;
-                                const colorClasses = {
-                                    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-                                    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-                                    orange: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
-                                };
-                                const iconColors = {
-                                    blue: 'text-blue-600',
-                                    green: 'text-green-600',
-                                    orange: 'text-orange-600'
-                                };
-
-                                return (
-                                    <motion.div
-                                        key={idx}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: idx * 0.1 }}
-                                        className={`p-3 rounded-lg border ${colorClasses[rec.color]}`}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <Icon className={`w-5 h-5 ${iconColors[rec.color]} flex-shrink-0 mt-0.5`} />
-                                            <div className="flex-1">
-                                                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                                    {rec.title}
-                                                </p>
-                                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                                                    {rec.description}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Trend Analysis */}
-                <div className="p-4 bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/30 dark:to-orange-950/30 rounded-xl border border-rose-200 dark:border-rose-800">
+        <>
+            <Card className="border-rose-100 dark:border-rose-900/30 shadow-xl rounded-2xl overflow-hidden bg-gradient-to-br from-white to-rose-50/30 dark:from-gray-900 dark:to-rose-950/20">
+                <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
-                                30-Day Projection
-                            </div>
-                            <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                {Math.min(100, successScore + 15)}%
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                If you maintain current pace
+                            <CardTitle className="flex items-center gap-2 text-2xl">
+                                <Brain className="w-6 h-6 text-rose-600" />
+                                Predictive Success Score
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                                AI-powered analysis of your exam readiness
+                            </CardDescription>
+                        </div>
+                        <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border-0 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            AI Powered
+                        </Badge>
+                    </div>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                    {/* Main Score Display */}
+                    <div className="relative">
+                        <div className="flex items-center justify-center">
+                            <div className="relative">
+                                {/* Circular Progress */}
+                                <svg className="w-48 h-48 transform -rotate-90">
+                                    <circle
+                                        cx="96"
+                                        cy="96"
+                                        r="88"
+                                        stroke="currentColor"
+                                        strokeWidth="12"
+                                        fill="none"
+                                        className="text-gray-200 dark:text-gray-700"
+                                    />
+                                    <motion.circle
+                                        cx="96"
+                                        cy="96"
+                                        r="88"
+                                        stroke="url(#gradient)"
+                                        strokeWidth="12"
+                                        fill="none"
+                                        strokeLinecap="round"
+                                        strokeDasharray={`${2 * Math.PI * 88}`}
+                                        initial={{ strokeDashoffset: 2 * Math.PI * 88 }}
+                                        animate={{ strokeDashoffset: 2 * Math.PI * 88 * (1 - successScore / 100) }}
+                                        transition={{ duration: 2, ease: "easeOut" }}
+                                    />
+                                    <defs>
+                                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" className="text-rose-500" stopColor="currentColor" />
+                                            <stop offset="100%" className="text-red-600" stopColor="currentColor" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+
+                                {/* Score Text */}
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ delay: 0.5, type: "spring" }}
+                                        className={`text-6xl font-black ${getScoreColor(successScore)}`}
+                                    >
+                                        {successScore}
+                                    </motion.div>
+                                    <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 mt-1">
+                                        {getScoreLabel(successScore)}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border-0 flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3" />
-                                +{Math.min(15, 100 - successScore)}%
-                            </Badge>
-                            <Button size="sm" variant="outline" className="text-xs">
-                                View Details
-                                <ArrowRight className="w-3 h-3 ml-1" />
-                            </Button>
+
+                        {/* Score Interpretation */}
+                        <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-xl border border-rose-100 dark:border-rose-900/30">
+                            <div className="flex items-start gap-3">
+                                <Info className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                                        What does this mean?
+                                    </p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                        {successScore >= 75 && "You're on track for success! Your consistent effort and strong performance indicate excellent exam readiness."}
+                                        {successScore >= 50 && successScore < 75 && "You're making good progress! Focus on consistency and practice to reach your full potential."}
+                                        {successScore < 50 && "There's room for improvement. Increase your study time, take more mock tests, and build a consistent routine."}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </CardContent>
-        </Card>
+
+                    {/* Subject-wise Breakdown */}
+                    <div>
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm flex items-center gap-2">
+                            <Target className="w-4 h-4 text-rose-600" />
+                            Subject-wise Readiness
+                        </h4>
+                        <div className="space-y-3">
+                            {subjectBreakdown.map((subject, idx) => (
+                                <motion.div
+                                    key={idx}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className="flex items-center gap-3"
+                                >
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                {subject.name}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                                    {Math.round(subject.score)}%
+                                                </span>
+                                                {subject.trend === 'up' && (
+                                                    <TrendingUp className="w-3 h-3 text-rose-600" />
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                            <motion.div
+                                                className={`h-2 rounded-full bg-gradient-to-r ${getScoreBgColor(subject.score)}`}
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${subject.score}%` }}
+                                                transition={{ duration: 1, delay: idx * 0.1 }}
+                                            />
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* AI Recommendations */}
+                    {recommendations.length > 0 && (
+                        <div>
+                            <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-rose-600" />
+                                Personalized Recommendations
+                            </h4>
+                            <div className="space-y-2">
+                                {recommendations.map((rec, idx) => {
+                                    const Icon = rec.icon;
+                                    const colorClasses = {
+                                        blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
+                                        green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+                                        orange: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                                    };
+                                    const iconColors = {
+                                        blue: 'text-blue-600',
+                                        green: 'text-green-600',
+                                        orange: 'text-orange-600'
+                                    };
+
+                                    return (
+                                        <motion.div
+                                            key={idx}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.1 }}
+                                            className={`p-3 rounded-lg border ${colorClasses[rec.color]}`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <Icon className={`w-5 h-5 ${iconColors[rec.color]} flex-shrink-0 mt-0.5`} />
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                        {rec.title}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                                        {rec.description}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Trend Analysis */}
+                    <div className="p-4 bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-950/30 dark:to-orange-950/30 rounded-xl border border-rose-200 dark:border-rose-800">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                                    30-Day Projection
+                                </div>
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {Math.min(100, successScore + 15)}%
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                    If you maintain current pace
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                                <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border-0 flex items-center gap-1">
+                                    <TrendingUp className="w-3 h-3" />
+                                    +{Math.min(15, 100 - successScore)}%
+                                </Badge>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => setShowPlanModal(true)}
+                                >
+                                    View Details
+                                    <ArrowRight className="w-3 h-3 ml-1" />
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Study Plan Modal */}
+            <StudyPlanModal
+                isOpen={showPlanModal}
+                onClose={() => setShowPlanModal(false)}
+            />
+        </>
     );
 }
