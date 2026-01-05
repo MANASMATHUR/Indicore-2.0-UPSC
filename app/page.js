@@ -29,8 +29,8 @@ import {
   Check,
   Users
 } from 'lucide-react';
-import PersonalizedDashboard from '@/components/PersonalizedDashboard';
 import UnifiedDashboard from '@/components/UnifiedDashboard';
+
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -122,8 +122,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Personalized Dashboard (Only shown when logged in) */}
-      <PersonalizedDashboard />
 
       <section id="features" className="py-32 px-4 sm:px-6 lg:px-8 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">

@@ -2,21 +2,32 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
 
+// WebSocket is optional - app falls back to SSE when unavailable
+const WEBSOCKET_ENABLED = process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === 'true';
+
 export function useWebSocket() {
   const { data: session } = useSession();
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(!WEBSOCKET_ENABLED);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
+  const maxReconnectAttempts = 2; // Reduced to fail faster and use SSE
+  const hasLoggedDisabled = useRef(false);
 
   useEffect(() => {
+    // Skip WebSocket entirely if disabled or in development without explicit enable
+    if (isDisabled || !WEBSOCKET_ENABLED) {
+      if (!hasLoggedDisabled.current) {
+        console.log('[WebSocket] Disabled - using SSE fallback for chat');
+        hasLoggedDisabled.current = true;
+      }
+      return;
+    }
+
     try {
-      // Prioritize localhost if we are running locally to avoid connecting to prod socket
       const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
       const socketUrl = isLocal ? window.location.origin : (process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : ''));
-
-      console.log('[WebSocket Debug] Environment:', { isLocal, hostname: window?.location?.hostname, finalUrl: socketUrl });
 
       if (!socketUrl || typeof window === 'undefined') {
         return;
@@ -24,38 +35,39 @@ export function useWebSocket() {
 
       const newSocket = io(socketUrl, {
         path: '/api/socket',
-        transports: ['websocket'], // Force websocket only for lowest latency
+        transports: ['websocket'],
         reconnection: true,
-        reconnectionDelay: 300, // Faster reconnection
-        reconnectionDelayMax: 1500,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 3000,
         reconnectionAttempts: maxReconnectAttempts,
-        timeout: 8000, // Reduced timeout for faster failure detection
-        forceNew: false, // Reuse connection when possible
-        upgrade: false, // Skip polling upgrade - websocket only
+        timeout: 5000,
+        forceNew: false,
+        upgrade: false,
         rememberUpgrade: true,
-        // Optimize for low latency
         autoConnect: true,
-        multiplex: false // Disable multiplexing for simpler, faster connections
+        multiplex: false
       });
 
       newSocket.on('connect', () => {
-        console.log('[WebSocket Debug] Connected successfully');
+        console.log('[WebSocket] Connected');
         setIsConnected(true);
         reconnectAttempts.current = 0;
       });
 
       newSocket.on('disconnect', (reason) => {
-        console.log('[WebSocket Debug] Disconnected:', reason);
         setIsConnected(false);
       });
 
       newSocket.on('connect_error', (error) => {
-        // Suppress massive error logs in console for polling failures
-        if (reconnectAttempts.current < 3) {
-          console.warn('[WebSocket Debug] Connection error:', error.message);
-        }
         setIsConnected(false);
         reconnectAttempts.current++;
+
+        // After max attempts, disable WebSocket and use SSE
+        if (reconnectAttempts.current >= maxReconnectAttempts) {
+          console.log('[WebSocket] Connection failed, switching to SSE fallback');
+          setIsDisabled(true);
+          newSocket.close();
+        }
       });
 
       setSocket(newSocket);
@@ -67,9 +79,10 @@ export function useWebSocket() {
         if (newSocket) newSocket.close();
       };
     } catch (err) {
-      console.error('[WebSocket Debug] Critical setup error:', err);
+      // Silent fail - SSE will be used
+      setIsDisabled(true);
     }
-  }, []);
+  }, [isDisabled]);
 
   const sendMessage = useCallback((message, options = {}) => {
     if (!socket || !isConnected) {
