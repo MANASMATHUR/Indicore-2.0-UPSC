@@ -1,4 +1,4 @@
-# Indicore - Complete README
+# Indicore
 
 ## 🎯 Overview
 
