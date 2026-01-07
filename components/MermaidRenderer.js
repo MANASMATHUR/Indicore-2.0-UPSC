@@ -44,31 +44,75 @@ function sanitizeFlowchart(chart) {
         return chart; // Only process flowcharts/graphs
     }
 
-    // Process line by line to preserve structure
-    return chart
+    // STEP 1: Global HTML tag removal before line-by-line processing
+    // This catches <br/>, <br>, <br />, and any other HTML tags anywhere in the chart
+    let sanitizedChart = chart
+        .replace(/<br\s*\/?>/gi, ' ')      // Replace all <br/>, <br>, <br /> with space
+        .replace(/<[^>]+>/g, '')           // Remove any other HTML tags
+        .replace(/\s+/g, ' ');             // Normalize multiple spaces (but keep newlines)
+
+    // Restore newlines that were collapsed
+    sanitizedChart = chart
+        .split('\n')
+        .map(line => {
+            // Clean HTML from each line
+            return line
+                .replace(/<br\s*\/?>/gi, ' ')
+                .replace(/<[^>]+>/g, '')
+                .replace(/\s{2,}/g, ' '); // Normalize spaces but not aggressively
+        })
+        .join('\n');
+
+    // STEP 2: Process line by line to clean node labels
+    return sanitizedChart
         .split('\n')
         .map(line => {
             // Match node definitions with square brackets like A[Label]
             let processedLine = line.replace(/\[([^\]]+)\]/g, (match, label) => {
                 // Clean the label
                 const cleanLabel = label
-                    .replace(/<br\s*\/?>/gi, ' ')     // Replace <br/> with space
+                    .replace(/<br\s*\/?>/gi, ' ')     // Replace <br/> with space (redundant but safe)
                     .replace(/<[^>]+>/g, '')          // Remove any HTML tags
                     .replace(/\(/g, ' - ')            // Replace ( with dash
                     .replace(/\)/g, '')               // Remove )
+                    .replace(/&/g, ' and ')           // Replace & with 'and'
                     .replace(/\s+/g, ' ')             // Normalize whitespace
                     .trim();
                 return `[${cleanLabel}]`;
             });
 
-            // Also match node definitions with parentheses like A(Label) or A((Label))
+            // Match node definitions with double parentheses like A((Label))
             processedLine = processedLine.replace(/\(\(([^)]+)\)\)/g, (match, label) => {
                 const cleanLabel = label
                     .replace(/<br\s*\/?>/gi, ' ')
                     .replace(/<[^>]+>/g, '')
+                    .replace(/&/g, ' and ')
                     .replace(/\s+/g, ' ')
                     .trim();
                 return `((${cleanLabel}))`;
+            });
+
+            // Match node definitions with single parentheses like A(Label) - stadium shape
+            processedLine = processedLine.replace(/([A-Za-z0-9_]+)\(([^()]+)\)(?!\))/g, (match, nodeId, label) => {
+                // Don't match if it's already a double parenthesis
+                const cleanLabel = label
+                    .replace(/<br\s*\/?>/gi, ' ')
+                    .replace(/<[^>]+>/g, '')
+                    .replace(/&/g, ' and ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                return `${nodeId}(${cleanLabel})`;
+            });
+
+            // Match node definitions with curly braces like A{Label} - diamond shape
+            processedLine = processedLine.replace(/\{([^}]+)\}/g, (match, label) => {
+                const cleanLabel = label
+                    .replace(/<br\s*\/?>/gi, ' ')
+                    .replace(/<[^>]+>/g, '')
+                    .replace(/&/g, ' and ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                return `{${cleanLabel}}`;
             });
 
             return processedLine;
