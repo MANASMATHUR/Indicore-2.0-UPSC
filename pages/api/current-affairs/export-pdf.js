@@ -25,20 +25,59 @@ function generateHTML(digest) {
     ? digest.endDate
     : (digest.endDate ? new Date(digest.endDate) : new Date());
 
+  // Determine language for proper font and lang attribute
+  const language = digest.language || 'en';
+  const langMap = {
+    'en': 'en',
+    'hi': 'hi',
+    'mr': 'mr',
+    'ta': 'ta',
+    'te': 'te',
+    'bn': 'bn',
+    'pa': 'pa',
+    'gu': 'gu',
+    'kn': 'kn',
+    'ml': 'ml',
+    'es': 'es'
+  };
+  const htmlLang = langMap[language] || 'en';
+
+  // Font selection based on language
+  const fontImports = `
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&family=Noto+Sans+Tamil:wght@400;700&family=Noto+Sans+Telugu:wght@400;700&family=Noto+Sans+Bengali:wght@400;700&family=Noto+Sans+Kannada:wght@400;700&family=Noto+Sans+Malayalam:wght@400;700&family=Noto+Sans+Gujarati:wght@400;700&display=swap');
+  `;
+
+  const fontFamily = language === 'hi' || language === 'mr' || language === 'pa'
+    ? "'Noto Sans Devanagari', 'Noto Sans', sans-serif"
+    : language === 'ta'
+      ? "'Noto Sans Tamil', 'Noto Sans', sans-serif"
+      : language === 'te'
+        ? "'Noto Sans Telugu', 'Noto Sans', sans-serif"
+        : language === 'bn'
+          ? "'Noto Sans Bengali', 'Noto Sans', sans-serif"
+          : language === 'kn'
+            ? "'Noto Sans Kannada', 'Noto Sans', sans-serif"
+            : language === 'ml'
+              ? "'Noto Sans Malayalam', 'Noto Sans', sans-serif"
+              : language === 'gu'
+                ? "'Noto Sans Gujarati', 'Noto Sans', sans-serif"
+                : "'Noto Sans', 'Arial Unicode MS', sans-serif";
+
   let html = `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="${htmlLang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(digest.title || 'Current Affairs Digest')}</title>
   <style>
+    ${fontImports}
     @page {
       margin: 2cm;
       size: A4;
     }
     body {
-      font-family: 'Noto Sans', 'Arial Unicode MS', 'DejaVu Sans', sans-serif;
+      font-family: ${fontFamily};
       line-height: 1.6;
       color: #333;
       max-width: 100%;
@@ -244,29 +283,34 @@ export default async function handler(req, res) {
 
   let browser = null;
   try {
-    const { digestId, digest: digestData } = req.body;
+    const { digestId, digest: digestData, language } = req.body;
 
     await connectToDatabase();
 
     let digest;
 
-    // Try to find digest by ID first
-    if (digestId) {
+    // Prioritize the digest data from request body (which contains translated content)
+    // over database lookup to ensure we use the correct language version
+    if (digestData) {
+      digest = digestData;
+      console.log(`Using digest data from request body with language: ${language || digest.language || 'en'}`);
+    }
+    // Fallback to database lookup only if no digest data provided
+    else if (digestId) {
       try {
-        digest = await CurrentAffairsDigest.findById(digestId);
-        // Convert to plain object if it's a Mongoose document
+        const filter = { _id: digestId };
+        // If language is specified, also filter by language
+        if (language) {
+          filter.language = language;
+        }
+        digest = await CurrentAffairsDigest.findOne(filter);
         if (digest && digest.toObject) {
           digest = digest.toObject();
         }
+        console.log(`Fetched digest from database with language: ${digest?.language || 'en'}`);
       } catch (dbError) {
         console.error('Error finding digest by ID:', dbError);
-        // Continue to try digestData fallback
       }
-    }
-
-    // If not found by ID, use the provided digest data (fallback)
-    if (!digest && digestData) {
-      digest = digestData;
     }
 
     if (!digest) {

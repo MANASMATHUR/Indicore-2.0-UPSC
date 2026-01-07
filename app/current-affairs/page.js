@@ -216,21 +216,12 @@ export default function CurrentAffairsPage() {
     if (!digest) return;
 
     try {
-      const resolveDigestId = () => {
-        if (!digest) return null;
-        if (typeof digest._id === 'string') return digest._id;
-        if (digest._id && typeof digest._id === 'object') {
-          if (typeof digest._id.toString === 'function' && !digest._id.toString().startsWith('[object')) {
-            return digest._id.toString();
-          }
-          if (typeof digest._id.$oid === 'string') return digest._id.$oid;
-        }
-        if (digest.id) return String(digest.id);
-        return null;
+      // Always pass the full digest object to ensure we use the translated content
+      // that's currently displayed, along with the language parameter
+      const payload = {
+        digest,
+        language: selectedLanguage
       };
-
-      const digestId = resolveDigestId();
-      const payload = digestId ? { digestId } : { digest };
 
       const response = await fetch('/api/current-affairs/export-pdf', {
         method: 'POST',
@@ -344,8 +335,8 @@ export default function CurrentAffairsPage() {
               <button
                 onClick={() => setActiveTab('news')}
                 className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'news'
-                    ? 'bg-red-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-red-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 <Newspaper className="inline-block h-4 w-4 mr-2" />
@@ -354,8 +345,8 @@ export default function CurrentAffairsPage() {
               <button
                 onClick={() => setActiveTab('digest')}
                 className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'digest'
-                    ? 'bg-red-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-red-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 <Calendar className="inline-block h-4 w-4 mr-2" />
@@ -675,8 +666,8 @@ export default function CurrentAffairsPage() {
                           key={p}
                           onClick={() => setPeriod(p)}
                           className={`p-4 rounded-lg border-2 transition-all capitalize ${period === p
-                              ? 'border-red-500 bg-red-50 dark:bg-red-900/20 shadow-md'
-                              : 'border-gray-200 hover:border-red-300 hover:shadow-sm'
+                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20 shadow-md'
+                            : 'border-gray-200 hover:border-red-300 hover:shadow-sm'
                             }`}
                         >
                           <Clock className={`h-6 w-6 mx-auto mb-2 ${period === p ? 'text-red-600' : 'text-gray-600'}`} />
