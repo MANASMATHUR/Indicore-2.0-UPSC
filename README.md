@@ -145,7 +145,7 @@ indicore/
 
 ---
 
-## 🏗️ System Architecture & Data Flows
+## 🏗️ High-Level Design (HLD) & Architecture
 
 ### 1. High-Level Architecture
 **The Big Picture: How users connect to our AI brain.**
@@ -329,6 +329,45 @@ graph TD
 ```
 
 **Value:** Provides instant feedback that usually takes human tutors days to provide.
+
+---
+
+## ⚙️ Low-Level Design (LLD)
+
+### 1. Backend Service Layer Pattern
+We utilize a **Service-Oriented Architecture** within a serverless environment to ensure scalability and maintainability.
+*   **API Routes (`pages/api/*`) -> Controllers**:
+    *   Handle HTTP requests and responses.
+    *   Perform input validation (Zod/Joi).
+    *   Delegate business logic to the Service Layer.
+    *   *Example:* `pages/api/ai/chat.js` validates the user session and forwards the prompt to `lib/ai-providers.js`.
+*   **Service Layer (`lib/*`) -> Business Logic**:
+    *   Contains the core application logic.
+    *   Reusable functions independent of the HTTP layer.
+    *   *Example:* `memoryService.js` handles vector embedding and retrieval logic.
+*   **Data Access Layer (`models/*`)**:
+    *   Mongoose schemas define data structure and validation.
+    *   Handles direct MongoDB interactions.
+
+### 2. Frontend Component Architecture
+We follow **Atomic Design Principles** and the **Container/Presentational Pattern**.
+*   **Smart Containers**: Handle state, side effects, and data fetching (e.g., `ChatInterface.js`).
+*   **Dumb Components**: Pure presentation components that receive data via props (e.g., `MessageBubble.js`, `Button.js`).
+*   **Custom Hooks (`hooks/*`)**: Encapsulate reusable logic.
+    *   `useVoiceInput`: Manages microphone access and Azure Speech SDK integration.
+    *   `useChatStream`: Handles Server-Sent Events (SSE) for real-time text generation.
+
+### 3. Database Schema Design (MongoDB)
+Our NoSQL schema is designed for flexibility and high read performance.
+*   **User Collection**:
+    *   `googleId`: Indexed for fast OAuth lookups.
+    *   `preferences`: Nested object for learning style settings.
+*   **Chat Collection**:
+    *   `userId`: Compound index with `createdAt` for efficient history pagination.
+    *   `messages`: Array of message objects `{ role, content, timestamp }`.
+*   **Memory Collection**:
+    *   `embedding`: Vector array for semantic search.
+    *   `context`: Text content of the memory.
 
 ---
 
